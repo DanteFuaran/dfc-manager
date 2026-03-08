@@ -43,7 +43,7 @@ _stop_spinner() {
     [ -n "$_spinner_pid" ] && kill "$_spinner_pid" 2>/dev/null; wait "$_spinner_pid" 2>/dev/null || true
     _spinner_pid=""
     if [ "$_ok" = "1" ]; then
-        printf "\r${GREEN}✅${NC} %s\n" "$_msg"
+        printf "\r\033[K"
     else
         printf "\r${RED}✖${NC}  %s\n" "$_msg"
     fi
