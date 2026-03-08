@@ -52,7 +52,9 @@ update_script() {
         echo -e "${YELLOW}Скрипт не установлен в системе${NC}"
     fi
 
-    if [ -n "$remote_version" ]; then
+    if [ -n "$remote_version" ] && [ "$remote_version" != "$installed_version" ]; then
+        echo -e "${WHITE}Доступная версия:${NC}     ${GREEN}v$remote_version${NC}"
+    elif [ -n "$remote_version" ]; then
         echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
     else
         # Нет кеша и сеть недоступна — показываем установленную версию как актуальную
@@ -92,9 +94,9 @@ update_script() {
     done
 
     (
-        mkdir -p "${DIR_REMNAWAVE}"
-        curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-remna-install/archive/refs/heads/main.tar.gz" \
-            | tar -xz -C "${DIR_REMNAWAVE}" --strip-components=1 2>/dev/null
+        rm -rf "${DIR_REMNAWAVE}"
+        mkdir -p "$(dirname "${DIR_REMNAWAVE%/}")"
+        git clone --depth 1 -b main "https://github.com/DanteFuaran/dfc-remna-install.git" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
         chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
         ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
         ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
