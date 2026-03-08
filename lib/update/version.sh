@@ -12,12 +12,20 @@ get_installed_version() {
 
 get_remote_version() {
     local latest_sha
-    latest_sha=$(curl -sL --max-time 5 "https://api.github.com/repos/DanteFuaran/dfc-remna-install/commits/main" 2>/dev/null | grep -m 1 '"sha"' | cut -d'"' -f4 || true)
+    latest_sha=$(curl -sL --max-time 5 \
+        -H "Cache-Control: no-cache" \
+        "https://api.github.com/repos/DanteFuaran/dfc-remna-install/commits/main" 2>/dev/null \
+        | grep -m 1 '"sha"' | cut -d'"' -f4 || true)
 
     if [ -n "$latest_sha" ]; then
-        curl -sL --max-time 5 "https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/$latest_sha/lib/core/constants.sh" 2>/dev/null | grep -m 1 'SCRIPT_VERSION=' | cut -d'"' -f2 || true
+        curl -sL --max-time 5 \
+            "https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/${latest_sha}/lib/core/constants.sh" \
+            2>/dev/null | grep -m 1 'SCRIPT_VERSION=' | cut -d'"' -f2 || true
     else
-        curl -sL --max-time 5 "https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/main/lib/core/constants.sh" 2>/dev/null | grep -m 1 'SCRIPT_VERSION=' | cut -d'"' -f2 || true
+        curl -sL --max-time 5 \
+            -H "Cache-Control: no-cache" \
+            "https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/main/lib/core/constants.sh" \
+            2>/dev/null | grep -m 1 'SCRIPT_VERSION=' | cut -d'"' -f2 || true
     fi
 }
 
