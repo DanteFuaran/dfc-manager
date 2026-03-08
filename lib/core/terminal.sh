@@ -15,6 +15,9 @@ cleanup_terminal() {
     else
         stty sane 2>/dev/null || true
     fi
+    # Явно восстанавливаем ключевые флаги (echo, icanon) — на случай если
+    # read -s или stty -icanon не были корректно сброшены при выходе
+    stty echo echoe icanon 2>/dev/null || true
 }
 
 # Удаление старых алиасов и команд
