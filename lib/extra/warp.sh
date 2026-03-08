@@ -204,6 +204,13 @@ install_warp_native() {
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
+
+        # Автоматически открываем порт 8443 для WARP-инбаунда
+        if command -v ufw >/dev/null 2>&1; then
+            ufw allow 8443/tcp >/dev/null 2>&1
+            print_success "Порт 8443 открыт (ufw)"
+        fi
+
         echo -e "${YELLOW}⚠️  Добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -320,8 +327,8 @@ add_warp_to_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Добавление WARP-настроек должно выполняться только на сервере,${NC}"
-    echo -e "${DARKGRAY}где установлена панель, а не на сервере ноды.${NC}"
+    echo -e "${DARKGRAY}Добавление WARP создаст второй инбаунд (порт 8443),${NC}"
+    echo -e "${DARKGRAY}хост и маршрутизацию трафика через WARP.${NC}"
     echo
     echo -en "${GREEN}[?]${NC} ${YELLOW}Продолжить? (Enter/Esc):${NC} "
     read -rsn 1 -t 10 key 2>/dev/null || true
@@ -365,11 +372,13 @@ add_warp_to_config() {
 
     local i=1
     declare -A config_map
+    declare -A config_name_map
     local menu_items=()
     while IFS=' ' read -r name uuid; do
         [ -z "$name" ] && continue
         menu_items+=("📄  $name")
         config_map[$i]="$uuid"
+        config_name_map[$i]="$name"
         ((i++))
     done <<< "$configs"
 
@@ -385,6 +394,7 @@ add_warp_to_config() {
     fi
 
     local selected_uuid=${config_map[$((choice+1))]}
+    local selected_name=${config_name_map[$((choice+1))]}
     [ -z "$selected_uuid" ] && return 1
 
     # Получаем данные конфигурации
@@ -412,54 +422,183 @@ add_warp_to_config() {
         return 0
     fi
 
-    # Добавляем warp-out
-    local warp_outbound
-    warp_outbound='{
-        "tag": "warp-out",
-        "protocol": "freedom",
-        "settings": {
-            "domainStrategy": "UseIP"
-        },
-        "streamSettings": {
-            "sockopt": {
-                "interface": "warp",
-                "tcpFastOpen": true
-            }
-        }
-    }'
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
 
-    config_json=$(echo "$config_json" | jq --argjson warp_out "$warp_outbound" '.outbounds += [$warp_out]' 2>/dev/null)
+    # Получаем данные из первого (основного) инбаунда
+    local main_inbound_tag main_domain
+    main_inbound_tag=$(echo "$config_json" | jq -r '.inbounds[0].tag // empty' 2>/dev/null)
+    main_domain=$(echo "$config_json" | jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0] // empty' 2>/dev/null)
 
-    # Добавляем правило маршрутизации — весь tcp/udp трафик через WARP
-    local warp_rule
-    warp_rule='{
-        "type": "field",
-        "network": ["tcp", "udp"],
-        "outboundTag": "warp-out"
-    }'
-
-    config_json=$(echo "$config_json" | jq --argjson warp_rule "$warp_rule" '.routing.rules += [$warp_rule]' 2>/dev/null)
-
-    # Устанавливаем domainStrategy на AsIs на уровне routing если не задано
-    if echo "$config_json" | jq -e '.routing.domainStrategy' >/dev/null 2>&1; then
-        : # уже есть
-    else
-        config_json=$(echo "$config_json" | jq '.routing.domainStrategy = "AsIs"' 2>/dev/null)
+    if [ -z "$main_inbound_tag" ] || [ -z "$main_domain" ]; then
+        print_error "Не удалось определить параметры основного инбаунда"
+        echo
+        show_continue_prompt || return 1
+        return 1
     fi
 
-    # Обновляем конфигурацию
-    local update_response
-    update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
-
-    if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
-        print_success "WARP добавлен в конфигурацию"
+    # Генерируем новые ключи для WARP-инбаунда
+    print_action "Генерация REALITY ключей для WARP-инбаунда..."
+    local warp_private_key
+    warp_private_key=$(generate_xray_keys "$domain_url" "$token")
+    if [ -z "$warp_private_key" ]; then
+        print_error "Не удалось сгенерировать ключи"
         echo
-        echo -e "${DARKGRAY}Весь трафик (TCP/UDP) будет идти через WARP${NC}"
-    else
+        show_continue_prompt || return 1
+        return 1
+    fi
+    print_success "Ключи сгенерированы"
+
+    local warp_short_id
+    warp_short_id=$(openssl rand -hex 8)
+
+    # Формируем тег для WARP-инбаунда
+    local warp_inbound_tag="${selected_name} - Warp"
+
+    # Добавляем второй инбаунд (порт 8443)
+    local warp_inbound
+    warp_inbound=$(jq -n --arg tag "$warp_inbound_tag" --arg domain "$main_domain" \
+        --arg private_key "$warp_private_key" --arg short_id "$warp_short_id" '{
+        tag: $tag,
+        port: 8443,
+        protocol: "vless",
+        settings: { clients: [], decryption: "none" },
+        sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
+        streamSettings: {
+            network: "tcp",
+            security: "reality",
+            realitySettings: {
+                show: false,
+                xver: 1,
+                dest: "/dev/shm/nginx.sock",
+                spiderX: "",
+                shortIds: [$short_id],
+                privateKey: $private_key,
+                fingerprint: "chrome",
+                serverNames: [$domain]
+            }
+        }
+    }')
+
+    config_json=$(echo "$config_json" | jq --argjson warp_inbound "$warp_inbound" '.inbounds += [$warp_inbound]')
+
+    # Добавляем warp-out outbound
+    local warp_outbound='{
+        "tag": "warp-out",
+        "protocol": "freedom",
+        "settings": { "domainStrategy": "UseIP" },
+        "streamSettings": { "sockopt": { "interface": "warp", "tcpFastOpen": true } }
+    }'
+    config_json=$(echo "$config_json" | jq --argjson wo "$warp_outbound" '.outbounds += [$wo]')
+
+    # Добавляем правила маршрутизации:
+    # 1. Основной инбаунд → DIRECT
+    # 2. WARP-инбаунд → warp-out
+    local rule_direct rule_warp
+    rule_direct=$(jq -n --arg tag "$main_inbound_tag" '{
+        type: "field",
+        inboundTag: [$tag],
+        outboundTag: "DIRECT"
+    }')
+    rule_warp=$(jq -n --arg tag "$warp_inbound_tag" '{
+        type: "field",
+        inboundTag: [$tag],
+        outboundTag: "warp-out"
+    }')
+
+    config_json=$(echo "$config_json" | jq --argjson rd "$rule_direct" --argjson rw "$rule_warp" \
+        '.routing.rules += [$rd, $rw]')
+
+    # Обновляем конфигурацию через API
+    print_action "Обновление конфигурации..."
+    local update_body
+    update_body=$(jq -n --arg uuid "$selected_uuid" --argjson config "$config_json" '{
+        uuid: $uuid,
+        config: $config
+    }')
+    local update_response
+    update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "$update_body")
+
+    if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
         print_error "Не удалось обновить конфигурацию"
+        echo
+        show_continue_prompt || return 1
+        return 1
+    fi
+    print_success "Конфигурация обновлена"
+
+    # Получаем UUID нового инбаунда из обновлённой конфигурации
+    local updated_config
+    updated_config=$(make_api_request "GET" "${domain_url}/api/config-profiles/$selected_uuid" "$token")
+    local warp_inbound_uuid
+    warp_inbound_uuid=$(echo "$updated_config" | jq -r --arg tag "$warp_inbound_tag" \
+        '.response.inbounds[] | select(.tag == $tag) | .uuid // empty' 2>/dev/null)
+
+    if [ -n "$warp_inbound_uuid" ] && [ "$warp_inbound_uuid" != "null" ]; then
+        # Создаём хост для WARP-инбаунда (порт 8443)
+        print_action "Создание хоста для WARP-инбаунда..."
+        create_host "$domain_url" "$token" "$selected_uuid" "$warp_inbound_uuid" \
+            "${selected_name} - Warp" "$main_domain" 8443
+        print_success "Хост создан ($main_domain:8443)"
+
+        # Добавляем WARP-инбаунд в сквады
+        print_action "Обновление сквадов..."
+        local squad_uuids
+        squad_uuids=$(get_default_squad "$domain_url" "$token")
+        if [ -n "$squad_uuids" ]; then
+            while IFS= read -r squad_uuid; do
+                [ -z "$squad_uuid" ] && continue
+                update_squad "$domain_url" "$token" "$squad_uuid" "$warp_inbound_uuid"
+            done <<< "$squad_uuids"
+            print_success "Сквады обновлены"
+        fi
+
+        # Обновляем ноду — добавляем WARP-инбаунд в activeInbounds
+        print_action "Обновление ноды..."
+        local nodes_response
+        nodes_response=$(make_api_request "GET" "${domain_url}/api/nodes" "$token")
+        local node_uuid
+        node_uuid=$(echo "$nodes_response" | jq -r --arg cp "$selected_uuid" \
+            '.response[] | select(.configProfile.activeConfigProfileUuid == $cp) | .uuid // empty' 2>/dev/null | head -1)
+
+        if [ -n "$node_uuid" ] && [ "$node_uuid" != "null" ]; then
+            # Получаем текущие activeInbounds ноды
+            local current_inbounds
+            current_inbounds=$(echo "$nodes_response" | jq -r --arg uuid "$node_uuid" \
+                '[.response[] | select(.uuid == $uuid) | .configProfile.activeInbounds[]] // []' 2>/dev/null)
+
+            # Добавляем WARP-инбаунд
+            local new_inbounds
+            new_inbounds=$(echo "$current_inbounds" | jq --arg inbound "$warp_inbound_uuid" '. + [$inbound] | unique' 2>/dev/null)
+
+            local node_update_body
+            node_update_body=$(jq -n --arg uuid "$node_uuid" --argjson inbounds "$new_inbounds" \
+                --arg cp_uuid "$selected_uuid" '{
+                uuid: $uuid,
+                configProfile: {
+                    activeConfigProfileUuid: $cp_uuid,
+                    activeInbounds: $inbounds
+                }
+            }')
+
+            make_api_request "PATCH" "${domain_url}/api/nodes" "$token" "$node_update_body" >/dev/null 2>&1
+            print_success "Нода обновлена"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Не удалось получить UUID WARP-инбаунда (хост и сквады не обновлены)${NC}"
     fi
 
     echo
+    echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
+    echo
+    echo -e "${DARKGRAY}Основной инбаунд (порт 443) → DIRECT${NC}"
+    echo -e "${DARKGRAY}WARP-инбаунд (порт 8443) → warp-out${NC}"
+    echo -e "${DARKGRAY}Не забудьте установить WARP на сервере ноды${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
@@ -473,8 +612,7 @@ remove_warp_from_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Удаление WARP-настроек должно выполняться только на сервере,${NC}"
-    echo -e "${DARKGRAY}где установлена панель, а не на сервере ноды.${NC}"
+    echo -e "${DARKGRAY}Будет удалён WARP-инбаунд (порт 8443), хост и маршрутизация.${NC}"
     echo
     echo -en "${GREEN}[?]${NC} ${YELLOW}Продолжить? (Enter/Esc):${NC} "
     read -rsn 1 -t 10 key 2>/dev/null || true
@@ -550,22 +688,33 @@ remove_warp_from_config() {
 
     local removed=false
 
+    # Удаляем WARP-инбаунд (порт 8443)
+    if echo "$config_json" | jq -e '.inbounds[] | select(.port == 8443)' >/dev/null 2>&1; then
+        config_json=$(echo "$config_json" | jq 'del(.inbounds[] | select(.port == 8443))' 2>/dev/null)
+        echo -e "${GREEN}✓${NC} Удалён WARP-инбаунд (порт 8443)"
+        removed=true
+    fi
+
     # Удаляем warp-out из outbounds
     if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' >/dev/null 2>&1; then
         config_json=$(echo "$config_json" | jq 'del(.outbounds[] | select(.tag == "warp-out"))' 2>/dev/null)
         echo -e "${GREEN}✓${NC} Удалён warp-out из outbounds"
         removed=true
-    else
-        echo -e "${YELLOW}⚠${NC} warp-out не найден в outbounds"
     fi
 
-    # Удаляем правило из routing
+    # Удаляем правила маршрутизации связанные с WARP
     if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' >/dev/null 2>&1; then
         config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "warp-out"))' 2>/dev/null)
-        echo -e "${GREEN}✓${NC} Удалено правило WARP из routing"
+        echo -e "${GREEN}✓${NC} Удалено правило маршрутизации WARP"
         removed=true
-    else
-        echo -e "${YELLOW}⚠${NC} Правило WARP не найдено в routing"
+    fi
+
+    # Удаляем правило DIRECT для основного инбаунда (добавленное при WARP)
+    # Оставляем только если есть inboundTag в правиле
+    if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "DIRECT" and .inboundTag)' >/dev/null 2>&1; then
+        config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "DIRECT" and .inboundTag))' 2>/dev/null)
+        echo -e "${GREEN}✓${NC} Удалено правило маршрутизации DIRECT по инбаунду"
+        removed=true
     fi
 
     if [ "$removed" = false ]; then
@@ -577,12 +726,19 @@ remove_warp_from_config() {
     fi
 
     # Обновляем конфигурацию
+    local update_body
+    update_body=$(jq -n --arg uuid "$selected_uuid" --argjson config "$config_json" '{
+        uuid: $uuid,
+        config: $config
+    }')
     local update_response
-    update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
+    update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "$update_body")
 
     if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
         echo
         print_success "WARP удалён из конфигурации"
+        echo
+        echo -e "${DARKGRAY}Хосты связанные с WARP-инбаундом будут удалены автоматически.${NC}"
     else
         echo
         print_error "Не удалось обновить конфигурацию"

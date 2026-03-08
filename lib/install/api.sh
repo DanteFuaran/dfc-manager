@@ -434,17 +434,18 @@ create_host() {
     local inbound_uuid=$4
     local remark=$5
     local address=$6
+    local port="${7:-443}"
 
     local request_body
     request_body=$(jq -n --arg config_uuid "$config_uuid" --arg inbound_uuid "$inbound_uuid" \
-        --arg remark "$remark" --arg address "$address" '{
+        --arg remark "$remark" --arg address "$address" --argjson port "$port" '{
         inbound: {
             configProfileUuid: $config_uuid,
             configProfileInboundUuid: $inbound_uuid
         },
         remark: $remark,
         address: $address,
-        port: 443,
+        port: $port,
         path: "",
         sni: $address,
         host: "",
