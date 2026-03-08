@@ -43,19 +43,19 @@ update_script() {
     remote_version=$(get_remote_version)
 
     if [ -n "$installed_version" ]; then
-        echo -e "${WHITE}Установленная версия:${NC} v$installed_version"
+        echo -e "Установленная версия: v$installed_version"
     else
         echo -e "${YELLOW}Скрипт не установлен в системе${NC}"
     fi
 
     if [ -n "$remote_version" ] && [ "$remote_version" != "$installed_version" ]; then
-        echo -e "${WHITE}Доступная версия:${NC}     ${GREEN}v$remote_version${NC}"
+        echo -e "Доступная версия:     ${GREEN}v$remote_version${NC}"
     elif [ -n "$remote_version" ]; then
-        echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
+        echo -e "Доступная версия:     v$remote_version"
     else
         # Нет кеша и сеть недоступна — показываем установленную версию как актуальную
         remote_version="$installed_version"
-        echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
+        echo -e "Доступная версия:     v$remote_version"
     fi
     
     echo
@@ -99,13 +99,9 @@ update_script() {
     ) &
     show_spinner "Загрузка обновлений"
 
-    local new_installed_version
-    new_installed_version=$(get_installed_version)
-    
-    if [ "$new_installed_version" = "$remote_version" ]; then
+    if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
-        
-        print_success "Скрипт успешно обновлён до версии v$new_installed_version"
+        print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 0
