@@ -72,7 +72,10 @@ update_script() {
         return 0
     fi
 
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Обновить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    # Сбрасываем буфер stdin — чтобы Enter из меню не засчитался как подтверждение
+    read -s -r -t 0.1 _flush 2>/dev/null || true
     tput civis
     local _key
     while true; do
