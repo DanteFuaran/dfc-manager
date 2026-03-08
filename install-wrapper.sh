@@ -22,7 +22,7 @@ echo -e "${BLUE}Подготовка скрипта к запуску...${NC}"
 # Если скрипт уже установлен — обновляем код через git clone и запускаем
 if [ -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
     _tmp=$(mktemp -d)
-    if git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}.git" "${_tmp}" >/dev/null 2>&1; then
+    if timeout 30 git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}.git" "${_tmp}" >/dev/null 2>&1; then
         rm -rf "${_INSTALL_DIR}"
         mv "${_tmp}" "${_INSTALL_DIR}"
         chmod +x "${_INSTALL_DIR}/dfc-remna-install.sh"
@@ -37,9 +37,7 @@ fi
 # ─── Первичная установка ─────────────────────────────────
 mkdir -p /usr/local/bin || { echo -e "${RED}✖ Ошибка создания /usr/local/bin${NC}"; exit 1; }
 
-git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}.git" "${_INSTALL_DIR}" >/dev/null 2>&1
-
-if [ $? -ne 0 ]; then
+if ! timeout 60 git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}.git" "${_INSTALL_DIR}" >/dev/null 2>&1; then
     echo -e "${RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${NC}"
     rm -rf "${_INSTALL_DIR}"
     exit 1
