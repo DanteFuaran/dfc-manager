@@ -5,7 +5,7 @@ ___
 ## 🚀 Быстрый старт
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/install-wrapper.sh)
 ```
 
 <sub>После установки управление доступно через команду **`dfc-remna-install`** или **`dfc-ri`**</sub>
@@ -87,7 +87,7 @@ ___
 
 ### ▶️ Полная установка одной командой
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/install-wrapper.sh)
 ```
 
 ### 📦 Что сделает скрипт
