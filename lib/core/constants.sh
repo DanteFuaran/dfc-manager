@@ -2,7 +2,7 @@
 # КОНСТАНТЫ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 # ═══════════════════════════════════════════════
 
-SCRIPT_VERSION="0.2.59"
+SCRIPT_VERSION="0.2.60"
 DIR_REMNAWAVE="/usr/local/dfc-remna-install/"
 DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
