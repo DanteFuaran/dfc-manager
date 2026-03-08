@@ -38,13 +38,9 @@ update_script() {
     local installed_version
     installed_version=$(get_installed_version)
 
-    # Используем кешированную версию с момента запуска (избегаем повторного сетевого запроса)
+    # Всегда запрашиваем свежую версию с GitHub (не кешируем — важно показать АКТУАЛЬНУЮ версию)
     local remote_version
-    if [ -f "${UPDATE_AVAILABLE_FILE}" ]; then
-        remote_version=$(cat "${UPDATE_AVAILABLE_FILE}")
-    else
-        remote_version=$(get_remote_version)
-    fi
+    remote_version=$(get_remote_version)
 
     if [ -n "$installed_version" ]; then
         echo -e "${WHITE}Установленная версия:${NC} v$installed_version"
