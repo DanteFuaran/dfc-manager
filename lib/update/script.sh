@@ -35,18 +35,13 @@ update_script() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    local installed_version
-    installed_version=$(get_installed_version)
+    local installed_version="${SCRIPT_VERSION}"
 
     # Всегда запрашиваем свежую версию с GitHub (не кешируем — важно показать АКТУАЛЬНУЮ версию)
     local remote_version
     remote_version=$(get_remote_version)
 
-    if [ -n "$installed_version" ]; then
-        echo -e "Установленная версия: v$installed_version"
-    else
-        echo -e "${YELLOW}Скрипт не установлен в системе${NC}"
-    fi
+    echo -e "Установленная версия: v$installed_version"
 
     if [ -n "$remote_version" ] && [ "$remote_version" != "$installed_version" ]; then
         echo -e "Доступная версия:     ${GREEN}v$remote_version${NC}"
