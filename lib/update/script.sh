@@ -60,17 +60,7 @@ update_script() {
         echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
     fi
     
-    echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-
-    if [ "$force_update" != "force" ] && [ "$installed_version" = "$remote_version" ]; then
-        print_success "У вас уже установлена последняя версия"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        show_continue_prompt
-        return 0
-    fi
-
     echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Обновить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     # Сбрасываем буфер stdin — чтобы Enter из меню не засчитался как подтверждение
     read -s -r -t 0.1 _flush 2>/dev/null || true
@@ -83,11 +73,19 @@ update_script() {
             return 0
         elif [[ "$_key" == "" ]]; then
             tput cnorm
-            # Стираем строку навигации, печатаем пустую строку
+            # Очищаем строку навигации и выводим пустую строку
             printf "\r\033[K\n"
             break
         fi
     done
+
+    if [ "$force_update" != "force" ] && [ "$installed_version" = "$remote_version" ]; then
+        print_success "У вас уже установлена последняя версия"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt
+        return 0
+    fi
 
     (
         mkdir -p "${DIR_REMNAWAVE}"
