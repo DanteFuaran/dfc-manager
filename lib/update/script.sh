@@ -37,23 +37,27 @@ update_script() {
 
     local installed_version
     installed_version=$(get_installed_version)
+
+    # Используем кешированную версию с момента запуска (избегаем повторного сетевого запроса)
     local remote_version
-    remote_version=$(get_remote_version)
-    
+    if [ -f "${UPDATE_AVAILABLE_FILE}" ]; then
+        remote_version=$(cat "${UPDATE_AVAILABLE_FILE}")
+    else
+        remote_version=$(get_remote_version)
+    fi
+
     if [ -n "$installed_version" ]; then
         echo -e "${WHITE}Установленная версия:${NC} v$installed_version"
     else
         echo -e "${YELLOW}Скрипт не установлен в системе${NC}"
     fi
-    
+
     if [ -n "$remote_version" ]; then
         echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
     else
-        print_error "Не удалось получить информацию о версии с GitHub"
-    echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
-        return 1
+        # Нет кеша и сеть недоступна — показываем установленную версию как актуальную
+        remote_version="$installed_version"
+        echo -e "${WHITE}Доступная версия:${NC}     v$remote_version"
     fi
     
     echo
