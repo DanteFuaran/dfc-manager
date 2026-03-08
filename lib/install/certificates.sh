@@ -156,7 +156,9 @@ get_cert_acme() {
     rm -f "$_tmp_log" "$_exit_file"
 
     local _deploy_hook='for d in /opt/remnawave /opt/remnanode; do [ -f "$d/docker-compose.yml" ] && cd "$d" && docker compose restart remnawave-nginx 2>/dev/null; done'
-    local cron_rule="0 3 * * * certbot renew --quiet --pre-hook 'ufw allow 80/tcp >/dev/null 2>&1' --post-hook 'ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1' --deploy-hook '${_deploy_hook}' 2>/dev/null"
+    local _pre_hook='ufw allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true; sleep 2'
+    local _post_hook='ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true'
+    local cron_rule="0 3 * * * certbot renew --quiet --pre-hook '${_pre_hook}' --post-hook '${_post_hook}' --deploy-hook '${_deploy_hook}' 2>/dev/null"
     if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
         (crontab -l 2>/dev/null; echo "$cron_rule") | crontab -
     fi

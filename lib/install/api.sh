@@ -335,6 +335,7 @@ create_config_profile() {
                         spiderX: "",
                         shortIds: [$short_id],
                         privateKey: $private_key,
+                        fingerprint: "chrome",
                         serverNames: [$domain]
                     }
                 }
@@ -344,6 +345,7 @@ create_config_profile() {
                 { tag: "BLOCK", protocol: "blackhole" }
             ],
             routing: {
+                domainStrategy: "AsIs",
                 rules: [
                     { ip: ["geoip:private"], type: "field", outboundTag: "BLOCK" },
                     { type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK" }

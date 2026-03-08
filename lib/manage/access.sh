@@ -409,6 +409,7 @@ EOF
         cd "$dir"
         docker compose restart remnawave-nginx >/dev/null 2>&1
     ) &
+    show_spinner "Активация доступа по 8443"
 
     ufw allow 8443/tcp >/dev/null 2>&1
 

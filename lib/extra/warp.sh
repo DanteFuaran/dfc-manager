@@ -107,7 +107,9 @@ install_warp_native() {
     echo -e "${DARKGRAY}Оставьте пустым для бесплатной версии.${NC}"
     echo
     reading_inline "WARP+ ключ (Enter для пропуска):" warp_key
+    local _rc_wk=$?
     echo
+    if [[ $_rc_wk -eq 2 ]]; then return 0; fi
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"

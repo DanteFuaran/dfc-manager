@@ -681,7 +681,71 @@ server {
 
     root /var/www/html;
     index index.html;
+
+    # Заголовки безопасности
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    # Только GET и HEAD методы
+    if (\$request_method !~ ^(GET|HEAD)\$) {
+        return 444;
+    }
+
+    # Блокировка скрытых файлов (.env, .git и др.)
+    location ~ /\\. {
+        return 444;
+    }
+
+    # Блокировка типичных целей сканирования
+    location ~* \\.(php|asp|aspx|jsp|cgi)\$ {
+        return 444;
+    }
+    location ~* ^/(wp-|wordpress|wp-admin|wp-content|wp-includes|wp-json|xmlrpc) {
+        return 444;
+    }
+    location ~* ^/(cgi-bin|_debugbar|debug|telescope|actuator|console|admin|phpmyadmin|pma|myadmin) {
+        return 444;
+    }
+    location ~* ^/(vendor|node_modules|storage|backup|config|credentials|docker) {
+        return 444;
+    }
+
+    # robots.txt — запрет индексации
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\\nDisallow: /\\n";
+    }
+
+    # favicon — подавление 404
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+    location = /favicon.png {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+
+    # Главная страница (selfsteal) — без rate limit (панель делает health-check)
+    location = / {
+        try_files /index.html =444;
+    }
+
+    # Статика
+    location ~* ^/(css|js|img|images|fonts|static)/ {
+        try_files \$uri =444;
+        expires 1h;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    # Всё остальное — разрыв соединения
+    location / {
+        return 444;
+    }
 }
 
 server {
@@ -929,8 +993,9 @@ server {
         return 204;
     }
 
-    # Главная страница (selfsteal)
+    # Главная страница (selfsteal) — без rate limit (панель делает health-check на GET /)
     location = / {
+        limit_req off;
         try_files /index.html =444;
     }
 
