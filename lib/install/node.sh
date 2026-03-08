@@ -699,5 +699,6 @@ EOL
     echo
     echo -e "${YELLOW}Проверьте подключение ноды в панели Remnawave${NC}"
     echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }

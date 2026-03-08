@@ -130,7 +130,6 @@ add_node_to_panel() {
     echo -e "${DARKGRAY}   ноды (Только нода) на сервере ноды.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}  ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     echo
     local _gpt_rc
     get_panel_token; _gpt_rc=$?
@@ -240,6 +239,7 @@ add_node_to_panel() {
     echo -e "${WHITE}1. Запустите этот скрипт на сервере, где будет установлена нода${NC}"
     echo -e "${WHITE}2. Выберите \"Установить компоненты\" → \"Только нода\"${NC}"
     echo -e "${RED}─────────────────────────────────────────────────${NC}"
+    echo -e "${DARKGRAY}  ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     echo
     show_continue_prompt || return 1
 }

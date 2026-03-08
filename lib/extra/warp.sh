@@ -210,7 +210,7 @@ install_warp_native() {
             ufw allow 8443/tcp >/dev/null 2>&1
             print_success "Порт 8443 открыт (ufw)"
         fi
-
+        echo
         echo -e "${YELLOW}⚠️  Добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"

@@ -901,6 +901,9 @@ generate_nginx_conf_node() {
     local node_cert=$2
     local target_dir="${3:-/opt/remnawave}"
 
+    # Удаляем если nginx.conf — директория (может быть создана Docker)
+    [ -d "${target_dir}/nginx.conf" ] && rm -rf "${target_dir}/nginx.conf"
+
     cat > "${target_dir}/nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
