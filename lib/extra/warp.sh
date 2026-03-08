@@ -327,11 +327,11 @@ add_warp_to_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Добавление WARP создаст второй инбаунд (порт 8443),${NC}"
-    echo -e "${DARKGRAY}хост и маршрутизацию трафика через WARP.${NC}"
+    echo -e "${DARKGRAY}В профиль будет добавлен WARP-инбаунд (порт 8443).${NC}"
     echo
-    echo -en "${GREEN}[?]${NC} ${YELLOW}Продолжить? (Enter/Esc):${NC} "
-    read -rsn 1 -t 10 key 2>/dev/null || true
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
+    read -rsn 1 key 2>/dev/null || true
     echo
 
     if [ "$key" = $'\x1b' ]; then
@@ -495,9 +495,15 @@ add_warp_to_config() {
     config_json=$(echo "$config_json" | jq --argjson wo "$warp_outbound" '.outbounds += [$wo]')
 
     # Добавляем правила маршрутизации:
-    # 1. Основной инбаунд → DIRECT
-    # 2. WARP-инбаунд → warp-out
-    local rule_direct rule_warp
+    # 1. YouTube → warp-out (домены через WARP с любого инбаунда)
+    # 2. Основной инбаунд → DIRECT
+    # 3. WARP-инбаунд → warp-out
+    local rule_direct rule_warp rule_youtube
+    rule_youtube=$(jq -n '{
+        type: "field",
+        domain: ["geosite:youtube"],
+        outboundTag: "warp-out"
+    }')
     rule_direct=$(jq -n --arg tag "$main_inbound_tag" '{
         type: "field",
         inboundTag: [$tag],
@@ -509,8 +515,8 @@ add_warp_to_config() {
         outboundTag: "warp-out"
     }')
 
-    config_json=$(echo "$config_json" | jq --argjson rd "$rule_direct" --argjson rw "$rule_warp" \
-        '.routing.rules += [$rd, $rw]')
+    config_json=$(echo "$config_json" | jq --argjson ry "$rule_youtube" --argjson rd "$rule_direct" --argjson rw "$rule_warp" \
+        '.routing.rules += [$ry, $rd, $rw]')
 
     # Обновляем конфигурацию через API
     print_action "Обновление конфигурации..."
@@ -562,13 +568,17 @@ add_warp_to_config() {
         nodes_response=$(make_api_request "GET" "${domain_url}/api/nodes" "$token")
         local node_uuid
         node_uuid=$(echo "$nodes_response" | jq -r --arg cp "$selected_uuid" \
-            '.response[] | select(.configProfile.activeConfigProfileUuid == $cp) | .uuid // empty' 2>/dev/null | head -1)
+            '[.response[] | select(
+                .configProfile.activeConfigProfileUuid == $cp or
+                .activeConfigProfileUuid == $cp
+            ) | .uuid][0] // empty' 2>/dev/null)
 
         if [ -n "$node_uuid" ] && [ "$node_uuid" != "null" ]; then
-            # Получаем текущие activeInbounds ноды
+            # Получаем текущие activeInbounds ноды (обработка как строк, так и объектов)
             local current_inbounds
-            current_inbounds=$(echo "$nodes_response" | jq -r --arg uuid "$node_uuid" \
-                '[.response[] | select(.uuid == $uuid) | .configProfile.activeInbounds[]] // []' 2>/dev/null)
+            current_inbounds=$(echo "$nodes_response" | jq --arg uuid "$node_uuid" \
+                '[.response[] | select(.uuid == $uuid) | .configProfile.activeInbounds[] |
+                  if type == "object" then .uuid else . end] // []' 2>/dev/null)
 
             # Добавляем WARP-инбаунд
             local new_inbounds
@@ -596,6 +606,7 @@ add_warp_to_config() {
     echo
     echo -e "${DARKGRAY}Основной инбаунд (порт 443) → DIRECT${NC}"
     echo -e "${DARKGRAY}WARP-инбаунд (порт 8443) → warp-out${NC}"
+    echo -e "${DARKGRAY}YouTube (geosite:youtube) → warp-out${NC}"
     echo -e "${DARKGRAY}Не забудьте установить WARP на сервере ноды${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -612,10 +623,11 @@ remove_warp_from_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Будет удалён WARP-инбаунд (порт 8443), хост и маршрутизация.${NC}"
+    echo -e "${DARKGRAY}Из профиля будет удалён WARP-инбаунд (порт 8443).${NC}"
     echo
-    echo -en "${GREEN}[?]${NC} ${YELLOW}Продолжить? (Enter/Esc):${NC} "
-    read -rsn 1 -t 10 key 2>/dev/null || true
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
+    read -rsn 1 key 2>/dev/null || true
     echo
 
     if [ "$key" = $'\x1b' ]; then
