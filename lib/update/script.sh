@@ -73,8 +73,9 @@ update_script() {
             return 0
         elif [[ "$_key" == "" ]]; then
             tput cnorm
-            # Очищаем строку навигации и выводим пустую строку
-            printf "\r\033[K\n"
+            # Возвращаемся на строку навигации и очищаем её
+            tput cuu1
+            printf "\033[K\n"
             break
         fi
     done
