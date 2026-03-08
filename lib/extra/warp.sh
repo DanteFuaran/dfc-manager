@@ -297,6 +297,9 @@ uninstall_warp_native() {
         rm -f /etc/wireguard/warp.conf 2>/dev/null || true
         rm -f /usr/local/bin/wgcf 2>/dev/null || true
         rm -f /tmp/wgcf-account.toml /tmp/wgcf-profile.conf 2>/dev/null || true
+        # Удаляем пакеты
+        DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y wireguard >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление WARP"
     echo
