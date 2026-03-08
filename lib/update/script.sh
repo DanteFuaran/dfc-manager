@@ -48,16 +48,16 @@ update_script() {
     # Если не удалось получить — показываем текущую
     [ -z "$remote_version" ] && remote_version="$installed_version"
 
-    echo -e "${NC}Установленная версия: v$installed_version"
+    printf "\033[0mУстановленная версия: v%s\n" "$installed_version"
 
     if [ -n "$remote_version" ] && [ "$remote_version" != "$installed_version" ]; then
-        echo -e "${NC}Доступная версия:     ${GREEN}v$remote_version${NC}"
+        printf "\033[0mДоступная версия:     \033[32mv%s\033[0m\n" "$remote_version"
     elif [ -n "$remote_version" ]; then
-        echo -e "${NC}Доступная версия:     v$remote_version"
+        printf "\033[0mДоступная версия:     v%s\n" "$remote_version"
     else
         # Нет кеша и сеть недоступна — показываем установленную версию как актуальную
         remote_version="$installed_version"
-        echo -e "${NC}Доступная версия:     v$remote_version"
+        printf "\033[0mДоступная версия:     v%s\n" "$remote_version"
     fi
     
     echo
