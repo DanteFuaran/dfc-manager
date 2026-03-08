@@ -64,6 +64,7 @@ update_script() {
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
 
     if [ "$force_update" != "force" ] && [ "$installed_version" = "$remote_version" ]; then
+        echo
         print_success "У вас уже установлена последняя версия"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
