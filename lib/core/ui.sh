@@ -7,6 +7,13 @@ print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
 print_success() { printf "${GREEN}✅${NC} %b\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
 
+# Сбрасывает буферизованный ввод (например, клавиши, нажатые во время спиннеров)
+_flush_stdin() {
+    local _dummy
+    while IFS= read -rsn1 -t 0 _dummy 2>/dev/null; do true; done
+    true
+}
+
 # ═══════════════════════════════════════════════
 # СПИННЕРЫ
 # ═══════════════════════════════════════════════
@@ -112,6 +119,8 @@ show_arrow_menu() {
 
     # Обработчик ошибок для этой функции
     trap "_restore_term" RETURN
+
+    _flush_stdin
 
     while true; do
         clear
@@ -261,6 +270,7 @@ reading_inline() {
 # Промпт "Enter: Продолжить    Esc: Назад"
 # Возвращает: 0 = Enter (назад на одно меню), 1 = Esc (в главное меню)
 show_continue_prompt() {
+    _flush_stdin
     tput civis 2>/dev/null
     while true; do
         printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
