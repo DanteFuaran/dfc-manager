@@ -117,10 +117,18 @@ generate_docker_compose_full() {
     local sub_cert_domain=$2
     local node_cert_domain=$3
 
-    # Проверяем, существует ли сеть remnawave-network
+    # Пересоздаём сеть remnawave-network с фиксированной подсетью 172.30.0.0/16
+    # Если сеть уже есть с другой подсетью — удаляем и создаём заново
     local network_exists=false
     if docker network ls | grep -q "remnawave-network"; then
-        network_exists=true
+        local current_subnet
+        current_subnet=$(docker network inspect remnawave-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+        if [ "$current_subnet" = "172.30.0.0/16" ]; then
+            network_exists=true
+        else
+            # Пересоздаём сеть с правильной подсетью
+            docker network rm remnawave-network >/dev/null 2>&1 || true
+        fi
     fi
 
     cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
