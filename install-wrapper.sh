@@ -19,8 +19,18 @@ _BRANCH="main"
 
 echo -e "${BLUE}Подготовка скрипта к запуску...${NC}"
 
-# Если скрипт уже установлен — запускаем
+# Если скрипт уже установлен — обновляем код через git clone и запускаем
 if [ -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
+    _tmp=$(mktemp -d)
+    if git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}.git" "${_tmp}" >/dev/null 2>&1; then
+        rm -rf "${_INSTALL_DIR}"
+        mv "${_tmp}" "${_INSTALL_DIR}"
+        chmod +x "${_INSTALL_DIR}/dfc-remna-install.sh"
+        ln -sf "${_INSTALL_DIR}/dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
+        ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
+    else
+        rm -rf "${_tmp}"
+    fi
     exec "${_INSTALL_DIR}/dfc-remna-install.sh"
 fi
 
