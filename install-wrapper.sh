@@ -22,11 +22,12 @@ _run_spinner() {
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0
     tput civis 2>/dev/null || true
     while kill -0 "$pid" 2>/dev/null; do
-        printf "\r${BLUE}%s${NC}  %s" "${spin[$i]}" "$msg"
+        printf "\r${BLUE}%s %s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep 0.08
     done
-    printf "\r\033[K"
+    # Оставляем текст синим пока загружаются модули скрипта
+    printf "\r\033[K${BLUE}%s${NC}" "$msg"
     tput cnorm 2>/dev/null || true
 }
 
