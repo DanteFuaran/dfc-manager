@@ -30,9 +30,9 @@ _run_spinner() {
     tput cnorm 2>/dev/null || true
 }
 
-# Если скрипт уже установлен — обновляем и запускаем
+# Если скрипт уже установлен — запускаем
 if [ -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
-    ( cd "${_INSTALL_DIR}" && git pull --ff-only -q 2>/dev/null ) &
+    ( sleep 0.5 ) &
     _run_spinner "Подготовка скрипта к запуску..." $!
     wait $! 2>/dev/null || true
     exec "${_INSTALL_DIR}/dfc-remna-install.sh"
