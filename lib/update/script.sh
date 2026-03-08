@@ -68,6 +68,21 @@ update_script() {
         return 0
     fi
 
+    echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Обновить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    tput civis
+    local _key
+    while true; do
+        read -s -n 1 _key
+        if [[ "$_key" == $'\x1b' ]]; then
+            tput cnorm
+            return 0
+        elif [[ "$_key" == "" ]]; then
+            tput cnorm
+            break
+        fi
+    done
+    echo
+
     (
         mkdir -p "${DIR_REMNAWAVE}"
         curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-remna-install/archive/refs/heads/main.tar.gz" \
