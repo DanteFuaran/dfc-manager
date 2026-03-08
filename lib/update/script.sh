@@ -85,10 +85,11 @@ update_script() {
             return 0
         elif [[ "$_key" == "" ]]; then
             tput cnorm
+            # Стираем строку "Enter: Обновить  Esc: Отмена"
+            printf "\r\033[K"
             break
         fi
     done
-    echo
 
     (
         mkdir -p "${DIR_REMNAWAVE}"
