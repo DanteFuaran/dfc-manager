@@ -337,7 +337,6 @@ installation_full() {
     # Итог
     clear
     tput civis 2>/dev/null
-    echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo -e "                   ${GREEN}🎉 УСТАНОВКА ЗАВЕРШЕНА!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -358,6 +357,5 @@ installation_full() {
     echo -e "${YELLOW}   время через главное меню скрипта.${NC}"
     echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo
     show_continue_prompt || return 1
 }

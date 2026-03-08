@@ -35,6 +35,9 @@ manage_panel_access() {
             1) close_panel_access || break ;;
             2)
                 clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}          🔗  Показать cookie-ссылку${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 local COOKIE_NAME COOKIE_VALUE
                 if get_cookie_from_nginx; then
                     local pd
@@ -46,17 +49,15 @@ manage_panel_access() {
                     if grep -q "# ─── 8443 Fallback" /opt/remnawave/nginx.conf 2>/dev/null; then
                         echo -e "${GREEN}🔗 Cookie-ссылка на панель (доступ по 8443):${NC}"
                         echo -e "${WHITE}https://${pd}:8443/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
-                        echo
                     fi
                 else
                     echo
                     print_error "Не удалось извлечь cookie из nginx.conf"
-                    echo
                 fi
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                show_continue_prompt || break
-                ;;
+                show_continue_prompt
+                ;; # Всегда возвращаемся в меню "Доступ к панели"
             3) ;;
             4) change_credentials || break ;;
             5) regenerate_cookies || break ;;
