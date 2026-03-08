@@ -30,9 +30,9 @@ install_script() {
 update_script() {
     local force_update="${1:-}"
     clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        🔄  Обновление скрипта${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    printf "\033[1;34m══════════════════════════════════════\033[0m\n"
+    printf "\033[32m        🔄  Обновление скрипта\033[0m\n"
+    printf "\033[1;34m══════════════════════════════════════\033[0m\n"
     echo
 
     local installed_version="${SCRIPT_VERSION}"
@@ -48,31 +48,30 @@ update_script() {
     # Если не удалось получить — показываем текущую
     [ -z "$remote_version" ] && remote_version="$installed_version"
 
-    printf "\033[0mУстановленная версия: v%s\n" "$installed_version"
+    printf "\033[0mУстановленная версия: v%s\033[0m\n" "$installed_version"
 
     if [ -n "$remote_version" ] && [ "$remote_version" != "$installed_version" ]; then
         printf "\033[0mДоступная версия:     \033[32mv%s\033[0m\n" "$remote_version"
     elif [ -n "$remote_version" ]; then
-        printf "\033[0mДоступная версия:     v%s\n" "$remote_version"
+        printf "\033[0mДоступная версия:     v%s\033[0m\n" "$remote_version"
     else
         # Нет кеша и сеть недоступна — показываем установленную версию как актуальную
         remote_version="$installed_version"
-        printf "\033[0mДоступная версия:     v%s\n" "$remote_version"
+        printf "\033[0mДоступная версия:     v%s\033[0m\n" "$remote_version"
     fi
-    
     echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    printf "\033[1;30m──────────────────────────────────────\033[0m\n"
 
     if [ "$force_update" != "force" ] && [ "$installed_version" = "$remote_version" ]; then
         echo
         print_success "У вас уже установлена последняя версия"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        printf "\033[1;34m══════════════════════════════════════\033[0m\n"
         show_continue_prompt
         return 0
     fi
 
-    echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Обновить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    printf "\033[1;30m \033[1;34mEnter\033[1;30m: Обновить     \033[1;34mEsc\033[1;30m: Отмена\033[0m\n"
     # Сбрасываем буфер stdin — чтобы Enter из меню не засчитался как подтверждение
     read -s -r -t 0.1 _flush 2>/dev/null || true
     tput civis
@@ -105,13 +104,13 @@ update_script() {
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        printf "\033[1;34m══════════════════════════════════════\033[0m\n"
         show_continue_prompt || return 0
         exec /usr/local/bin/dfc-remna-install
     else
         print_error "Ошибка при обновлении скрипта"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        printf "\033[1;34m══════════════════════════════════════\033[0m\n"
         show_continue_prompt
         return 1
     fi
