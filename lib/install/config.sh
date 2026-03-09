@@ -890,6 +890,8 @@ server {
         limit_req zone=sub_limit burst=20 nodelay;
         limit_req_status 444;
 
+        keepalive_timeout 0;
+
         proxy_http_version 1.1;
         proxy_pass http://json;
         proxy_set_header Host \$host;
