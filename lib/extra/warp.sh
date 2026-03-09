@@ -351,6 +351,8 @@ add_warp_to_config() {
     printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
     read -rsn 1 key 2>/dev/null || true
     echo
+    echo
+    echo
 
     if [ "$key" = $'\x1b' ]; then
         return 0
@@ -747,9 +749,13 @@ remove_warp_from_config() {
     # Получаем UUID WARP-инбаундов через API (для удаления хостов)
     local warp_inbound_uuids=""
     if [ -n "$warp_inbound_tags" ]; then
-        warp_inbound_uuids=$(echo "$config_data" | jq -r --argjson tags \
-            "$(echo "$warp_inbound_tags" | jq -Rs 'split("\n") | map(select(length>0))')" \
-            '.response.inbounds[] | select(.tag as $t | $tags | index($t) != null) | .uuid // empty' 2>/dev/null)
+        while IFS= read -r _tag; do
+            [ -z "$_tag" ] && continue
+            local _uuid
+            _uuid=$(echo "$config_data" | jq -r --arg t "$_tag" \
+                '.response.inbounds[] | select(.tag == $t) | .uuid // empty' 2>/dev/null)
+            [ -n "$_uuid" ] && warp_inbound_uuids+="${_uuid}"$'\n'
+        done <<< "$warp_inbound_tags"
     fi
 
     # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
