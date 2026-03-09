@@ -119,6 +119,16 @@ install_packages() {
             echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.conf
         fi
 
+        # Unattended-upgrades — автоматические обновления безопасности
+        echo 'Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; };' \
+            > /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null || true
+        echo 'Unattended-Upgrade::Mail "root";' \
+            >> /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null || true
+        echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true \
+            | debconf-set-selections 2>/dev/null || true
+        dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null 2>&1 || true
+        systemctl restart unattended-upgrades >/dev/null 2>&1 || true
+
         # Locales
         sed -i '/^#.*en_US.UTF-8/s/^#//' /etc/locale.gen 2>/dev/null || true
         locale-gen >/dev/null 2>&1 || true
