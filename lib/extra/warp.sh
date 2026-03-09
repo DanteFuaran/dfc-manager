@@ -318,15 +318,13 @@ uninstall_warp_native() {
 
     # Проверяем результат
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
-        print_success "Удаление WARP"
         print_success "WARP успешно удалён"
         # Закрываем порт в UFW если он был сохранён при установке
         if [ -f /etc/wireguard/.warp_port ] && command -v ufw >/dev/null 2>&1; then
             local _saved_port
             _saved_port=$(cat /etc/wireguard/.warp_port 2>/dev/null)
             if [[ "$_saved_port" =~ ^[0-9]+$ ]]; then
-                ufw delete allow "${_saved_port}/tcp" >/dev/null 2>&1 && \
-                    print_success "Порт ${_saved_port}/tcp закрыт в UFW" || true
+                ufw delete allow "${_saved_port}/tcp" >/dev/null 2>&1 || true
             fi
             rm -f /etc/wireguard/.warp_port
         fi
