@@ -931,9 +931,6 @@ map \$status \$loggable {
     default       1;
 }
 
-# Rate limiting: защита от сканирования и DDoS (5 запросов/сек)
-limit_req_zone \$binary_remote_addr zone=node_limit:10m rate=5r/s;
-
 ssl_protocols TLSv1.2 TLSv1.3;
 ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
@@ -956,10 +953,6 @@ server {
 
     # Логирование только успешных запросов (сканеры не засоряют логи)
     access_log /dev/stdout combined if=\$loggable;
-
-    # Rate limiting
-    limit_req zone=node_limit burst=10 nodelay;
-    limit_req_status 444;
 
     # Заголовки безопасности
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -1009,9 +1002,8 @@ server {
         return 204;
     }
 
-    # Главная страница (selfsteal) — без rate limit (панель делает health-check на GET /)
+    # Главная страница (selfsteal)
     location = / {
-        limit_req off;
         try_files /index.html =444;
     }
 
