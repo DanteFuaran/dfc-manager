@@ -801,6 +801,8 @@ remove_warp_from_config() {
     fi
 
     # Обновляем конфигурацию
+    echo
+    print_action "Сохранение конфигурации..."
     local update_body
     update_body=$(jq -n --arg uuid "$selected_uuid" --argjson config "$config_json" '{
         uuid: $uuid,
@@ -810,6 +812,7 @@ remove_warp_from_config() {
     update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "$update_body")
 
     if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
+        print_success "Конфигурация сохранена"
 
         # Удаляем хосты WARP:
         # — по UUID инбаунда (inbound.configProfileInboundUuid или inbound.uuid)
