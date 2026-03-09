@@ -810,8 +810,6 @@ remove_warp_from_config() {
     update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "$update_body")
 
     if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
-        echo
-        print_success "WARP удалён из конфигурации"
 
         # Удаляем хосты WARP:
         # — по UUID инбаунда (inbound.configProfileInboundUuid или inbound.uuid)
@@ -834,36 +832,50 @@ remove_warp_from_config() {
                 ) | .uuid // empty' 2>/dev/null)
             while IFS= read -r host_uuid; do
                 [ -z "$host_uuid" ] && continue
-                make_api_request "DELETE" "${domain_url}/api/hosts/${host_uuid}" "$token" >/dev/null 2>&1 && \
-                    print_success "Удалён хост WARP" || true
+                make_api_request "DELETE" "${domain_url}/api/hosts/${host_uuid}" "$token" >/dev/null 2>&1 || true
             done <<< "$host_uuids_to_del"
         fi
 
         # Спрашиваем закрыть ли порт в UFW (только если он не используется другими инбаундами)
+        local _close_port_done=false
         if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
             local remaining_ports
             remaining_ports=$(echo "$config_json" | jq -r '[.inbounds[].port | tostring] | .[]' 2>/dev/null)
             while IFS= read -r port; do
                 [ -z "$port" ] && continue
                 if ! echo "$remaining_ports" | grep -qx "$port"; then
-                    sleep 0.3
                     _flush_stdin
                     show_arrow_menu "🛡️  Закрытие порта WARP" \
                         "Закрыть порт ${port}/tcp" \
                         "Не закрывать"
                     local _port_choice=$?
                     if [ $_port_choice -eq 0 ]; then
-                        ufw delete allow "${port}/tcp" >/dev/null 2>&1 && \
-                            print_success "Порт ${port}/tcp закрыт в UFW" || true
+                        ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
                     fi
+                    _close_port_done=true
                 fi
             done <<< "$warp_ports"
         fi
+
+        # Итоговый экран
+        stty sane 2>/dev/null || true
+        tput cnorm 2>/dev/null || true
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}   ➖ УДАЛЕНИЕ WARP ИЗ КОНФИГУРАЦИИ${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        print_success "WARP удалён из конфигурации"
+        print_success "Хосты WARP удалены"
+        echo
     else
+        stty sane 2>/dev/null || true
+        tput cnorm 2>/dev/null || true
         echo
         print_error "Не удалось обновить конфигурацию"
+        echo
     fi
 
-    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
