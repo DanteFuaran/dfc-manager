@@ -290,7 +290,7 @@ installation_node_local() {
 
     (
         cd /opt/remnawave
-        docker compose down 2>&1
+        docker compose down >/dev/null 2>&1
     ) &
     show_spinner "Остановка сервисов" || true
 
@@ -329,7 +329,7 @@ installation_node_local() {
 
     (
         cd /opt/remnawave
-        docker compose up -d 2>&1
+        docker compose up -d >/dev/null 2>&1
     ) &
     if ! show_spinner "Запуск Docker контейнеров"; then
         print_error "Не удалось запустить контейнеры"
@@ -421,8 +421,8 @@ installation_node_local() {
     print_action "Перезапуск сервисов..."
     (
         cd /opt/remnawave
-        docker compose down 2>&1
-        docker compose up -d 2>&1
+        docker compose down >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск контейнеров" || true
 
@@ -686,7 +686,7 @@ EOL
 
     (
         cd "${NODE_INSTALL_DIR}"
-        docker compose up -d 2>&1
+        docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск Docker контейнеров" || true
 

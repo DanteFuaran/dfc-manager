@@ -121,7 +121,7 @@ installation_panel() {
     echo
     (
         cd /opt/remnawave
-        docker compose up -d 2>&1
+        docker compose up -d >/dev/null 2>&1
     ) &
     if ! show_spinner "Запуск Docker контейнеров"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
@@ -180,8 +180,8 @@ installation_panel() {
     print_action "Перезапуск сервисов с обновлённой конфигурацией..."
     (
         cd /opt/remnawave
-        docker compose down 2>&1
-        docker compose up -d 2>&1
+        docker compose down >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск контейнеров" || true
 
