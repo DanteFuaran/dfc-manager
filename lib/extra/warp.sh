@@ -205,13 +205,6 @@ install_warp_native() {
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
-
-        # Автоматически открываем порт 8443 для WARP-инбаунда
-        if command -v ufw >/dev/null 2>&1; then
-            ufw allow 8443/tcp >/dev/null 2>&1
-            print_success "Порт 8443 открыт (ufw)"
-        fi
-        echo
         echo -e "${YELLOW}⚠️  Добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -328,7 +321,7 @@ add_warp_to_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}В профиль будет добавлен WARP-инбаунд (порт 8443).${NC}"
+    echo -e "${DARKGRAY}В профиль будет добавлен WARP-инбаунд на указанный вами порт.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
@@ -441,6 +434,26 @@ add_warp_to_config() {
         return 1
     fi
 
+    # Запрашиваем порт для WARP-инбаунда
+    local warp_port=""
+    while true; do
+        reading_inline "Порт для WARP-инбаунда (Enter = 8443):" warp_port
+        local _rc_port=$?
+        if [[ $_rc_port -eq 2 ]]; then return; fi
+        if [ -z "$warp_port" ]; then
+            warp_port=8443
+            break
+        fi
+        if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
+            break
+        fi
+        print_error "Введите корректный порт (1024–65535)"
+    done
+    echo
+    echo -e "${YELLOW}⚠️  Не забудьте открыть порт ${WHITE}${warp_port}/tcp${YELLOW} на сервере с нодой:${NC}"
+    echo -e "${DARKGRAY}   ufw allow ${warp_port}/tcp${NC}"
+    echo
+
     # Генерируем новые ключи для WARP-инбаунда
     print_action "Генерация REALITY ключей для WARP-инбаунда..."
     local warp_private_key
@@ -459,12 +472,13 @@ add_warp_to_config() {
     # Формируем тег для WARP-инбаунда
     local warp_inbound_tag="${selected_name} - Warp"
 
-    # Добавляем второй инбаунд (порт 8443)
+    # Добавляем второй инбаунд (порт $warp_port)
     local warp_inbound
     warp_inbound=$(jq -n --arg tag "$warp_inbound_tag" --arg domain "$main_domain" \
-        --arg private_key "$warp_private_key" --arg short_id "$warp_short_id" '{
+        --arg private_key "$warp_private_key" --arg short_id "$warp_short_id" \
+        --argjson port "$warp_port" '{
         tag: $tag,
-        port: 8443,
+        port: $port,
         protocol: "vless",
         settings: { clients: [], decryption: "none" },
         sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
@@ -545,11 +559,11 @@ add_warp_to_config() {
         '.response.inbounds[] | select(.tag == $tag) | .uuid // empty' 2>/dev/null)
 
     if [ -n "$warp_inbound_uuid" ] && [ "$warp_inbound_uuid" != "null" ]; then
-        # Создаём хост для WARP-инбаунда (порт 8443)
+        # Создаём хост для WARP-инбаунда (порт $warp_port)
         print_action "Создание хоста для WARP-инбаунда..."
         create_host "$domain_url" "$token" "$selected_uuid" "$warp_inbound_uuid" \
-            "${selected_name} - Warp" "$main_domain" 8443
-        print_success "Хост создан ($main_domain:8443)"
+            "${selected_name} - Warp" "$main_domain" "$warp_port"
+        print_success "Хост создан ($main_domain:$warp_port)"
 
         # Добавляем WARP-инбаунд в сквады
         print_action "Обновление сквадов..."
@@ -606,7 +620,7 @@ add_warp_to_config() {
     echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
     echo
     echo -e "${DARKGRAY}Основной инбаунд (порт 443) → DIRECT${NC}"
-    echo -e "${DARKGRAY}WARP-инбаунд (порт 8443) → warp-out${NC}"
+    echo -e "${DARKGRAY}WARP-инбаунд (порт ${warp_port}) → warp-out${NC}"
     echo -e "${DARKGRAY}YouTube (geosite:youtube) → warp-out${NC}"
     echo -e "${DARKGRAY}Не забудьте установить WARP на сервере ноды${NC}"
     echo
@@ -624,7 +638,7 @@ remove_warp_from_config() {
     # Предупреждение — операция должна выполняться на сервере с панелью
     echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
     echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Из профиля будет удалён WARP-инбаунд (порт 8443).${NC}"
+    echo -e "${DARKGRAY}Из профиля будет удалён WARP-инбаунд и связанные правила маршрутизации.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
@@ -701,10 +715,15 @@ remove_warp_from_config() {
 
     local removed=false
 
-    # Удаляем WARP-инбаунд (порт 8443)
-    if echo "$config_json" | jq -e '.inbounds[] | select(.port == 8443)' >/dev/null 2>&1; then
-        config_json=$(echo "$config_json" | jq 'del(.inbounds[] | select(.port == 8443))' 2>/dev/null)
-        echo -e "${GREEN}✓${NC} Удалён WARP-инбаунд (порт 8443)"
+    # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
+    local warp_inbound_tags
+    warp_inbound_tags=$(echo "$config_json" | jq -r '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique[]' 2>/dev/null)
+    if [ -n "$warp_inbound_tags" ]; then
+        while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            config_json=$(echo "$config_json" | jq --arg tag "$tag" 'del(.inbounds[] | select(.tag == $tag))' 2>/dev/null)
+        done <<< "$warp_inbound_tags"
+        echo -e "${GREEN}✓${NC} Удалён WARP-инбаунд"
         removed=true
     fi
 
