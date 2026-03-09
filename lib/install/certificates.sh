@@ -41,10 +41,10 @@ detect_cert_method() {
     local base_domain
     base_domain=$(extract_domain "$domain")
 
-    if [ -d "/etc/letsencrypt/live/$base_domain" ]; then
-        echo "1"
-    elif [ -d "/etc/letsencrypt/live/$domain" ]; then
+    if [ -d "/etc/letsencrypt/live/$domain" ]; then
         echo "2"
+    elif [ -d "/etc/letsencrypt/live/$base_domain" ] && [ -f "/etc/letsencrypt/live/$base_domain/fullchain.pem" ]; then
+        echo "1"
     else
         echo "2"
     fi
