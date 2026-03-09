@@ -106,7 +106,7 @@ install_warp_native() {
     # Спрашиваем порт для WARP-подключения
     local warp_install_port=""
     while true; do
-        reading_inline "Порт для WARP-инбаунда (По умолчанию 8443):" warp_install_port
+        reading_inline "Порт для WARP-инбаунда (По умолчанию: 8443):" warp_install_port
         local _rc_wp=$?
         if [[ $_rc_wp -eq 2 ]]; then return 0; fi
         if [ -z "$warp_install_port" ]; then
@@ -118,7 +118,6 @@ install_warp_native() {
         fi
         print_error "Введите корректный порт (1024–65535)"
     done
-    echo
 
     # Спрашиваем WARP+ ключ
     reading_inline "WARP+ ключ (Enter для бесплатной версии):" warp_key
@@ -215,12 +214,11 @@ install_warp_native() {
         fi
     ) > "$_warp_log" 2>&1 &
     show_spinner "Установка WARP"
-    echo
 
     # Проверяем результат
     if ip link show warp 2>/dev/null | grep -q "warp"; then
         rm -f "$_warp_log"
-        print_success "Настройка WARP"
+        echo "${warp_install_port}" > /etc/wireguard/.warp_port
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
@@ -288,6 +286,10 @@ uninstall_warp_native() {
         return 0
     fi
 
+    echo
+    echo -e "${YELLOW}⚠️  Вы уверены что хотите удалить WARP ?${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then
         print_error "Операция отменена"
         sleep 2
@@ -318,6 +320,16 @@ uninstall_warp_native() {
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
         print_success "Удаление WARP"
         print_success "WARP успешно удалён"
+        # Закрываем порт в UFW если он был сохранён при установке
+        if [ -f /etc/wireguard/.warp_port ] && command -v ufw >/dev/null 2>&1; then
+            local _saved_port
+            _saved_port=$(cat /etc/wireguard/.warp_port 2>/dev/null)
+            if [[ "$_saved_port" =~ ^[0-9]+$ ]]; then
+                ufw delete allow "${_saved_port}/tcp" >/dev/null 2>&1 && \
+                    print_success "Порт ${_saved_port}/tcp закрыт в UFW" || true
+            fi
+            rm -f /etc/wireguard/.warp_port
+        fi
     else
         print_error "Не удалось удалить WARP — интерфейс всё ещё активен"
     fi
