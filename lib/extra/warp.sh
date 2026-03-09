@@ -103,6 +103,23 @@ install_warp_native() {
         return 0
     fi
 
+    # Спрашиваем порт для WARP-подключения
+    local warp_install_port=""
+    while true; do
+        reading_inline "Порт для WARP-подключения (Enter = 8443):" warp_install_port
+        local _rc_wp=$?
+        if [[ $_rc_wp -eq 2 ]]; then return 0; fi
+        if [ -z "$warp_install_port" ]; then
+            warp_install_port=8443
+            break
+        fi
+        if [[ "$warp_install_port" =~ ^[0-9]+$ ]] && [ "$warp_install_port" -ge 1024 ] && [ "$warp_install_port" -le 65535 ]; then
+            break
+        fi
+        print_error "Введите корректный порт (1024–65535)"
+    done
+    echo
+
     # Спрашиваем WARP+ ключ
     echo -e "${YELLOW}Если у вас есть ключ для WARP, вы можете ввести его ниже.${NC}"
     echo -e "${DARKGRAY}Оставьте пустым для бесплатной версии.${NC}"
@@ -205,7 +222,8 @@ install_warp_native() {
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
-        echo -e "${YELLOW}⚠️  Добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
+        echo -e "${YELLOW}⚠️  Откройте порт ${WHITE}${warp_install_port}/tcp${YELLOW} на этом сервере и добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
+        echo -e "${DARKGRAY}   ufw allow ${warp_install_port}/tcp${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
@@ -300,7 +318,6 @@ uninstall_warp_native() {
 
     # Проверяем результат
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
-        print_success "Удаление WARP"
         print_success "WARP успешно удалён"
     else
         print_error "Не удалось удалить WARP — интерфейс всё ещё активен"
@@ -614,7 +631,7 @@ add_warp_to_config() {
     echo
     echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
     echo
-    echo -e "${YELLOW}⚠️  Не забудьте установить WARP на сервере ноды${NC}"
+    echo -e "${YELLOW}⚠️  Откройте порт ${WHITE}${warp_port}/tcp${YELLOW} и установите WARP на сервере ноды${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
@@ -763,6 +780,20 @@ remove_warp_from_config() {
         print_success "WARP удалён из конфигурации"
         echo
         echo -e "${DARKGRAY}Хосты связанные с WARP-инбаундом будут удалены автоматически.${NC}"
+
+        # Спрашиваем про закрытие порта на сервере ноды
+        echo
+        local warp_close_port=""
+        reading_inline "Какой порт закрыть на сервере ноды? (Enter = пропустить):" warp_close_port
+        if [ -n "$warp_close_port" ] && [[ "$warp_close_port" =~ ^[0-9]+$ ]]; then
+            if command -v ufw >/dev/null 2>&1; then
+                ufw delete allow "${warp_close_port}/tcp" >/dev/null 2>&1 && \
+                    print_success "Порт ${warp_close_port}/tcp закрыт в UFW" || \
+                    echo -e "${YELLOW}⚠️  Не удалось закрыть порт ${warp_close_port}/tcp через UFW${NC}"
+            else
+                echo -e "${YELLOW}⚠️  UFW не найден — закройте порт ${warp_close_port}/tcp вручную${NC}"
+            fi
+        fi
     else
         echo
         print_error "Не удалось обновить конфигурацию"

@@ -316,12 +316,6 @@ installation_node_local() {
         "$COOKIE_NAME" "$COOKIE_VALUE") &
     show_spinner "Обновление nginx.conf" || true
 
-    # ─── UFW для ноды ───
-    (
-        ufw allow from "$network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
-    ) &
-    show_spinner "Настройка файрвола" || true
-
     # ─── Запуск сервисов ───
     echo
     print_action "Запуск сервисов..."
