@@ -764,8 +764,8 @@ remove_warp_from_config() {
 
     if [ -n "$_port_to_close" ]; then
         show_arrow_menu "🛡️  Закрытие порта WARP" \
-            "Закрыть порт ${_port_to_close}/tcp" \
-            "Не закрывать"
+            "Закрыть порт от WARP (${_port_to_close})" \
+            "Не закрывать порт"
         [ $? -eq 0 ] && _should_close_port=true
     fi
 
