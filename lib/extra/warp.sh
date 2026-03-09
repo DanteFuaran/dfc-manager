@@ -662,6 +662,7 @@ remove_warp_from_config() {
     printf " ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
     read -rsn 1 key 2>/dev/null || true
     echo
+    echo
 
     if [ "$key" = $'\x1b' ]; then
         return 0
