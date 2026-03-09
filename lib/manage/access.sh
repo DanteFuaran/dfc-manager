@@ -95,6 +95,7 @@ close_panel_access() {
 _update_hosts_port() {
     local dir="${1:-/opt/remnawave}"
     local target_port="$2"
+    local inbound_port="${3:-}"   # опционально: уже полученный xray inbound port
     local domain_url="127.0.0.1:3000"
 
     # Получаем токен
@@ -103,13 +104,14 @@ _update_hosts_port() {
     [ -z "$token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
     [ -z "$token" ] && return 0
 
-    # Получаем xray inbound port из config profile
-    local profiles_response inbound_port
-    profiles_response=$(make_api_request "GET" "$domain_url/api/config-profiles" "$token" 2>/dev/null)
-    [ -z "$profiles_response" ] && return 0
-
-    inbound_port=$(echo "$profiles_response" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
-    [ -z "$inbound_port" ] && return 0
+    # Получаем xray inbound port из config profile (если не передан)
+    if [ -z "$inbound_port" ]; then
+        local profiles_response
+        profiles_response=$(make_api_request "GET" "$domain_url/api/config-profiles" "$token" 2>/dev/null)
+        [ -z "$profiles_response" ] && return 0
+        inbound_port=$(echo "$profiles_response" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
+        [ -z "$inbound_port" ] && return 0
+    fi
 
     # Получаем все хосты
     local hosts_response
@@ -455,6 +457,17 @@ SERVERBLOCK_8443
         return 1
     fi
 
+    # Получаем xray inbound port заранее (для UFW и обновления хостов)
+    local xray_inbound_port=""
+    local _api_token
+    _api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
+    [ -z "$_api_token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && _api_token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
+    if [ -n "$_api_token" ]; then
+        local _profiles_resp
+        _profiles_resp=$(make_api_request "GET" "127.0.0.1:3000/api/config-profiles" "$_api_token" 2>/dev/null)
+        xray_inbound_port=$(echo "$_profiles_resp" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
+    fi
+
     # UFW: закрываем старый порт, открываем новый
     local old_port
     if [ "$target_port" = "443" ]; then
@@ -464,10 +477,14 @@ SERVERBLOCK_8443
     fi
     ufw delete allow ${old_port}/tcp >/dev/null 2>&1 || true
     ufw allow ${target_port}/tcp >/dev/null 2>&1
+    # При переключении на 443 открываем xray inbound port в UFW
+    if [ "$target_port" = "443" ] && [ -n "$xray_inbound_port" ] && [ "$xray_inbound_port" != "443" ]; then
+        ufw allow ${xray_inbound_port}/tcp >/dev/null 2>&1
+    fi
     ufw reload >/dev/null 2>&1 || true
 
-    # Обновляем порт хостов, привязанных к локальной ноде
-    _update_hosts_port "$dir" "$target_port"
+    # Обновляем порт хостов, привязанных к локальной ноде (передаём уже полученный порт)
+    _update_hosts_port "$dir" "$target_port" "$xray_inbound_port"
 
     print_success "Порт доступа к панели изменён на ${target_port}"
     echo
