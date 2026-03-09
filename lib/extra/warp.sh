@@ -739,9 +739,19 @@ remove_warp_from_config() {
         "$(echo "$config_json" | jq '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique')" \
         '.inbounds[] | select(.tag as $t | $tags | index($t)) | .port | tostring' 2>/dev/null)
 
-    # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
+    # Определяем теги WARP-инбаундов
     local warp_inbound_tags
     warp_inbound_tags=$(echo "$config_json" | jq -r '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique[]' 2>/dev/null)
+
+    # Получаем UUID WARP-инбаундов через API (для удаления хостов)
+    local warp_inbound_uuids=""
+    if [ -n "$warp_inbound_tags" ]; then
+        warp_inbound_uuids=$(echo "$config_data" | jq -r --argjson tags \
+            "$(echo "$warp_inbound_tags" | jq -Rs 'split("\n") | map(select(length>0))')" \
+            '.response.inbounds[] | select(.tag as $t | $tags | index($t) != null) | .uuid // empty' 2>/dev/null)
+    fi
+
+    # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
     if [ -n "$warp_inbound_tags" ]; then
         while IFS= read -r tag; do
             [ -z "$tag" ] && continue
@@ -793,12 +803,30 @@ remove_warp_from_config() {
         echo
         print_success "WARP удалён из конфигурации"
 
+        # Удаляем хосты связанные с WARP-инбаундами
+        if [ -n "$warp_inbound_uuids" ]; then
+            local hosts_response
+            hosts_response=$(make_api_request "GET" "${domain_url}/api/hosts" "$token")
+            if [ -n "$hosts_response" ]; then
+                while IFS= read -r inbound_uuid; do
+                    [ -z "$inbound_uuid" ] && continue
+                    local host_uuids_to_del
+                    host_uuids_to_del=$(echo "$hosts_response" | jq -r --arg iu "$inbound_uuid" \
+                        '.response[] | select(.inbound.configProfileInboundUuid == $iu) | .uuid // empty' 2>/dev/null)
+                    while IFS= read -r host_uuid; do
+                        [ -z "$host_uuid" ] && continue
+                        make_api_request "DELETE" "${domain_url}/api/hosts/${host_uuid}" "$token" >/dev/null 2>&1 && \
+                            print_success "Удалён хост WARP" || true
+                    done <<< "$host_uuids_to_del"
+                done <<< "$warp_inbound_uuids"
+            fi
+        fi
+
         # Автоматически закрываем порты WARP-инбаундов в UFW
         if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
             while IFS= read -r port; do
                 [ -z "$port" ] && continue
-                ufw delete allow "${port}/tcp" >/dev/null 2>&1 && \
-                    print_success "Порт ${port}/tcp закрыт в UFW" || true
+                ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
             done <<< "$warp_ports"
         fi
     else
