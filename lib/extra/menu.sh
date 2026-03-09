@@ -10,7 +10,7 @@ manage_extra_settings() {
         echo
 
         show_arrow_menu "⚙️  Дополнительные настройки" \
-            "�  Firewall (UFW)" \
+            "🔥  Firewall (UFW)" \
             "🌐  WARP" \
             "💾  SWAP" \
             "🚀  BBR" \
