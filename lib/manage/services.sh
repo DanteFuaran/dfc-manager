@@ -103,9 +103,7 @@ manage_reinstall() {
     show_spinner "Удаление контейнеров и данных"
 
     (
-        rm -f "$rw_path/.env"
-        rm -f "$rw_path/docker-compose.yml"
-        rm -f "$rw_path/nginx.conf"
+        rm -rf "$rw_path"
     ) &
     show_spinner "Очистка конфигурации"
 
