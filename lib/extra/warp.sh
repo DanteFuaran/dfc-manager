@@ -124,9 +124,9 @@ install_warp_native() {
     (
         # 1. Установка WireGuard
         echo "=== apt-get update ==="
-        apt-get update -qq 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1
         echo "=== apt-get install wireguard ==="
-        apt-get install -y wireguard 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" wireguard 2>&1
 
         # 2. Определяем архитектуру и скачиваем wgcf
         local arch
@@ -319,9 +319,7 @@ add_warp_to_config() {
     echo
 
     # Предупреждение — операция должна выполняться на сервере с панелью
-    echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}В профиль будет добавлен WARP-инбаунд на указанный вами порт.${NC}"
+    echo -e "${YELLOW}⚠️  Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
@@ -416,12 +414,6 @@ add_warp_to_config() {
         return 0
     fi
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
     # Получаем данные из первого (основного) инбаунда
     local main_inbound_tag main_domain
     main_inbound_tag=$(echo "$config_json" | jq -r '.inbounds[0].tag // empty' 2>/dev/null)
@@ -449,6 +441,11 @@ add_warp_to_config() {
         fi
         print_error "Введите корректный порт (1024–65535)"
     done
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}⚠️  Не забудьте открыть порт ${WHITE}${warp_port}/tcp${YELLOW} на сервере с нодой:${NC}"
     echo -e "${DARKGRAY}   ufw allow ${warp_port}/tcp${NC}"
@@ -559,11 +556,9 @@ add_warp_to_config() {
         '.response.inbounds[] | select(.tag == $tag) | .uuid // empty' 2>/dev/null)
 
     if [ -n "$warp_inbound_uuid" ] && [ "$warp_inbound_uuid" != "null" ]; then
-        # Создаём хост для WARP-инбаунда (порт $warp_port)
-        print_action "Создание хоста для WARP-инбаунда..."
+        # Создаём хост для WARP-инбаунда
         create_host "$domain_url" "$token" "$selected_uuid" "$warp_inbound_uuid" \
-            "${selected_name} - Warp" "$main_domain" "$warp_port"
-        print_success "Хост создан ($main_domain:$warp_port)"
+            "${selected_name} - Warp" "$main_domain" "$warp_port" >/dev/null 2>&1
 
         # Добавляем WARP-инбаунд в сквады
         print_action "Обновление сквадов..."
@@ -619,10 +614,7 @@ add_warp_to_config() {
     echo
     echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
     echo
-    echo -e "${DARKGRAY}Основной инбаунд (порт 443) → DIRECT${NC}"
-    echo -e "${DARKGRAY}WARP-инбаунд (порт ${warp_port}) → warp-out${NC}"
-    echo -e "${DARKGRAY}YouTube (geosite:youtube) → warp-out${NC}"
-    echo -e "${DARKGRAY}Не забудьте установить WARP на сервере ноды${NC}"
+    echo -e "${YELLOW}⚠️  Не забудьте установить WARP на сервере ноды${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
