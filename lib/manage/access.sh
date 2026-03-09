@@ -92,6 +92,41 @@ close_panel_access() {
 }
 
 
+_update_hosts_port() {
+    local dir="${1:-/opt/remnawave}"
+    local target_port="$2"
+    local domain_url="127.0.0.1:3000"
+
+    # Получаем токен
+    local token
+    token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
+    [ -z "$token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
+    [ -z "$token" ] && return 0
+
+    # Получаем xray inbound port из config profile
+    local profiles_response inbound_port
+    profiles_response=$(make_api_request "GET" "$domain_url/api/config-profiles" "$token" 2>/dev/null)
+    [ -z "$profiles_response" ] && return 0
+
+    inbound_port=$(echo "$profiles_response" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
+    [ -z "$inbound_port" ] && return 0
+
+    # Получаем все хосты
+    local hosts_response
+    hosts_response=$(make_api_request "GET" "$domain_url/api/hosts" "$token" 2>/dev/null)
+    [ -z "$hosts_response" ] && return 0
+
+    # Обновляем порт у хостов, у которых он не совпадает с inbound port
+    local host_uuids
+    host_uuids=$(echo "$hosts_response" | jq -r --argjson port "$inbound_port" \
+        '[.response[] | select(.port != $port) | .uuid] | .[]' 2>/dev/null)
+
+    for uuid in $host_uuids; do
+        make_api_request "PATCH" "$domain_url/api/hosts" "$token" \
+            "{\"uuid\":\"${uuid}\",\"port\":${inbound_port}}" >/dev/null 2>&1
+    done
+}
+
 switch_panel_port() {
     local target_port="$1"
     local dir="/opt/remnawave"
@@ -129,10 +164,18 @@ switch_panel_port() {
         sub_cert=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
     fi
 
+    # Определяем selfsteal_domain (третий домен, не панель и не подписка)
+    local selfsteal_domain selfsteal_cert
+    selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "$dir/nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
+    if [ -n "$selfsteal_domain" ]; then
+        selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    fi
+
     # Удаляем любые существующие блоки прямого доступа
     sed -i '/# ─── 8443 Fallback/,/^}$/d' "$dir/nginx.conf"
     sed -i '/# ─── 443 Direct/,/^}$/d' "$dir/nginx.conf"
     sed -i '/# ─── Sub Direct/,/^}$/d' "$dir/nginx.conf"
+    sed -i '/# ─── Selfsteal Direct/,/^}$/d' "$dir/nginx.conf"
     sed -i '/# ─── Default Direct/,/^}$/d' "$dir/nginx.conf"
 
     # Вставляем после последнего серверного блока
@@ -246,6 +289,59 @@ server {
 SUBBLOCK_443
             sed -i "s/SUB_DOMAIN_PH/${sub_domain}/g" "$temp_file"
             sed -i "s/SUB_CERT_PH/${sub_cert}/g" "$temp_file"
+        fi
+
+        # Добавляем блок selfsteal если selfsteal_domain определён
+        if [ -n "$selfsteal_domain" ]; then
+            cat >> "$temp_file" << 'SELFSTEALBLOCK_443'
+
+# ─── Selfsteal Direct
+server {
+    server_name SELFSTEAL_DOMAIN_PH;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/SELFSTEAL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
+
+    root /var/www/html;
+    index index.html;
+
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    if ($request_method !~ ^(GET|HEAD)$) {
+        return 444;
+    }
+
+    location ~ /\. {
+        return 444;
+    }
+
+    location ~* \.(php|asp|aspx|jsp|cgi)$ {
+        return 444;
+    }
+
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\nDisallow: /\n";
+    }
+
+    location = / {
+        try_files /index.html =444;
+    }
+
+    location / {
+        return 444;
+    }
+}
+SELFSTEALBLOCK_443
+            sed -i "s/SELFSTEAL_DOMAIN_PH/${selfsteal_domain}/g" "$temp_file"
+            sed -i "s/SELFSTEAL_CERT_PH/${selfsteal_cert}/g" "$temp_file"
         fi
 
         # Default server — отклоняем неизвестные домены
@@ -369,6 +465,9 @@ SERVERBLOCK_8443
     ufw delete allow ${old_port}/tcp >/dev/null 2>&1 || true
     ufw allow ${target_port}/tcp >/dev/null 2>&1
     ufw reload >/dev/null 2>&1 || true
+
+    # Обновляем порт хостов, привязанных к локальной ноде
+    _update_hosts_port "$dir" "$target_port"
 
     print_success "Порт доступа к панели изменён на ${target_port}"
     echo
