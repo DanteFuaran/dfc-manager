@@ -122,10 +122,11 @@ switch_panel_port() {
     panel_cert=$(grep -A 5 "server_name ${panel_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
     # Определяем sub_domain (домен подписки → upstream json)
-    local sub_domain sub_cert
-    sub_domain=$(grep -B 5 'proxy_pass http://json' "$dir/nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | head -1)
-    if [ -n "$sub_domain" ]; then
-        sub_cert=$(grep -A 5 "server_name ${sub_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    local sub_domain sub_cert json_line
+    json_line=$(grep -n 'proxy_pass http://json' "$dir/nginx.conf" | head -1 | cut -d: -f1)
+    if [ -n "$json_line" ]; then
+        sub_domain=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
+        sub_cert=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
     fi
 
     # Удаляем любые существующие блоки прямого доступа
@@ -341,10 +342,16 @@ SERVERBLOCK_8443
         cd "$dir"
         docker compose down remnawave-nginx >/dev/null 2>&1
         docker compose up -d remnawave-nginx >/dev/null 2>&1
+        local _i=0
+        while [ $_i -lt 20 ]; do
+            docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$' && exit 0
+            sleep 0.5
+            _i=$((_i + 1))
+        done
+        exit 1
     ) &
     show_spinner "Перезапуск nginx"
 
-    sleep 2
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
