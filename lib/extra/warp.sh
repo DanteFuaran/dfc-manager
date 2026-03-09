@@ -737,29 +737,52 @@ remove_warp_from_config() {
         return 1
     fi
 
-    local removed=false
-
-    # Сохраняем порты WARP-инбаундов до удаления (для закрытия в UFW)
+    # Определяем порты WARP-инбаундов
     local warp_ports
     warp_ports=$(echo "$config_json" | jq -r --argjson tags \
         "$(echo "$config_json" | jq '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique')" \
         '.inbounds[] | select(.tag as $t | $tags | index($t)) | .port | tostring' 2>/dev/null)
 
+    # Определяем остаточные порты (после удаления WARP-инбаундов)
+    local remaining_ports
+    remaining_ports=$(echo "$config_json" | jq -r --argjson tags \
+        "$(echo "$config_json" | jq '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique')" \
+        '.inbounds[] | select(.tag as $t | $tags | index($t) == null) | .port | tostring' 2>/dev/null)
+
+    # Спрашиваем про порт ДО удаления, пока терминал в нормальном состоянии
+    local _should_close_port=false
+    local _port_to_close=""
+    if command -v ufw >/dev/null 2>&1 && [ -n "$warp_ports" ]; then
+        while IFS= read -r port; do
+            [ -z "$port" ] && continue
+            if ! echo "$remaining_ports" | grep -qx "$port"; then
+                _port_to_close="$port"
+                break
+            fi
+        done <<< "$warp_ports"
+    fi
+
+    if [ -n "$_port_to_close" ]; then
+        show_arrow_menu "🛡️  Закрытие порта WARP" \
+            "Закрыть порт ${_port_to_close}/tcp" \
+            "Не закрывать"
+        [ $? -eq 0 ] && _should_close_port=true
+    fi
+
+    # После show_arrow_menu — сбрасываем состояние терминала
+    stty sane 2>/dev/null || true
+    tput cnorm 2>/dev/null || true
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}   ➖ УДАЛЕНИЕ WARP ИЗ КОНФИГУРАЦИИ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
     # Определяем теги WARP-инбаундов
     local warp_inbound_tags
     warp_inbound_tags=$(echo "$config_json" | jq -r '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique[]' 2>/dev/null)
 
-    # Получаем UUID WARP-инбаундов через API (для удаления хостов)
-    local warp_inbound_uuids=""
-    if [ -n "$warp_inbound_tags" ]; then
-        while IFS= read -r _tag; do
-            [ -z "$_tag" ] && continue
-            local _uuid
-            _uuid=$(echo "$config_data" | jq -r --arg t "$_tag" \
-                '.response.inbounds[] | select(.tag == $t) | .uuid // empty' 2>/dev/null)
-            [ -n "$_uuid" ] && warp_inbound_uuids+="${_uuid}"$'\n'
-        done <<< "$warp_inbound_tags"
-    fi
+    local removed=false
 
     # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
     if [ -n "$warp_inbound_tags" ]; then
@@ -839,40 +862,16 @@ remove_warp_from_config() {
             echo -e "${YELLOW}⚠️  Не удалось получить список хостов${NC}"
         fi
 
-        # Спрашиваем закрыть ли порт в UFW (только если он не используется другими инбаундами)
-        if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
-            local remaining_ports
-            remaining_ports=$(echo "$config_json" | jq -r '[.inbounds[].port | tostring] | .[]' 2>/dev/null)
-            while IFS= read -r port; do
-                [ -z "$port" ] && continue
-                if ! echo "$remaining_ports" | grep -qx "$port"; then
-                    _flush_stdin
-                    show_arrow_menu "🛡️  Закрытие порта WARP" \
-                        "Закрыть порт ${port}/tcp" \
-                        "Не закрывать"
-                    local _port_choice=$?
-                    if [ $_port_choice -eq 0 ]; then
-                        ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
-                    fi
-                    _close_port_done=true
-                fi
-            done <<< "$warp_ports"
+        # Закрываем порт если пользователь выбрал "Закрыть" до начала операции
+        if [ "$_should_close_port" = true ] && [ -n "$_port_to_close" ]; then
+            ufw delete allow "${_port_to_close}/tcp" >/dev/null 2>&1 || true
+            print_success "Порт ${_port_to_close}/tcp закрыт в UFW"
         fi
 
-        # Итоговый экран
-        stty sane 2>/dev/null || true
-        tput cnorm 2>/dev/null || true
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${RED}   ➖ УДАЛЕНИЕ WARP ИЗ КОНФИГУРАЦИИ${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         print_success "WARP удалён из конфигурации"
-        print_success "Хосты WARP удалены"
         echo
     else
-        stty sane 2>/dev/null || true
-        tput cnorm 2>/dev/null || true
         echo
         print_error "Не удалось обновить конфигурацию"
         echo
