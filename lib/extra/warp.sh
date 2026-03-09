@@ -641,8 +641,7 @@ add_warp_to_config() {
 
     # Открываем порт в UFW на этом сервере
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${warp_port}/tcp" >/dev/null 2>&1 && \
-            print_success "Порт ${warp_port}/tcp открыт в UFW" || true
+        ufw allow "${warp_port}/tcp" >/dev/null 2>&1 || true
     fi
 
     echo
@@ -847,9 +846,11 @@ remove_warp_from_config() {
             while IFS= read -r port; do
                 [ -z "$port" ] && continue
                 if ! echo "$remaining_ports" | grep -qx "$port"; then
-                    show_arrow_menu "Закрыть порт ${port}/tcp в UFW?" \
-                        "✅  Да — закрыть порт ${port}/tcp" \
-                        "❌  Нет — оставить порт открытым"
+                    sleep 0.3
+                    _flush_stdin
+                    show_arrow_menu "🛡️  Закрытие порта WARP" \
+                        "Закрыть порт ${port}/tcp" \
+                        "Не закрывать"
                     local _port_choice=$?
                     if [ $_port_choice -eq 0 ]; then
                         ufw delete allow "${port}/tcp" >/dev/null 2>&1 && \
