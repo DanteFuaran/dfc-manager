@@ -94,13 +94,11 @@ install_packages() {
         # UFW
         ufw default deny incoming >/dev/null 2>&1
         ufw default allow outgoing >/dev/null 2>&1
-        ufw allow 22/tcp >/dev/null 2>&1
-        # Добавляем кастомный SSH-порт из sshd_config (если отличается от 22)
+        # Открываем порт SSH (определяем из sshd_config, по умолчанию 22)
         local sshd_port
         sshd_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-        if [ -n "$sshd_port" ] && [ "$sshd_port" != "22" ]; then
-            ufw allow "${sshd_port}/tcp" >/dev/null 2>&1
-        fi
+        sshd_port="${sshd_port:-22}"
+        ufw allow "${sshd_port}/tcp" >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
         echo "y" | ufw enable >/dev/null 2>&1
 
@@ -140,13 +138,11 @@ install_packages() {
 setup_firewall() {
     ufw default deny incoming >/dev/null 2>&1 || true
     ufw default allow outgoing >/dev/null 2>&1 || true
-    ufw allow 22/tcp >/dev/null 2>&1 || true
-    # Добавляем кастомный SSH-порт из sshd_config (если отличается от 22)
+    # Открываем порт SSH (определяем из sshd_config, по умолчанию 22)
     local sshd_port
     sshd_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    if [ -n "$sshd_port" ] && [ "$sshd_port" != "22" ]; then
-        ufw allow "${sshd_port}/tcp" >/dev/null 2>&1 || true
-    fi
+    sshd_port="${sshd_port:-22}"
+    ufw allow "${sshd_port}/tcp" >/dev/null 2>&1 || true
     ufw allow 443/tcp >/dev/null 2>&1 || true
     echo "y" | ufw enable >/dev/null 2>&1 || true
 }

@@ -121,9 +121,18 @@ switch_panel_port() {
     local panel_cert
     panel_cert=$(grep -A 5 "server_name ${panel_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
+    # Определяем sub_domain (домен подписки → upstream json)
+    local sub_domain sub_cert
+    sub_domain=$(grep -B 5 'proxy_pass http://json' "$dir/nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | head -1)
+    if [ -n "$sub_domain" ]; then
+        sub_cert=$(grep -A 5 "server_name ${sub_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    fi
+
     # Удаляем любые существующие блоки прямого доступа
     sed -i '/# ─── 8443 Fallback/,/^}$/d' "$dir/nginx.conf"
     sed -i '/# ─── 443 Direct/,/^}$/d' "$dir/nginx.conf"
+    sed -i '/# ─── Sub Direct/,/^}$/d' "$dir/nginx.conf"
+    sed -i '/# ─── Default Direct/,/^}$/d' "$dir/nginx.conf"
 
     # Вставляем после последнего серверного блока
     local insert_after_line
@@ -196,6 +205,60 @@ server {
     }
 }
 SERVERBLOCK_443
+
+        # Добавляем блок подписки если sub_domain определён
+        if [ -n "$sub_domain" ]; then
+            cat >> "$temp_file" << 'SUBBLOCK_443'
+
+# ─── Sub Direct
+server {
+    server_name SUB_DOMAIN_PH;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/SUB_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_pass http://json;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 400 404 500 502 @redirect;
+    }
+
+    location @redirect {
+        return 444;
+    }
+}
+SUBBLOCK_443
+            sed -i "s/SUB_DOMAIN_PH/${sub_domain}/g" "$temp_file"
+            sed -i "s/SUB_CERT_PH/${sub_cert}/g" "$temp_file"
+        fi
+
+        # Default server — отклоняем неизвестные домены
+        cat >> "$temp_file" << 'DEFAULTBLOCK_443'
+
+# ─── Default Direct
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+    return 444;
+}
+DEFAULTBLOCK_443
     else
         cat > "$temp_file" << 'SERVERBLOCK_8443'
 

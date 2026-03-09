@@ -162,6 +162,8 @@ installation_full() {
     ) &
     if ! show_spinner "Запуск сервисов"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
+        echo
+        show_continue_prompt || true
         return
     fi
 
@@ -170,6 +172,8 @@ installation_full() {
 
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
+        echo
+        show_continue_prompt || true
         return
     fi
 
@@ -215,6 +219,8 @@ installation_full() {
     # Проверяем, что SECRET_KEY реально обновлён
     if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$target_dir/docker-compose.yml" 2>/dev/null; then
         print_error "Не удалось установить публичный ключ"
+        echo
+        show_continue_prompt || true
         return
     fi
 
@@ -225,6 +231,8 @@ installation_full() {
 
     if [ -z "$private_key" ]; then
         print_error "Не удалось сгенерировать REALITY ключи"
+        echo
+        show_continue_prompt || true
         return
     fi
 
@@ -243,6 +251,8 @@ installation_full() {
     if [ -z "$config_profile_uuid" ] || [ "$config_profile_uuid" = "ERROR" ] || \
        [ -z "$inbound_uuid" ]; then
         print_error "Не удалось создать конфиг-профиль"
+        echo
+        show_continue_prompt || true
         return
     fi
 

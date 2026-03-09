@@ -123,6 +123,8 @@ installation_panel() {
     ) &
     if ! show_spinner "Запуск сервисов"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
+        echo
+        show_continue_prompt || true
         return
     fi
 
@@ -131,6 +133,8 @@ installation_panel() {
 
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
         print_error "API не отвечает"
+        echo
+        show_continue_prompt || true
         return
     fi
 

@@ -186,13 +186,7 @@ manage_ufw() {
 
                     # Подтверждено — удаляем правило
                     local rule_num=$((del_choice + 1))
-                    echo
-                    (
-                        echo "y" | ufw delete "$rule_num" >/dev/null 2>&1
-                    ) &
-                    show_spinner "Удаление правила"
-                    print_success "Правило удалено: ${rules[$del_choice]}"
-                    sleep 1
+                    echo "y" | ufw delete "$rule_num" >/dev/null 2>&1
                     # Продолжаем цикл — список правил обновится автоматически
                 done
                 ;;

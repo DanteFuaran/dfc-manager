@@ -21,6 +21,7 @@ manage_warp() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}На сервере нет приложений требующих WARP${NC}"
+        echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
         return 0
