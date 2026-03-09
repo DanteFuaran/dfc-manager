@@ -200,7 +200,7 @@ add_node_to_panel() {
 
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
-    if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" "${SELFSTEAL_DOMAIN}:443"); then
+    if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
         print_error "Не удалось создать конфигурационный профиль"
         show_continue_prompt || true
         return 1

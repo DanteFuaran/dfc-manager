@@ -306,14 +306,6 @@ create_config_profile() {
     local domain=$4
     local private_key=$5
     local inbound_tag="${6:-Steal}"
-    # dest: для локальной ноды (xray на том же сервере что и nginx) — unix сокет
-    # для удалённой ноды (xray на другом сервере) — "domain:443"
-    local xray_dest="${7:-/dev/shm/nginx.sock}"
-    # xver: 1 для unix-сокета (передаёт proxy protocol), 0 для тцп-адреса
-    local xray_xver=1
-    if [[ "$xray_dest" != "/dev/shm/nginx.sock" ]]; then
-        xray_xver=0
-    fi
 
     local short_id
     short_id=$(openssl rand -hex 8)
@@ -321,8 +313,7 @@ create_config_profile() {
     local request_body
     request_body=$(jq -n --arg name "$name" --arg domain "$domain" \
         --arg private_key "$private_key" --arg short_id "$short_id" \
-        --arg inbound_tag "$inbound_tag" --arg dest "$xray_dest" \
-        --argjson xver "$xray_xver" '{
+        --arg inbound_tag "$inbound_tag" '{
         name: $name,
         config: {
             log: { loglevel: "warning" },
@@ -341,12 +332,11 @@ create_config_profile() {
                     security: "reality",
                     realitySettings: {
                         show: false,
-                        xver: $xver,
-                        dest: $dest,
+                        xver: 1,
+                        dest: "/dev/shm/nginx.sock",
                         spiderX: "",
                         shortIds: [$short_id],
                         privateKey: $private_key,
-                        fingerprint: "chrome",
                         serverNames: [$domain]
                     }
                 }
