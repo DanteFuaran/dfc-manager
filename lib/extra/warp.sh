@@ -814,33 +814,32 @@ remove_warp_from_config() {
     if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
         print_success "Конфигурация сохранена"
 
-        # Удаляем хосты WARP:
-        # — по UUID инбаунда (inbound.configProfileInboundUuid или inbound.uuid)
-        # — fallback: по configProfileUuid + remark содержит "Warp"
+        # Удаляем хосты WARP
+        print_action "Удаление хостов WARP..."
         local hosts_response
-        hosts_response=$(make_api_request "GET" "${domain_url}/api/hosts" "$token")
+        hosts_response=$(make_api_request "GET" "${domain_url}/api/hosts" "$token" 2>/dev/null) || true
         if [ -n "$hosts_response" ]; then
-            local _iuuids_json
-            _iuuids_json=$(echo "$warp_inbound_uuids" | jq -Rs 'split("\n") | map(select(length>0))')
             local host_uuids_to_del
             host_uuids_to_del=$(echo "$hosts_response" | jq -r \
                 --arg cp "$selected_uuid" \
-                --argjson iuuids "${_iuuids_json:-[]}" \
-                '.response[] | select(
-                    ((.inbound.configProfileInboundUuid // .inbound.uuid // "") as $iu |
-                        ($iuuids | length) > 0 and ($iuuids | index($iu)) != null)
-                    or
-                    ((.inbound.configProfileUuid // "") == $cp and
-                        ((.remark // "") | test("Warp"; "i")))
-                ) | .uuid // empty' 2>/dev/null)
-            while IFS= read -r host_uuid; do
-                [ -z "$host_uuid" ] && continue
-                make_api_request "DELETE" "${domain_url}/api/hosts/${host_uuid}" "$token" >/dev/null 2>&1 || true
-            done <<< "$host_uuids_to_del"
+                '[.response[] | select(
+                    (.inbound.configProfileUuid // "") == $cp and
+                    ((.remark // "") | test("[Ww]arp"))
+                ) | .uuid // empty] | .[]' 2>/dev/null) || true
+            if [ -n "$host_uuids_to_del" ]; then
+                while IFS= read -r host_uuid; do
+                    [ -z "$host_uuid" ] && continue
+                    make_api_request "DELETE" "${domain_url}/api/hosts/${host_uuid}" "$token" >/dev/null 2>&1 || true
+                done <<< "$host_uuids_to_del"
+                print_success "Хосты WARP удалены"
+            else
+                print_success "Хосты WARP не найдены"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Не удалось получить список хостов${NC}"
         fi
 
         # Спрашиваем закрыть ли порт в UFW (только если он не используется другими инбаундами)
-        local _close_port_done=false
         if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
             local remaining_ports
             remaining_ports=$(echo "$config_json" | jq -r '[.inbounds[].port | tostring] | .[]' 2>/dev/null)
