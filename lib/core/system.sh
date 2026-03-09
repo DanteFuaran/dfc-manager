@@ -74,22 +74,60 @@ install_packages() {
         systemctl start docker 2>/dev/null || true
         systemctl enable docker 2>/dev/null || true
 
-        # BBR
-        if ! sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
-            echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
-            echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-            sysctl -p >/dev/null 2>&1
-        fi
+        # ─── Оптимизация сети и ядра ───
+        # Удаляем старые записи чтобы не дублировать
+        sed -i '/^net\.core\.default_qdisc/d;
+                /^net\.ipv4\.tcp_congestion_control/d;
+                /^net\.core\.rmem_max/d;
+                /^net\.core\.wmem_max/d;
+                /^net\.core\.rmem_default/d;
+                /^net\.core\.wmem_default/d;
+                /^net\.ipv4\.tcp_rmem/d;
+                /^net\.ipv4\.tcp_wmem/d;
+                /^net\.ipv4\.tcp_slow_start_after_idle/d;
+                /^net\.ipv4\.tcp_mtu_probing/d;
+                /^net\.ipv4\.tcp_fastopen/d;
+                /^net\.ipv4\.tcp_notsent_lowat/d;
+                /^net\.core\.netdev_max_backlog/d;
+                /^net\.core\.somaxconn/d;
+                /^net\.ipv4\.tcp_max_syn_backlog/d;
+                /^vm\.overcommit_memory/d' /etc/sysctl.conf 2>/dev/null
 
-        # Memory overcommit (рекомендовано для Redis/Valkey — предотвращает сбои фоновых сохранений)
-        if ! sysctl vm.overcommit_memory 2>/dev/null | grep -q "= 1"; then
-            sysctl -w vm.overcommit_memory=1 >/dev/null 2>&1
-            if ! grep -q 'vm.overcommit_memory' /etc/sysctl.conf 2>/dev/null; then
-                echo 'vm.overcommit_memory=1' >> /etc/sysctl.conf
-            else
-                sed -i 's/vm.overcommit_memory=.*/vm.overcommit_memory=1/' /etc/sysctl.conf
-            fi
-        fi
+        cat >> /etc/sysctl.conf <<'SYSCTL'
+
+# ─── DFC: BBR + TCP оптимизация ───
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+
+# Буферы сокетов — без них BBR не может использовать доступную полосу
+net.core.rmem_max=16777216
+net.core.wmem_max=16777216
+net.core.rmem_default=1048576
+net.core.wmem_default=1048576
+net.ipv4.tcp_rmem=4096 1048576 16777216
+net.ipv4.tcp_wmem=4096 65536 16777216
+
+# Не сбрасывать cwnd после простоя — критично для VPN
+net.ipv4.tcp_slow_start_after_idle=0
+
+# MTU probing — предотвращает blackhole на путях с нестандартным MTU
+net.ipv4.tcp_mtu_probing=1
+
+# TCP Fast Open для входящих и исходящих соединений
+net.ipv4.tcp_fastopen=3
+
+# Снижение latency для интерактивного трафика
+net.ipv4.tcp_notsent_lowat=131072
+
+# Обработка burst-нагрузок
+net.core.netdev_max_backlog=4096
+net.core.somaxconn=4096
+net.ipv4.tcp_max_syn_backlog=4096
+
+# Redis/Valkey — предотвращает сбои фоновых сохранений
+vm.overcommit_memory=1
+SYSCTL
+        sysctl -p >/dev/null 2>&1
 
         # UFW
         ufw default deny incoming >/dev/null 2>&1
