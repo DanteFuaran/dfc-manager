@@ -389,7 +389,7 @@ installation_node_local() {
     print_success "Конфигурационный профиль: $entity_name"
 
     print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$network_gateway" "$entity_name"; then
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
         print_success "Нода создана"
     else
         print_error "Не удалось создать ноду. Восстановление конфигурации..."

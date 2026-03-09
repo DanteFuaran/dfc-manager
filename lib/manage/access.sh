@@ -300,13 +300,14 @@ SERVERBLOCK_8443
     ufw allow ${target_port}/tcp >/dev/null 2>&1
     ufw reload >/dev/null 2>&1 || true
 
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
     print_success "Порт доступа к панели изменён на ${target_port}"
+    echo
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
     echo -e "${GREEN}🔗 Ссылка на панель:${NC}"
     echo -e "${WHITE}https://${panel_domain}:${target_port}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
