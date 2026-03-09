@@ -106,7 +106,7 @@ install_warp_native() {
     # Спрашиваем порт для WARP-подключения
     local warp_install_port=""
     while true; do
-        reading_inline "Порт для WARP-подключения (Enter = 8443):" warp_install_port
+        reading_inline "Порт для WARP-инбаунда (По умолчанию 8443):" warp_install_port
         local _rc_wp=$?
         if [[ $_rc_wp -eq 2 ]]; then return 0; fi
         if [ -z "$warp_install_port" ]; then
@@ -121,10 +121,7 @@ install_warp_native() {
     echo
 
     # Спрашиваем WARP+ ключ
-    echo -e "${YELLOW}Если у вас есть ключ для WARP, вы можете ввести его ниже.${NC}"
-    echo -e "${DARKGRAY}Оставьте пустым для бесплатной версии.${NC}"
-    echo
-    reading_inline "WARP+ ключ (Enter для пропуска):" warp_key
+    reading_inline "WARP+ ключ (Enter для бесплатной версии):" warp_key
     local _rc_wk=$?
     echo
     if [[ $_rc_wk -eq 2 ]]; then return 0; fi
@@ -211,6 +208,11 @@ install_warp_native() {
         echo "=== systemctl start wg-quick@warp ==="
         systemctl start wg-quick@warp 2>&1
         systemctl enable wg-quick@warp 2>&1
+
+        # Открываем порт в UFW
+        if command -v ufw >/dev/null 2>&1; then
+            ufw allow "${warp_install_port}/tcp" >/dev/null 2>&1 || true
+        fi
     ) > "$_warp_log" 2>&1 &
     show_spinner "Установка WARP"
     echo
@@ -221,9 +223,6 @@ install_warp_native() {
         print_success "Настройка WARP"
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
-        echo
-        echo -e "${YELLOW}⚠️  Откройте порт ${WHITE}${warp_install_port}/tcp${YELLOW} на этом сервере и добавьте WARP в конфигурацию ноды через соответствующий пункт меню.${NC}"
-        echo -e "${DARKGRAY}   ufw allow ${warp_install_port}/tcp${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
@@ -314,10 +313,10 @@ uninstall_warp_native() {
         DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление WARP"
-    echo
 
     # Проверяем результат
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
+        print_success "Удаление WARP"
         print_success "WARP успешно удалён"
     else
         print_error "Не удалось удалить WARP — интерфейс всё ещё активен"
@@ -650,7 +649,7 @@ remove_warp_from_config() {
     echo -e "${DARKGRAY}Из профиля будет удалён WARP-инбаунд и связанные правила маршрутизации.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
+    printf " ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
     read -rsn 1 key 2>/dev/null || true
     echo
 
@@ -724,6 +723,12 @@ remove_warp_from_config() {
 
     local removed=false
 
+    # Сохраняем порты WARP-инбаундов до удаления (для закрытия в UFW)
+    local warp_ports
+    warp_ports=$(echo "$config_json" | jq -r --argjson tags \
+        "$(echo "$config_json" | jq '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique')" \
+        '.inbounds[] | select(.tag as $t | $tags | index($t)) | .port | tostring' 2>/dev/null)
+
     # Удаляем WARP-инбаунд (определяем по правилу маршрутизации → warp-out)
     local warp_inbound_tags
     warp_inbound_tags=$(echo "$config_json" | jq -r '[.routing.rules[] | select(.outboundTag == "warp-out" and .inboundTag) | .inboundTag[]] | unique[]' 2>/dev/null)
@@ -732,29 +737,28 @@ remove_warp_from_config() {
             [ -z "$tag" ] && continue
             config_json=$(echo "$config_json" | jq --arg tag "$tag" 'del(.inbounds[] | select(.tag == $tag))' 2>/dev/null)
         done <<< "$warp_inbound_tags"
-        echo -e "${GREEN}✓${NC} Удалён WARP-инбаунд"
+        print_success "Удалён WARP-инбаунд"
         removed=true
     fi
 
     # Удаляем warp-out из outbounds
     if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' >/dev/null 2>&1; then
         config_json=$(echo "$config_json" | jq 'del(.outbounds[] | select(.tag == "warp-out"))' 2>/dev/null)
-        echo -e "${GREEN}✓${NC} Удалён warp-out из outbounds"
+        print_success "Удалён warp-out из outbounds"
         removed=true
     fi
 
     # Удаляем правила маршрутизации связанные с WARP
     if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' >/dev/null 2>&1; then
         config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "warp-out"))' 2>/dev/null)
-        echo -e "${GREEN}✓${NC} Удалено правило маршрутизации WARP"
+        print_success "Удалено правило маршрутизации WARP"
         removed=true
     fi
 
     # Удаляем правило DIRECT для основного инбаунда (добавленное при WARP)
-    # Оставляем только если есть inboundTag в правиле
     if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "DIRECT" and .inboundTag)' >/dev/null 2>&1; then
         config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "DIRECT" and .inboundTag))' 2>/dev/null)
-        echo -e "${GREEN}✓${NC} Удалено правило маршрутизации DIRECT по инбаунду"
+        print_success "Удалено правило маршрутизации DIRECT по инбаунду"
         removed=true
     fi
 
@@ -778,21 +782,14 @@ remove_warp_from_config() {
     if [ -n "$update_response" ] && echo "$update_response" | jq -e '.' >/dev/null 2>&1; then
         echo
         print_success "WARP удалён из конфигурации"
-        echo
-        echo -e "${DARKGRAY}Хосты связанные с WARP-инбаундом будут удалены автоматически.${NC}"
 
-        # Спрашиваем про закрытие порта на сервере ноды
-        echo
-        local warp_close_port=""
-        reading_inline "Какой порт закрыть на сервере ноды? (Enter = пропустить):" warp_close_port
-        if [ -n "$warp_close_port" ] && [[ "$warp_close_port" =~ ^[0-9]+$ ]]; then
-            if command -v ufw >/dev/null 2>&1; then
-                ufw delete allow "${warp_close_port}/tcp" >/dev/null 2>&1 && \
-                    print_success "Порт ${warp_close_port}/tcp закрыт в UFW" || \
-                    echo -e "${YELLOW}⚠️  Не удалось закрыть порт ${warp_close_port}/tcp через UFW${NC}"
-            else
-                echo -e "${YELLOW}⚠️  UFW не найден — закройте порт ${warp_close_port}/tcp вручную${NC}"
-            fi
+        # Автоматически закрываем порты WARP-инбаундов в UFW
+        if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
+            while IFS= read -r port; do
+                [ -z "$port" ] && continue
+                ufw delete allow "${port}/tcp" >/dev/null 2>&1 && \
+                    print_success "Порт ${port}/tcp закрыт в UFW" || true
+            done <<< "$warp_ports"
         fi
     else
         echo
