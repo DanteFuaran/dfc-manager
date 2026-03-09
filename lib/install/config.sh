@@ -2,6 +2,18 @@
 # ГЕНЕРАЦИЯ КОНФИГУРАЦИОННЫХ ФАЙЛОВ
 # ═══════════════════════════════════════════════
 
+# ─── Определение gateway и subnet существующей docker-сети ───
+# Если remnawave-network уже существует (например от другого проекта),
+# возвращает её gateway и subnet. Иначе — дефолтные значения 172.30.0.0/16.
+get_remnawave_network_info() {
+    local gateway subnet
+    if docker network ls --format '{{.Name}}' | grep -qx "remnawave-network"; then
+        gateway=$(docker network inspect remnawave-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)
+        subnet=$(docker network inspect remnawave-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+    fi
+    echo "${gateway:-172.30.0.1} ${subnet:-172.30.0.0/16}"
+}
+
 # ─── Генерация .env файла ───
 generate_env_file() {
     local panel_domain=$1
@@ -117,18 +129,10 @@ generate_docker_compose_full() {
     local sub_cert_domain=$2
     local node_cert_domain=$3
 
-    # Пересоздаём сеть remnawave-network с фиксированной подсетью 172.30.0.0/16
-    # Если сеть уже есть с другой подсетью — удаляем и создаём заново
+    # Проверяем, существует ли сеть remnawave-network
     local network_exists=false
-    if docker network ls | grep -q "remnawave-network"; then
-        local current_subnet
-        current_subnet=$(docker network inspect remnawave-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
-        if [ "$current_subnet" = "172.30.0.0/16" ]; then
-            network_exists=true
-        else
-            # Пересоздаём сеть с правильной подсетью
-            docker network rm remnawave-network >/dev/null 2>&1 || true
-        fi
+    if docker network ls --format '{{.Name}}' | grep -qx "remnawave-network"; then
+        network_exists=true
     fi
 
     cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
@@ -311,7 +315,6 @@ COMPOSE_CERT
 
 COMPOSE_TAIL
 
-    # Добавляем networks секцию в зависимости от существования сети
     if [ "$network_exists" = true ]; then
         cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXTERNAL'
 networks:

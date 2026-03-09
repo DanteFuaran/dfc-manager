@@ -97,15 +97,15 @@ manage_reinstall() {
 
     (
         cd "$rw_path"
-        docker compose down -v --rmi all >/dev/null 2>&1
-        docker system prune -af >/dev/null 2>&1
+        docker compose down -v --rmi all 2>&1
+        docker system prune -af 2>&1
     ) &
-    show_spinner "Удаление контейнеров и данных"
+    show_spinner "Удаление контейнеров и данных" || true
 
     (
         rm -rf "$rw_path"
     ) &
-    show_spinner "Очистка конфигурации"
+    show_spinner "Очистка конфигурации" || true
 
     print_success "Готово к переустановке"
 

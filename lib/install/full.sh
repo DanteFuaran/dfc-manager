@@ -134,26 +134,31 @@ installation_full() {
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
     ) &
-    show_spinner "Создание .env файла"
+    show_spinner "Создание .env файла" || true
 
     (
         generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
     ) &
-    show_spinner "Создание docker-compose.yml"
+    show_spinner "Создание docker-compose.yml" || true
+
+    # Определяем gateway и subnet сети (после генерации docker-compose.yml)
+    local network_info network_gateway network_subnet
+    network_info=$(get_remnawave_network_info)
+    network_gateway=$(echo "$network_info" | awk '{print $1}')
+    network_subnet=$(echo "$network_info" | awk '{print $2}')
 
     (
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
     ) &
-    show_spinner "Создание nginx.conf"
+    show_spinner "Создание nginx.conf" || true
 
     # UFW для ноды
     (
-        remnawave_network_subnet=172.30.0.0/16
-        ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
+        ufw allow from "$network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
     ) &
-    show_spinner "Настройка файрвола"
+    show_spinner "Настройка файрвола" || true
 
     # Запуск
     echo
@@ -161,9 +166,12 @@ installation_full() {
 
     (
         cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск Docker контейнеров"
+    if ! show_spinner "Запуск Docker контейнеров"; then
+        print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
+        return
+    fi
 
     # Ожидание готовности
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
@@ -252,7 +260,7 @@ installation_full() {
 
     # 6. Создание ноды
     print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "172.30.0.1" "$entity_name"; then
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$network_gateway" "$entity_name"; then
         print_success "Создание ноды"
     else
         print_error "Не удалось создать ноду"
@@ -286,10 +294,10 @@ installation_full() {
     print_action "Перезапуск сервисов с обновлённой конфигурацией..."
     (
         cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
+        docker compose down 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск контейнеров"
+    show_spinner "Запуск контейнеров" || true
 
     # 11. Шаблон selfsteal
     randomhtml

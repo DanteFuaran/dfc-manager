@@ -29,9 +29,15 @@ show_spinner() {
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
-    wait $pid 2>/dev/null || true
-    printf "\r${GREEN}✅${NC} %s\n" "$msg"
+    local exit_code=0
+    wait $pid 2>/dev/null || exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        printf "\r${GREEN}✅${NC} %s\n" "$msg"
+    else
+        printf "\r${RED}✖${NC} %s\n" "$msg"
+    fi
     tput cnorm 2>/dev/null || true
+    return $exit_code
 }
 
 show_spinner_timer() {
@@ -50,7 +56,7 @@ show_spinner_timer() {
             sleep $delay
             i=$(( (i+1) % 10 ))
         done
-        ((elapsed++))
+        elapsed=$((elapsed + 1))
     done
     printf "\r\033[K${GREEN}✅${NC} %s\n" "$done_msg"
     tput cnorm 2>/dev/null || true
@@ -67,9 +73,9 @@ show_spinner_until_ready() {
         printf "\r${DARKGRAY}%s  %s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
-        ((loop_count++))
+        loop_count=$((loop_count + 1))
         if [ $((loop_count % 12)) -eq 0 ]; then
-            ((elapsed++))
+            elapsed=$((elapsed + 1))
             if curl -s -f --max-time 5 "$url" \
                 --header 'X-Forwarded-For: 127.0.0.1' \
                 --header 'X-Forwarded-Proto: https' \

@@ -106,24 +106,27 @@ installation_panel() {
     COOKIE_VALUE=$(generate_cookie_key)
 
     (generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN") &
-    show_spinner "Создание .env файла"
+    show_spinner "Создание .env файла" || true
 
     (generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN") &
-    show_spinner "Создание docker-compose.yml"
+    show_spinner "Создание docker-compose.yml" || true
 
     (generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
         "$COOKIE_NAME" "$COOKIE_VALUE") &
-    show_spinner "Создание nginx.conf"
+    show_spinner "Создание nginx.conf" || true
 
     (setup_firewall) &
-    show_spinner "Настройка файрвола"
+    show_spinner "Настройка файрвола" || true
 
     echo
     (
         cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск Docker контейнеров"
+    if ! show_spinner "Запуск Docker контейнеров"; then
+        print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
+        return
+    fi
 
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
@@ -177,10 +180,10 @@ installation_panel() {
     print_action "Перезапуск сервисов с обновлённой конфигурацией..."
     (
         cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
+        docker compose down 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск контейнеров"
+    show_spinner "Запуск контейнеров" || true
 
     # Ожидаем готовность после перезапуска
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"

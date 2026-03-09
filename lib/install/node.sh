@@ -290,15 +290,21 @@ installation_node_local() {
 
     (
         cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
+        docker compose down 2>&1
     ) &
-    show_spinner "Остановка сервисов"
+    show_spinner "Остановка сервисов" || true
 
     mkdir -p /var/www/html
 
     # ─── Перегенерация docker-compose.yml (full: с нодой) ───
     (generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN") &
-    show_spinner "Обновление docker-compose.yml"
+    show_spinner "Обновление docker-compose.yml" || true
+
+    # Определяем gateway и subnet сети (после генерации docker-compose.yml)
+    local network_info network_gateway network_subnet
+    network_info=$(get_remnawave_network_info)
+    network_gateway=$(echo "$network_info" | awk '{print $1}')
+    network_subnet=$(echo "$network_info" | awk '{print $2}')
 
     # Восстанавливаем API токен
     if [ -n "$existing_api_token" ]; then
@@ -309,14 +315,13 @@ installation_node_local() {
     (generate_nginx_conf_full "$panel_domain" "$sub_domain" "$SELFSTEAL_DOMAIN" \
         "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN" \
         "$COOKIE_NAME" "$COOKIE_VALUE") &
-    show_spinner "Обновление nginx.conf"
+    show_spinner "Обновление nginx.conf" || true
 
     # ─── UFW для ноды ───
     (
-        remnawave_network_subnet=172.30.0.0/16
-        ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
+        ufw allow from "$network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
     ) &
-    show_spinner "Настройка файрвола"
+    show_spinner "Настройка файрвола" || true
 
     # ─── Запуск сервисов ───
     echo
@@ -324,9 +329,15 @@ installation_node_local() {
 
     (
         cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск Docker контейнеров"
+    if ! show_spinner "Запуск Docker контейнеров"; then
+        print_error "Не удалось запустить контейнеры"
+        _restore_panel_config
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
 
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
@@ -379,7 +390,7 @@ installation_node_local() {
     print_success "Конфигурационный профиль: $entity_name"
 
     print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "172.30.0.1" "$entity_name"; then
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$network_gateway" "$entity_name"; then
         print_success "Нода создана"
     else
         print_error "Не удалось создать ноду. Восстановление конфигурации..."
@@ -410,10 +421,10 @@ installation_node_local() {
     print_action "Перезапуск сервисов..."
     (
         cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
+        docker compose down 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск контейнеров"
+    show_spinner "Запуск контейнеров" || true
 
     randomhtml
 
@@ -662,22 +673,22 @@ services:
         max-file: '5'
 EOL
     ) &
-    show_spinner "Создание docker-compose.yml"
+    show_spinner "Создание docker-compose.yml" || true
 
     (generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_INSTALL_DIR") &
-    show_spinner "Создание nginx.conf"
+    show_spinner "Создание nginx.conf" || true
 
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
-    show_spinner "Настройка файрвола"
+    show_spinner "Настройка файрвола" || true
 
     (
         cd "${NODE_INSTALL_DIR}"
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d 2>&1
     ) &
-    show_spinner "Запуск Docker контейнеров"
+    show_spinner "Запуск Docker контейнеров" || true
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
 
