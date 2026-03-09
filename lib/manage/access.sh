@@ -4,12 +4,20 @@
 
 manage_panel_access() {
     while true; do
-        # Показываем текущий статус доступа по 8443
-        local _8443_status
+        # Определяем текущий режим доступа
+        local _has_8443
         if grep -q "# ─── 8443 Fallback" /opt/remnawave/nginx.conf 2>/dev/null; then
-            _8443_status="${GREEN}открыт${NC}"
+            _has_8443=true
         else
-            _8443_status="${RED}закрыт${NC}"
+            _has_8443=false
+        fi
+
+        # Формируем лейбл для переключателя
+        local _toggle_label
+        if [ "$_has_8443" = true ]; then
+            _toggle_label="🔒  Переключить панель на 443"
+        else
+            _toggle_label="🔓  Переключить панель на 8443"
         fi
 
         # Показываем cookie-ссылку
@@ -18,8 +26,7 @@ manage_panel_access() {
         _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf 2>/dev/null | head -1)
 
         show_arrow_menu "🔓  Доступ к панели" \
-            "🔓  Открыть доступ по 8443" \
-            "🔒  Закрыть доступ по 8443" \
+            "$_toggle_label" \
             "🔗  Показать cookie-ссылку" \
             "──────────────────────────────────────" \
             "🔐  Сбросить суперадмина" \
@@ -31,9 +38,14 @@ manage_panel_access() {
         [[ $choice -eq 255 ]] && return
 
         case $choice in
-            0) open_panel_access || break ;;
-            1) close_panel_access || break ;;
-            2)
+            0)
+                if [ "$_has_8443" = true ]; then
+                    close_panel_access || break
+                else
+                    open_panel_access || break
+                fi
+                ;;
+            1)
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}          🔗  Показать cookie-ссылку${NC}"
@@ -58,12 +70,12 @@ manage_panel_access() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt
                 ;; # Всегда возвращаемся в меню "Доступ к панели"
-            3) ;;
-            4) change_credentials || break ;;
-            5) regenerate_cookies || break ;;
-            6) manage_domains ;;
-            7) ;;
-            8) return ;;
+            2) ;;
+            3) change_credentials || break ;;
+            4) regenerate_cookies || break ;;
+            5) manage_domains ;;
+            6) ;;
+            7) return ;;
         esac
     done
 }
