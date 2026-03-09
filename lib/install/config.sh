@@ -925,10 +925,10 @@ map \$http_upgrade \$connection_upgrade {
     ""      close;
 }
 
-# Фильтрация логов: скрываем запросы сканеров (404, 444) для чистоты логов
+# Фильтрация логов: скрываем запросы сканеров (400, 404, 444) для чистоты логов
 map \$status \$loggable {
-    ~^(404|444)\$ 0;
-    default       1;
+    ~^(400|404|444)\$ 0;
+    default            1;
 }
 
 ssl_protocols TLSv1.2 TLSv1.3;
@@ -948,11 +948,16 @@ server {
     ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
 
+    real_ip_header   proxy_protocol;
+    set_real_ip_from unix:;
+
     root /var/www/html;
     index index.html;
 
     # Логирование только успешных запросов (сканеры не засоряют логи)
     access_log /dev/stdout combined if=\$loggable;
+
+    error_page 400 = @drop;
 
     # Заголовки безопасности
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -962,6 +967,10 @@ server {
 
     # Только GET и HEAD методы (selfsteal — статическая страница)
     if (\$request_method !~ ^(GET|HEAD)\$) {
+        return 444;
+    }
+
+    location @drop {
         return 444;
     }
 
