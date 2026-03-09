@@ -141,7 +141,7 @@ net.ipv4.tcp_notsent_lowat=131072
 net.core.netdev_max_backlog=4096
 net.core.somaxconn=4096
 net.ipv4.tcp_max_syn_backlog=4096
-SYSTCL
+SYSCTL
                     sysctl -p >/dev/null 2>&1
                 ) &
                 show_spinner "Включение BBR"
