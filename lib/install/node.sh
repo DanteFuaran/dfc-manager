@@ -622,6 +622,20 @@ installation_node_remote() {
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
 
+    # Проверяем сертификаты перед запуском Docker
+    local cert_path="/etc/letsencrypt/live/$NODE_CERT_DOMAIN"
+    if [ ! -f "$cert_path/fullchain.pem" ] || [ ! -f "$cert_path/privkey.pem" ]; then
+        print_error "Сертификаты не найдены в $cert_path"
+        echo -e "${DARKGRAY}Содержимое /etc/letsencrypt/live/:${NC}"
+        ls -la /etc/letsencrypt/live/ 2>/dev/null || echo "  (директория не существует)"
+        [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
+        show_continue_prompt || true
+        return
+    fi
+
+    # Создаём директорию для selfsteal до запуска Docker (том монтируется в nginx)
+    mkdir -p /var/www/html
+
     # Docker-compose для ноды
     (
         cat > "${NODE_INSTALL_DIR}/docker-compose.yml" <<EOL
@@ -637,8 +651,7 @@ services:
         hard: 1048576
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /etc/letsencrypt/live/$NODE_CERT_DOMAIN/fullchain.pem:/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem:ro
-      - /etc/letsencrypt/live/$NODE_CERT_DOMAIN/privkey.pem:/etc/nginx/ssl/$NODE_CERT_DOMAIN/privkey.pem:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
@@ -680,9 +693,12 @@ EOL
 
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
+        ufw allow 443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
     show_spinner "Настройка файрвола" || true
+
+    randomhtml
 
     (
         cd "${NODE_INSTALL_DIR}"
@@ -696,7 +712,35 @@ EOL
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
 
-    randomhtml
+    # Проверка здоровья: nginx должен создать unix-сокет
+    local health_ok=true
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+        health_ok=false
+        echo
+        print_error "Контейнер remnawave-nginx не запущен"
+        echo -e "${DARKGRAY}Логи remnawave-nginx:${NC}"
+        docker logs remnawave-nginx --tail 15 2>&1 | while IFS= read -r line; do
+            echo -e "${DARKGRAY}  $line${NC}"
+        done
+    elif [ ! -S /dev/shm/nginx.sock ]; then
+        health_ok=false
+        echo
+        print_error "Unix-сокет /dev/shm/nginx.sock не создан"
+        echo -e "${DARKGRAY}Логи remnawave-nginx:${NC}"
+        docker logs remnawave-nginx --tail 15 2>&1 | while IFS= read -r line; do
+            echo -e "${DARKGRAY}  $line${NC}"
+        done
+    fi
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
+        health_ok=false
+        echo
+        print_error "Контейнер remnanode не запущен"
+        echo -e "${DARKGRAY}Логи remnanode:${NC}"
+        docker logs remnanode --tail 15 2>&1 | while IFS= read -r line; do
+            echo -e "${DARKGRAY}  $line${NC}"
+        done
+    fi
 
     # Удаляем trap при успешном завершении
     if [ "$is_fresh_install" = true ]; then
@@ -705,12 +749,27 @@ EOL
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🎉 НОДА УСТАНОВЛЕНА!${NC}"
+    if [ "$health_ok" = true ]; then
+        echo -e "${GREEN}   🎉 НОДА УСТАНОВЛЕНА!${NC}"
+    else
+        echo -e "${YELLOW}   ⚠️  НОДА УСТАНОВЛЕНА С ПРЕДУПРЕЖДЕНИЯМИ${NC}"
+    fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Директория:${NC}   ${NODE_INSTALL_DIR}"
     echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
     echo -e "${WHITE}IP панели:${NC}    $PANEL_IP"
+    if [ "$health_ok" = true ]; then
+        echo -e "${GREEN}✅ Все контейнеры запущены${NC}"
+        echo -e "${GREEN}✅ Unix-сокет создан${NC}"
+    else
+        echo
+        echo -e "${YELLOW}Диагностика:${NC}"
+        echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
+        echo -e "${WHITE}  docker logs remnanode${NC}"
+        echo -e "${WHITE}  ls -la /dev/shm/nginx.sock${NC}"
+        echo -e "${WHITE}  cd ${NODE_INSTALL_DIR} && docker compose restart${NC}"
+    fi
     echo
     echo -e "${YELLOW}Проверьте подключение ноды в панели Remnawave${NC}"
     echo

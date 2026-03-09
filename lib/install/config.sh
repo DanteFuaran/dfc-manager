@@ -947,9 +947,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
 
     root /var/www/html;
     index index.html;
