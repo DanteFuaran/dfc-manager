@@ -638,6 +638,13 @@ add_warp_to_config() {
 
     echo
     echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
+
+    # Открываем порт в UFW на этом сервере
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow "${warp_port}/tcp" >/dev/null 2>&1 && \
+            print_success "Порт ${warp_port}/tcp открыт в UFW" || true
+    fi
+
     echo
     echo -e "${YELLOW}⚠️  Теперь установите WARP на сервере ноды${NC}"
     echo
