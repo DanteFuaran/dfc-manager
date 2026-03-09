@@ -267,8 +267,7 @@ installation_node_local() {
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
-            read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-            echo
+            show_continue_prompt || true
             return
         fi
     else
@@ -400,8 +399,11 @@ installation_node_local() {
     fi
 
     print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
-    create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"
-    print_success "Хост зарегистрирован"
+    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+        print_success "Хост зарегистрирован"
+    else
+        print_error "Не удалось зарегистрировать хост"
+    fi
 
     print_action "Настройка сквадов..."
     local squad_uuids
@@ -603,8 +605,7 @@ installation_node_remote() {
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
             [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
-            read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-            echo
+            show_continue_prompt || true
             return
         fi
     else
@@ -687,7 +688,11 @@ EOL
         cd "${NODE_INSTALL_DIR}"
         docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Запуск Docker контейнеров" || true
+    if ! show_spinner "Запуск Docker контейнеров"; then
+        print_error "Не удалось запустить контейнеры"
+        show_continue_prompt || true
+        return
+    fi
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
 

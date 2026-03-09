@@ -38,8 +38,8 @@ installation_panel() {
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || return
-    prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || return
+    prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME

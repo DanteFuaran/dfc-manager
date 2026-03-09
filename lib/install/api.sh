@@ -156,7 +156,7 @@ get_panel_token() {
 
                 local login_response
                 login_response=$(make_api_request "POST" "$domain_url/api/auth/login" "" \
-                    "{\"username\":\"$username\",\"password\":\"$password\"}")
+                    "$(jq -n --arg u "$username" --arg p "$password" '{username: $u, password: $p}')")
                 token=$(echo "$login_response" | jq -r '.response.accessToken // empty')
 
                 if [ -n "$token" ] && [ "$token" != "null" ]; then
@@ -189,6 +189,7 @@ get_panel_token() {
         fi
 
         echo "$token" > "$TOKEN_FILE"
+        chmod 600 "$TOKEN_FILE" 2>/dev/null
     fi
 
     # Финальная проверка
@@ -209,7 +210,8 @@ register_remnawave() {
     local max_attempts=5
     local attempt=1
 
-    local register_data='{"username":"'"$username"'","password":"'"$password"'"}'
+    local register_data
+    register_data=$(jq -n --arg u "$username" --arg p "$password" '{username: $u, password: $p}')
     local token=""
 
     while [ $attempt -le $max_attempts ] && [ -z "$token" ]; do

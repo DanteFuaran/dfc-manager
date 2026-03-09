@@ -193,6 +193,7 @@ add_node_to_panel() {
     private_key=$(generate_xray_keys "$domain_url" "$token")
     if [ -z "$private_key" ]; then
         print_error "Не удалось сгенерировать ключи"
+        show_continue_prompt || true
         return 1
     fi
     print_success "Ключи сгенерированы"
@@ -201,6 +202,7 @@ add_node_to_panel() {
     local config_result config_profile_uuid inbound_uuid
     if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
         print_error "Не удалось создать конфигурационный профиль"
+        show_continue_prompt || true
         return 1
     fi
     read config_profile_uuid inbound_uuid <<< "$config_result"
@@ -211,12 +213,16 @@ add_node_to_panel() {
         print_success "Нода создана"
     else
         print_error "Не удалось создать ноду"
+        show_continue_prompt || true
         return 1
     fi
 
     print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
-    create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"
-    print_success "Хост зарегистрирован"
+    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+        print_success "Хост зарегистрирован"
+    else
+        print_error "Не удалось зарегистрировать хост"
+    fi
 
     print_action "Настройка сквадов..."
     local squad_uuids

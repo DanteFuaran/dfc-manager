@@ -121,6 +121,7 @@ POSTGRES_DB=postgres
 ### SUBSCRIPTION PAGE ###
 REMNAWAVE_API_TOKEN=
 EOL
+    chmod 600 /opt/remnawave/.env 2>/dev/null
 }
 
 # ─── Docker-Compose: Панель + Нода (Full) ───
@@ -829,6 +830,7 @@ ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDS
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
 ssl_session_cache shared:MozSSL:10m;
+ssl_session_tickets off;
 
 server {
     server_name $panel_domain;

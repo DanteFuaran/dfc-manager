@@ -266,8 +266,11 @@ installation_full() {
 
     # 7. Создание хоста
     print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
-    create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"
-    print_success "Регистрация хоста"
+    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+        print_success "Регистрация хоста"
+    else
+        print_error "Не удалось зарегистрировать хост"
+    fi
 
     # 8. Получение и обновление сквадов
     print_action "Настройка сквадов..."
