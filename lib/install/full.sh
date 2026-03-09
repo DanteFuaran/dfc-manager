@@ -131,28 +131,20 @@ installation_full() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
-    (
-        generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
-    ) &
-    show_spinner "Создание .env файла" || true
-
-    (
-        generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
-    ) &
-    show_spinner "Создание docker-compose.yml" || true
-
-    # Определяем gateway и subnet сети (после генерации docker-compose.yml)
+    # Определяем gateway и subnet сети
     local network_info network_gateway network_subnet
     network_info=$(get_remnawave_network_info)
     network_gateway=$(echo "$network_info" | awk '{print $1}')
     network_subnet=$(echo "$network_info" | awk '{print $2}')
 
     (
+        generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
+        generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
     ) &
-    show_spinner "Создание nginx.conf" || true
+    show_spinner "Создание файлов" || true
 
     # UFW для ноды
     (
@@ -166,15 +158,12 @@ installation_full() {
 
     (
         cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1 && sleep 20
     ) &
-    if ! show_spinner "Запуск Docker контейнеров"; then
+    if ! show_spinner "Запуск сервисов"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         return
     fi
-
-    # Ожидание готовности
-    show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -228,7 +217,6 @@ installation_full() {
         print_error "Не удалось установить публичный ключ"
         return
     fi
-    print_success "Установка публичного ключа"
 
     # 3. Генерация ключей x25519 (REALITY)
     print_action "Генерация REALITY ключей..."

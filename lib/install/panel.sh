@@ -105,15 +105,13 @@ installation_panel() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
-    (generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN") &
-    show_spinner "Создание .env файла" || true
-
-    (generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN") &
-    show_spinner "Создание docker-compose.yml" || true
-
-    (generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
-        "$COOKIE_NAME" "$COOKIE_VALUE") &
-    show_spinner "Создание nginx.conf" || true
+    (
+        generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
+        generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN"
+        generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
+            "$COOKIE_NAME" "$COOKIE_VALUE"
+    ) &
+    show_spinner "Создание файлов" || true
 
     (setup_firewall) &
     show_spinner "Настройка файрвола" || true
@@ -121,14 +119,12 @@ installation_panel() {
     echo
     (
         cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1 && sleep 20
     ) &
-    if ! show_spinner "Запуск Docker контейнеров"; then
+    if ! show_spinner "Запуск сервисов"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         return
     fi
-
-    show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"

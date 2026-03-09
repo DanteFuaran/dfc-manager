@@ -361,7 +361,6 @@ installation_node_local() {
         show_continue_prompt || return 1
         return
     fi
-    print_success "Установка публичного ключа"
 
     # ─── API: регистрация ноды ───
     echo

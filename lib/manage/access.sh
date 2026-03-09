@@ -4,18 +4,20 @@
 
 manage_panel_access() {
     while true; do
-        # Определяем текущий режим доступа
-        local _has_8443
+        # Определяем текущий активный порт прямого доступа
+        local _current_port=""
         if grep -q "# ─── 8443 Fallback" /opt/remnawave/nginx.conf 2>/dev/null; then
-            _has_8443=true
-        else
-            _has_8443=false
+            _current_port="8443"
+        elif grep -q "# ─── 443 Direct" /opt/remnawave/nginx.conf 2>/dev/null; then
+            _current_port="443"
         fi
 
         # Формируем лейбл для переключателя
         local _toggle_label
-        if [ "$_has_8443" = true ]; then
+        if [ "$_current_port" = "8443" ]; then
             _toggle_label="🔒  Переключить панель на 443"
+        elif [ "$_current_port" = "443" ]; then
+            _toggle_label="🔓  Переключить панель на 8443"
         else
             _toggle_label="🔓  Переключить панель на 8443"
         fi
@@ -39,10 +41,10 @@ manage_panel_access() {
 
         case $choice in
             0)
-                if [ "$_has_8443" = true ]; then
-                    close_panel_access || break
+                if [ "$_current_port" = "8443" ]; then
+                    switch_panel_port 443 || break
                 else
-                    open_panel_access || break
+                    switch_panel_port 8443 || break
                 fi
                 ;;
             1)
@@ -55,12 +57,12 @@ manage_panel_access() {
                     local pd
                     pd=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | head -1)
                     echo
-                    echo -e "${GREEN}🔗 Cookie-ссылка на панель (основной порт):${NC}"
+                    echo -e "${GREEN}🔗 Cookie-ссылка на панель:${NC}"
                     echo -e "${WHITE}https://${pd}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
                     echo
-                    if grep -q "# ─── 8443 Fallback" /opt/remnawave/nginx.conf 2>/dev/null; then
-                        echo -e "${GREEN}🔗 Cookie-ссылка на панель (доступ по 8443):${NC}"
-                        echo -e "${WHITE}https://${pd}:8443/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
+                    if [ -n "$_current_port" ]; then
+                        echo -e "${GREEN}🔗 Прямой доступ (порт ${_current_port}):${NC}"
+                        echo -e "${WHITE}https://${pd}:${_current_port}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
                     fi
                 else
                     echo
@@ -81,25 +83,36 @@ manage_panel_access() {
 }
 
 open_panel_access() {
+    switch_panel_port 8443
+}
+
+
+close_panel_access() {
+    switch_panel_port 443
+}
+
+
+switch_panel_port() {
+    local target_port="$1"
+    local dir="/opt/remnawave"
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔓 ОТКРЫТИЕ ДОСТУПА К ПАНЕЛИ (8443)${NC}"
+    echo -e "${GREEN}     🔒 Переключение порта панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-
-    local dir="/opt/remnawave"
 
     if [ ! -f "$dir/nginx.conf" ]; then
         print_error "Файл nginx.conf не найден"
         sleep 2
-        return
+        return 1
     fi
 
     local COOKIE_NAME COOKIE_VALUE
     if ! get_cookie_from_nginx; then
         print_error "Не удалось извлечь cookie из nginx.conf"
         sleep 2
-        return
+        return 1
     fi
 
     local panel_domain
@@ -108,63 +121,97 @@ open_panel_access() {
     local panel_cert
     panel_cert=$(grep -A 5 "server_name ${panel_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
-    if grep -q "# ─── 8443 Fallback" "$dir/nginx.conf" 2>/dev/null; then
-        if ufw status 2>/dev/null | grep -q "8443/tcp.*ALLOW"; then
-            print_success "Доступ по 8443 уже открыт"
-        else
-            ufw allow 8443/tcp >/dev/null 2>&1
-            print_success "Порт 8443 открыт в файрволе"
-        fi
-        echo
-        echo -e "${GREEN}🔗 Ссылка на панель:${NC}"
-        echo -e "${WHITE}https://${panel_domain}:8443/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
-        echo
-        echo -e "${RED}⚠️  Не забудьте закрыть доступ после использования!${NC}"
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
+    # Удаляем любые существующие блоки прямого доступа
+    sed -i '/# ─── 8443 Fallback/,/^}$/d' "$dir/nginx.conf"
+    sed -i '/# ─── 443 Direct/,/^}$/d' "$dir/nginx.conf"
 
-    if command -v ss >/dev/null 2>&1; then
-        if ss -tuln | grep -q ":8443"; then
-            print_error "Порт 8443 уже занят другим процессом"
-            sleep 2
-            return
-        fi
-    elif command -v netstat >/dev/null 2>&1; then
-        if netstat -tuln | grep -q ":8443"; then
-            print_error "Порт 8443 уже занят другим процессом"
-            sleep 2
-            return
-        fi
-    fi
-
+    # Вставляем после последнего серверного блока
     local insert_after_line
-    insert_after_line=$(awk '/^server \{/ {start=NR; brace=1} 
-        brace {if (/\{/) brace++; if (/\}/) brace--} 
-        brace==0 && start {print NR; exit}' "$dir/nginx.conf")
-    
-    if [ -z "$insert_after_line" ]; then
-        insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
-    fi
+    insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
 
-    local temp_file="/tmp/remnawave_8443_block_$$.conf"
-    cat > "$temp_file" << 'EOF'
+    local temp_file="/tmp/remnawave_port_switch_$$.conf"
+    if [ "$target_port" = "443" ]; then
+        cat > "$temp_file" << 'SERVERBLOCK_443'
+
+# ─── 443 Direct
+server {
+    server_name PANEL_DOMAIN_PH;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+
+    add_header Set-Cookie $set_cookie_header;
+
+    location ^~ /api/auth/ {
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_busy_buffers_size 24k;
+        proxy_buffers 8 16k;
+        proxy_buffer_size 16k;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location / {
+        error_page 418 = @unauthorized;
+        recursive_error_pages on;
+        if ($authorized = 0) {
+            return 418;
+        }
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_busy_buffers_size 24k;
+        proxy_buffers 8 16k;
+        proxy_buffer_size 16k;
+        proxy_redirect off;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location @unauthorized {
+        root /var/www/html;
+        index index.html;
+    }
+}
+SERVERBLOCK_443
+    else
+        cat > "$temp_file" << 'SERVERBLOCK_8443'
 
 # ─── 8443 Fallback (direct access) ───
 server {
-    server_name PANEL_DOMAIN;
+    server_name PANEL_DOMAIN_PH;
     listen 8443 ssl;
     listen [::]:8443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
-    # API endpoints - no auth required for auth status
     location ^~ /api/auth/ {
         proxy_http_version 1.1;
         proxy_pass http://remnawave;
@@ -214,17 +261,17 @@ server {
         index index.html;
     }
 }
-EOF
+SERVERBLOCK_8443
+    fi
 
-    sed -i "s/PANEL_DOMAIN/${panel_domain}/g" "$temp_file"
-    sed -i "s/PANEL_CERT/${panel_cert}/g" "$temp_file"
+    sed -i "s/PANEL_DOMAIN_PH/${panel_domain}/g" "$temp_file"
+    sed -i "s/PANEL_CERT_PH/${panel_cert}/g" "$temp_file"
 
     if [ -n "$insert_after_line" ]; then
         sed -i "${insert_after_line}r ${temp_file}" "$dir/nginx.conf"
     else
         cat "$temp_file" >> "$dir/nginx.conf"
     fi
-
     rm -f "$temp_file"
 
     (
@@ -239,67 +286,26 @@ EOF
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
         show_continue_prompt || return 1
-        return
+        return 1
     fi
 
-    ufw allow 8443/tcp >/dev/null 2>&1
+    # UFW: закрываем старый порт, открываем новый
+    local old_port
+    if [ "$target_port" = "443" ]; then
+        old_port="8443"
+    else
+        old_port="443"
+    fi
+    ufw delete allow ${old_port}/tcp >/dev/null 2>&1 || true
+    ufw allow ${target_port}/tcp >/dev/null 2>&1
+    ufw reload >/dev/null 2>&1 || true
 
     echo
-    print_success "Доступ по 8443 открыт"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    print_success "Порт доступа к панели изменён на ${target_port}"
     echo
     echo -e "${GREEN}🔗 Ссылка на панель:${NC}"
-    echo -e "${WHITE}https://${panel_domain}:8443/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
-    echo
-    echo -e "${RED}⚠️  Не забудьте закрыть доступ после использования!${NC}"
-    echo
-    show_continue_prompt || return 1
-}
-
-close_panel_access() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   🔒 ЗАКРЫТИЕ ДОСТУПА К ПАНЕЛИ (8443)${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
-    local dir="/opt/remnawave"
-
-    if [ ! -f "$dir/nginx.conf" ]; then
-        print_error "Файл nginx.conf не найден"
-        sleep 2
-        return
-    fi
-
-    if ! grep -q "# ─── 8443 Fallback" "$dir/nginx.conf" 2>/dev/null; then
-        print_warning "Доступ по 8443 уже закрыт"
-        sleep 2
-        return
-    fi
-
-    sed -i '/# ─── 8443 Fallback/,/^}$/d' "$dir/nginx.conf"
-
-    (
-        cd "$dir"
-        docker compose down remnawave-nginx >/dev/null 2>&1
-        docker compose up -d remnawave-nginx >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск nginx"
-
-    sleep 2
-    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
-        print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
-
-    if ufw status 2>/dev/null | grep -q "8443.*ALLOW"; then
-        ufw delete allow 8443/tcp >/dev/null 2>&1
-        ufw reload >/dev/null 2>&1
-    fi
-
-    echo
-    print_success "Доступ по 8443 закрыт"
+    echo -e "${WHITE}https://${panel_domain}:${target_port}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     echo
     show_continue_prompt || return 1
 }
