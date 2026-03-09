@@ -237,15 +237,31 @@ add_node_to_panel() {
         echo -e "${YELLOW}⚠️  Сквады не найдены (будут настроены при создании пользователей)${NC}"
     fi
 
+    # Получаем pubkey панели — он нужен пользователю как SECRET_KEY при установке ноды
+    local pubkey=""
+    local keygen_response
+    keygen_response=$(make_api_request "GET" "$domain_url/api/keygen" "$token" 2>/dev/null)
+    pubkey=$(echo "$keygen_response" | jq -r '.response.pubKey // empty' 2>/dev/null)
+
     echo
-    print_success "Нода успешно зарегистрирована в панели!"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}     ➕  Подключение ноды в панель${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${RED}─────────────────────────────────────────────────${NC}"
     echo -e "${YELLOW}Для завершения установки ноды:${NC}"
     echo -e "${WHITE}1. Запустите этот скрипт на сервере, где будет установлена нода${NC}"
     echo -e "${WHITE}2. Выберите \"Установить компоненты\" → \"Только нода\"${NC}"
+    if [ -n "$pubkey" ]; then
+        echo -e "${WHITE}3. Когда скрипт попросит SECRET KEY — вставьте:${NC}"
+        echo
+        echo -e "   ${GREEN}${pubkey}${NC}"
+        echo
+    fi
     echo -e "${RED}─────────────────────────────────────────────────${NC}"
-    echo -e "${DARKGRAY}  ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     echo
+    print_success "Нода успешно зарегистрирована в панели!"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
