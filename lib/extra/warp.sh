@@ -475,9 +475,6 @@ add_warp_to_config() {
     echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${YELLOW}⚠️  Не забудьте открыть порт ${WHITE}${warp_port}/tcp${YELLOW} на сервере с нодой:${NC}"
-    echo -e "${DARKGRAY}   ufw allow ${warp_port}/tcp${NC}"
-    echo
 
     # Генерируем новые ключи для WARP-инбаунда
     print_action "Генерация REALITY ключей для WARP-инбаунда..."
@@ -642,7 +639,7 @@ add_warp_to_config() {
     echo
     echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
     echo
-    echo -e "${YELLOW}⚠️  Откройте порт ${WHITE}${warp_port}/tcp${YELLOW} и установите WARP на сервере ноды${NC}"
+    echo -e "${YELLOW}⚠️  Теперь установите WARP на сервере ноды${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
