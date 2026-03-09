@@ -607,6 +607,9 @@ ssl_session_timeout 1d;
 ssl_session_cache shared:MozSSL:10m;
 ssl_session_tickets off;
 
+real_ip_header   proxy_protocol;
+set_real_ip_from unix:;
+
 server {
     server_name $panel_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
@@ -661,6 +664,8 @@ server {
         limit_req zone=sub_limit burst=20 nodelay;
         limit_req_status 444;
 
+        keepalive_timeout 0;
+
         proxy_http_version 1.1;
         proxy_pass http://json;
         proxy_set_header Host \$host;
@@ -694,6 +699,8 @@ server {
     root /var/www/html;
     index index.html;
 
+    error_page 400 = @drop;
+
     # Заголовки безопасности
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -702,6 +709,10 @@ server {
 
     # Только GET и HEAD методы
     if (\$request_method !~ ^(GET|HEAD)\$) {
+        return 444;
+    }
+
+    location @drop {
         return 444;
     }
 
