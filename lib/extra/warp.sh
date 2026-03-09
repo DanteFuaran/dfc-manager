@@ -833,14 +833,21 @@ remove_warp_from_config() {
             done <<< "$host_uuids_to_del"
         fi
 
-        # Закрываем порт в UFW только если ни один оставшийся инбаунд не использует этот порт
+        # Спрашиваем закрыть ли порт в UFW (только если он не используется другими инбаундами)
         if [ -n "$warp_ports" ] && command -v ufw >/dev/null 2>&1; then
             local remaining_ports
             remaining_ports=$(echo "$config_json" | jq -r '[.inbounds[].port | tostring] | .[]' 2>/dev/null)
             while IFS= read -r port; do
                 [ -z "$port" ] && continue
                 if ! echo "$remaining_ports" | grep -qx "$port"; then
-                    ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+                    show_arrow_menu "Закрыть порт ${port}/tcp в UFW?" \
+                        "✅  Да — закрыть порт ${port}/tcp" \
+                        "❌  Нет — оставить порт открытым"
+                    local _port_choice=$?
+                    if [ $_port_choice -eq 0 ]; then
+                        ufw delete allow "${port}/tcp" >/dev/null 2>&1 && \
+                            print_success "Порт ${port}/tcp закрыт в UFW" || true
+                    fi
                 fi
             done <<< "$warp_ports"
         fi
