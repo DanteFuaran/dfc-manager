@@ -155,7 +155,11 @@ installation_full() {
     ) &
     show_spinner "Создание необходимых файлов" || true
 
-    echo
+    (
+        setup_firewall
+        ufw allow 2222/tcp >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Настройка файрвола" || true
 
     (
         cd /opt/remnawave

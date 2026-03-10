@@ -70,7 +70,7 @@ show_spinner_until_ready() {
     local i=0 elapsed=0 delay=0.08 loop_count=0
     tput civis 2>/dev/null || true
     while [ $elapsed -lt $timeout ]; do
-        printf "\r${DARKGRAY}%s  %s${NC}" "${spin[$i]}" "$msg"
+        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
         loop_count=$((loop_count + 1))
