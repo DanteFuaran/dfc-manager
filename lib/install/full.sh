@@ -42,7 +42,7 @@ installation_full() {
     # Домены
     prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
     prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен selfsteal/ноды (например node.example.com):" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
@@ -282,6 +282,7 @@ installation_full() {
 
     # 10. Шаблон selfsteal
     randomhtml
+    echo
 
     # 11. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
     (
@@ -309,11 +310,15 @@ installation_full() {
     echo -e "                   ${GREEN}🎉 УСТАНОВКА ЗАВЕРШЕНА!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
-    echo -e "${YELLOW}⚠️  ВАЖНО: XRAY (selfsteal) занимает порт 443 для работы VPN.${NC}"
-    echo -e "${WHITE}   Панель доступна через порт 8443 (автоматически включен).${NC}"
+    echo -e "${YELLOW}⚠️  ВАЖНО: Xray занимает порт 443 для работы ноды.${NC}"
+    echo -e "${WHITE}   Панель доступна через порт 8443.${NC}"
+    echo
+    echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для входа в панель:${NC}"
     echo -e "${WHITE}https://${PANEL_DOMAIN}:8443/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
+    echo
+    echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
     echo -e "${GREEN}dfc-remna-install${NC} или ${GREEN}dfc-ri${NC}"
@@ -322,7 +327,7 @@ installation_full() {
     echo
     echo -e "${YELLOW}⚠️  При первом входе в панель произойдет создание администратора.${NC}"
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
-    echo -e "${YELLOW}   время через главное меню скрипта.${NC}"
+    echo -e "${YELLOW}   время в меню \"🔓  Доступ к панели\".${NC}"
     echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     show_continue_prompt || return 1

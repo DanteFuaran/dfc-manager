@@ -232,7 +232,8 @@ reading() {
     local var_name="$2"
     local input
     echo
-    read -e -p "$(echo -e "${BLUE}➜${NC}  ${YELLOW}$prompt${NC} ")" input
+    read -e -p "$(echo -e "${BLUE}➜${NC}  ${YELLOW}$prompt${NC} \033[32m")" input
+    echo -en "\033[0m"
     printf -v "$var_name" '%s' "$input"
 }
 
@@ -243,7 +244,7 @@ reading_inline() {
     local char
     local _rl_stty
     _rl_stty=$(stty -g 2>/dev/null || echo "")
-    echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} "
+    echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} \033[32m"
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
@@ -268,6 +269,7 @@ reading_inline() {
             echo -en "$char"
         fi
     done
+    echo -en "\033[0m"
     if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
     echo
     printf -v "$var_name" '%s' "$input"
