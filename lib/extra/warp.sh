@@ -436,13 +436,9 @@ add_warp_to_config() {
     # Запрашиваем порт для WARP-инбаунда
     local warp_port=""
     while true; do
-        reading_inline "Порт для WARP-инбаунда (Enter = 9443):" warp_port
+        reading_inline "Порт для WARP-инбаунда:" warp_port
         local _rc_port=$?
         if [[ $_rc_port -eq 2 ]]; then return; fi
-        if [ -z "$warp_port" ]; then
-            warp_port=9443
-            break
-        fi
         if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
             if ss -tuln 2>/dev/null | grep -qE ":${warp_port}[^0-9]"; then
                 print_error "Порт ${warp_port} уже занят (например, nginx). Выберите другой порт."
