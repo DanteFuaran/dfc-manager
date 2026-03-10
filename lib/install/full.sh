@@ -309,26 +309,32 @@ installation_full() {
     # Ожидаем готовность после перезапуска
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
-    show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности панели" 120 || true
-
     # Верификация: ждём пока remnanode запустит xray на порту 443
-    print_action "Ожидание подключения ноды (xray → порт 443)..."
     local verify_ok=false
     local verify_elapsed=0
     local verify_timeout=60
+    local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local _si=0 _tick=0
+    tput civis 2>/dev/null || true
     while [ $verify_elapsed -lt $verify_timeout ]; do
-        if ss -tuln 2>/dev/null | grep -q ':443 '; then
-            verify_ok=true
-            break
+        printf "\r${DARKGRAY}%s  Ожидание подключения ноды (порт 443)...${NC}" "${_spin[$_si]}"
+        _si=$(( (_si+1) % 10 ))
+        sleep 0.1
+        _tick=$((_tick + 1))
+        if [ $((_tick % 20)) -eq 0 ]; then
+            verify_elapsed=$((verify_elapsed + 2))
+            if ss -tuln 2>/dev/null | grep -q ':443 '; then
+                verify_ok=true
+                break
+            fi
         fi
-        sleep 2
-        ((verify_elapsed+=2))
     done
     if [ "$verify_ok" = true ]; then
-        print_success "Порт 443 активен — xray (remnanode) работает"
+        printf "\r${GREEN}✅${NC} Нода запущена — порт 443 активен\n"
     else
-        echo -e "${YELLOW}⚠️  Порт 443 пока не активен — нода может ещё подключаться${NC}"
+        printf "\r${YELLOW}⚠️${NC}  Порт 443 не ответил за %s сек — проверьте: docker logs remnanode\n" "$verify_timeout"
     fi
+    tput cnorm 2>/dev/null || true
 
     # 12. Сброс суперадмина — при первом входе пользователь задаст свои данные
     print_action "Сброс суперадмина для первого входа..."
