@@ -524,13 +524,8 @@ auto_enable_panel_access_8443() {
     fi
 
     local insert_after_line
-    insert_after_line=$(awk '/^server \{/ {start=NR; brace=1} 
-        brace {if (/\{/) brace++; if (/\}/) brace--} 
-        brace==0 && start {print NR; exit}' "$dir/nginx.conf")
-    
-    if [ -z "$insert_after_line" ]; then
-        insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
-    fi
+    # Вставляем перед закрывающей скобкой http{} (новый формат) или после последнего server{} (старый формат)
+    insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
 
     local temp_file="/tmp/remnawave_8443_auto_$$.conf"
     cat > "$temp_file" << 'EOF'
