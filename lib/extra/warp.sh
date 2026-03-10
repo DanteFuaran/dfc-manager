@@ -103,6 +103,18 @@ install_warp_native() {
         return 0
     fi
 
+    # Спрашиваем порт WARP-инбаунда
+    local warp_install_port=""
+    while true; do
+        reading_inline "Порт для WARP-инбаунда:" warp_install_port
+        local _rc_wp=$?
+        if [[ $_rc_wp -eq 2 ]]; then return 0; fi
+        if [[ "$warp_install_port" =~ ^[0-9]+$ ]] && [ "$warp_install_port" -ge 1024 ] && [ "$warp_install_port" -le 65535 ]; then
+            break
+        fi
+        print_error "Введите корректный порт (1024–65535)"
+    done
+
     # Спрашиваем WARP+ ключ
     reading_inline "WARP+ ключ (Enter для бесплатной версии):" warp_key
     local _rc_wk=$?
@@ -198,6 +210,10 @@ install_warp_native() {
     # Проверяем результат
     if ip link show warp 2>/dev/null | grep -q "warp"; then
         rm -f "$_warp_log"
+        if command -v ufw >/dev/null 2>&1; then
+            ufw allow "${warp_install_port}/tcp" >/dev/null 2>&1 || true
+            echo "${warp_install_port}" > /etc/wireguard/.warp_port
+        fi
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
