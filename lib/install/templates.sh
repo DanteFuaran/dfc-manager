@@ -53,7 +53,7 @@ apply_template() {
     if curl -fsSL "${base_url}/index.html${cache_bust}" -o /var/www/html/index.html; then
         echo "$name" > /var/www/.current_template
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed
-        echo -e "${GREEN}✅${NC} Установлен шаблон: ${WHITE}${name}${NC}"
+        echo -e "${GREEN}✅${NC} Установка шаблона: ${WHITE}${name}${NC}"
     else
         echo -e "${RED}✖${NC} Ошибка загрузки шаблона. Проверьте интернет-соединение."
         # Создаём заглушку на случай ошибки

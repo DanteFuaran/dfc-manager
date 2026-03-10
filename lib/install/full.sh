@@ -133,8 +133,6 @@ installation_full() {
     fi
 
     # Генерируем конфиги
-    echo
-    print_action "Генерация конфигурации..."
 
     # Генерируем cookie для защиты панели
     local COOKIE_NAME COOKIE_VALUE
@@ -155,17 +153,15 @@ installation_full() {
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
     ) &
-    show_spinner "Создание файлов" || true
+    show_spinner "Создание необходимых файлов" || true
 
-    # Запуск
     echo
-    print_action "Запуск сервисов..."
 
     (
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 && sleep 20
     ) &
-    if ! show_spinner "Запуск сервисов"; then
+    if ! show_spinner "Установка сервисов"; then
         print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         echo
         show_continue_prompt || true
@@ -185,11 +181,8 @@ installation_full() {
     # ═══════════════════════════════════════════
     # АВТОНАСТРОЙКА: РЕГИСТРАЦИЯ И СОЗДАНИЕ НОДЫ
     # ═══════════════════════════════════════════
-    echo
-    print_action "Автонастройка панели и ноды..."
 
     # 1. Регистрация суперадмина → получение токена
-    print_action "Регистрация администратора..."
     local token
     token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
 
@@ -262,23 +255,16 @@ installation_full() {
     fi
 
     # 6. Создание ноды
-    print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
-        print_success "Создание ноды"
-    else
+    if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
         print_error "Не удалось создать ноду"
     fi
 
     # 7. Создание хоста
-    print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
-    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
-        print_success "Регистрация хоста"
-    else
+    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
         print_error "Не удалось зарегистрировать хост"
     fi
 
     # 8. Получение и обновление сквадов
-    print_action "Настройка сквадов..."
     local squad_uuids
     squad_uuids=$(get_default_squad "$domain_url" "$token")
 
@@ -287,64 +273,26 @@ installation_full() {
             [ -z "$squad_uuid" ] && continue
             update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
         done <<< "$squad_uuids"
-        print_success "Обновление сквадов"
-    else
-        echo -e "${YELLOW}⚠️  Сквады не найдены (будут настроены при создании пользователей)${NC}"
     fi
 
     # 9. Создание API токена для subscription-page
-    print_action "Создание API токена для страницы подписки..."
-    create_api_token "$domain_url" "$token" "$target_dir"
+    create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    # 10. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
-    print_action "Перезапуск сервисов с обновлённой конфигурацией..."
+    print_success "Обновление конфигураций"
+
+    # 10. Шаблон selfsteal
+    randomhtml
+
+    # 11. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
     (
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
-    show_spinner "Запуск контейнеров" || true
-
-    # 11. Шаблон selfsteal
-    randomhtml
-
-    # Ожидаем готовность после перезапуска
-    show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
-
-    # Верификация: ждём пока remnanode запустит xray на порту 443
-    local verify_ok=false
-    local verify_elapsed=0
-    local verify_timeout=60
-    local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local _si=0 _tick=0
-    tput civis 2>/dev/null || true
-    while [ $verify_elapsed -lt $verify_timeout ]; do
-        printf "\r${DARKGRAY}%s  Ожидание подключения ноды (порт 443)...${NC}" "${_spin[$_si]}"
-        _si=$(( (_si+1) % 10 ))
-        sleep 0.1
-        _tick=$((_tick + 1))
-        if [ $((_tick % 20)) -eq 0 ]; then
-            verify_elapsed=$((verify_elapsed + 2))
-            if ss -tuln 2>/dev/null | grep -q ':443 '; then
-                verify_ok=true
-                break
-            fi
-        fi
-    done
-    if [ "$verify_ok" = true ]; then
-        printf "\r${GREEN}✅${NC} Нода запущена — порт 443 активен\n"
-    else
-        printf "\r${YELLOW}⚠️${NC}  Порт 443 не ответил за %s сек — проверьте: docker logs remnanode\n" "$verify_timeout"
-    fi
-    tput cnorm 2>/dev/null || true
+    show_spinner "Запуск сервисов" || true
 
     # 12. Сброс суперадмина — при первом входе пользователь задаст свои данные
-    print_action "Сброс суперадмина для первого входа..."
-    if docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1; then
-        print_success "Суперадмин сброшен"
-    else
-        print_error "Не удалось сбросить суперадмина"
-    fi
+    docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 
     # Удаляем trap при успешном завершении
     if [ "$is_fresh_install" = true ]; then
