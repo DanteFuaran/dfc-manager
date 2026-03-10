@@ -78,6 +78,13 @@ installation_panel() {
         fi
 
         echo
+    else
+        CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
+        echo
+        for domain in "${!domains_to_check[@]}"; do
+            print_success "Сертификат для $domain уже существует"
+        done
+        echo
     fi
 
     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -92,13 +99,6 @@ installation_panel() {
             echo
             return
         fi
-    else
-        CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
-        echo
-        for domain in "${!domains_to_check[@]}"; do
-            print_success "Сертификат для $domain уже существует"
-        done
-        echo
     fi
 
     local PANEL_CERT_DOMAIN SUB_CERT_DOMAIN

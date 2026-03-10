@@ -586,6 +586,11 @@ installation_node_remote() {
         fi
 
         echo
+    else
+        CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
+        echo
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        echo
     fi
 
     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -599,11 +604,6 @@ installation_node_remote() {
             show_continue_prompt || true
             return
         fi
-    else
-        CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
-        echo
-        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
-        echo
     fi
 
     local NODE_CERT_DOMAIN

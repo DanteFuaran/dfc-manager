@@ -98,6 +98,12 @@ installation_full() {
         fi
 
         echo
+    else
+        CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
+        echo
+        for domain in "${!domains_to_check[@]}"; do
+            print_success "Сертификат для $domain уже существует"
+        done
     fi
 
     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -112,12 +118,6 @@ installation_full() {
             echo
             return
         fi
-    else
-        CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
-        echo
-        for domain in "${!domains_to_check[@]}"; do
-            print_success "Сертификат для $domain уже существует"
-        done
     fi
 
     # Определяем домены сертификатов
