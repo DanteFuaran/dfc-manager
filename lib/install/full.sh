@@ -147,12 +147,6 @@ installation_full() {
     ) &
     show_spinner "Создание файлов" || true
 
-    # UFW для ноды
-    (
-        ufw allow from "$network_subnet" to any port 2222 proto tcp >/dev/null 2>&1
-    ) &
-    show_spinner "Настройка файрвола" || true
-
     # Запуск
     echo
     print_action "Запуск сервисов..."

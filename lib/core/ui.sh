@@ -278,8 +278,8 @@ reading_inline() {
 show_continue_prompt() {
     _flush_stdin
     tput civis 2>/dev/null
+    printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
     while true; do
-        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
         local _cpk
         IFS= read -rsn1 _cpk 2>/dev/null
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
@@ -290,6 +290,9 @@ show_continue_prompt() {
             if [[ -z "$_cps" ]]; then
                 tput cnorm 2>/dev/null; echo
                 return 1   # Esc → в главное меню
+            else
+                # Поглощаем третий символ escape-последовательности (стрелки: \x1b[A/B/C/D)
+                IFS= read -rsn1 -t 0.1 2>/dev/null || true
             fi
         fi
     done
