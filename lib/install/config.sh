@@ -720,6 +720,8 @@ server {
 
     access_log /dev/stdout combined if=\$loggable;
 
+    error_page 502 = @redirect;
+
     location / {
         limit_req zone=sub_limit burst=20 nodelay;
         limit_req_status 444;
@@ -739,7 +741,7 @@ server {
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         proxy_intercept_errors on;
-        error_page 400 404 500 502 @redirect;
+        error_page 400 404 500 @redirect;
     }
 
     location @redirect {
@@ -952,6 +954,8 @@ server {
 
     access_log /dev/stdout combined if=\$loggable;
 
+    error_page 502 = @redirect;
+
     location / {
         limit_req zone=sub_limit burst=20 nodelay;
         limit_req_status 444;
@@ -971,7 +975,7 @@ server {
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         proxy_intercept_errors on;
-        error_page 400 404 500 502 @redirect;
+        error_page 400 404 500 @redirect;
     }
 
     location @redirect {
