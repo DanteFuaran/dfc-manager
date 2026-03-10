@@ -453,47 +453,31 @@ installation_node_local() {
     fi
 
     # ─── Верификация: ждём пока remnanode запустит xray на порту 443 ───
-    print_action "Ожидание подключения ноды (xray → порт 443)..."
     local verify_ok=false
     local verify_elapsed=0
     local verify_timeout=60
+    local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local _si=0 _tick=0
+    tput civis 2>/dev/null || true
     while [ $verify_elapsed -lt $verify_timeout ]; do
-        if ss -tuln 2>/dev/null | grep -q ':443 '; then
-            verify_ok=true
-            break
+        printf "\r${DARKGRAY}%s  Ожидание подключения ноды (порт 443)...${NC}" "${_spin[$_si]}"
+        _si=$(( (_si+1) % 10 ))
+        sleep 0.1
+        _tick=$((_tick + 1))
+        if [ $((_tick % 20)) -eq 0 ]; then
+            verify_elapsed=$((verify_elapsed + 2))
+            if ss -tuln 2>/dev/null | grep -q ':443 '; then
+                verify_ok=true
+                break
+            fi
         fi
-        sleep 2
-        ((verify_elapsed+=2))
     done
-
     if [ "$verify_ok" = true ]; then
-        print_success "Порт 443 активен — xray (remnanode) работает"
+        printf "\r${GREEN}✅${NC} Порт 443 активен — нода работает\n"
     else
-        echo -e "${YELLOW}⚠️  Порт 443 не активен через ${verify_timeout} сек. Диагностика:${NC}"
-        echo
-
-        # Проверяем контейнер remnanode
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
-            echo -e "${GREEN}  ✓${NC} Контейнер remnanode запущен"
-            echo -e "${DARKGRAY}  Логи remnanode (последние 10 строк):${NC}"
-            docker logs --tail 10 remnanode 2>&1 | while IFS= read -r line; do
-                echo -e "${DARKGRAY}    $line${NC}"
-            done
-        else
-            echo -e "${RED}  ✗${NC} Контейнер remnanode НЕ запущен"
-        fi
-
-        echo
-        echo -e "${YELLOW}  Возможные причины:${NC}"
-        echo -e "${WHITE}  1. Нода ещё подключается к панели (подождите 1-2 мин)${NC}"
-        echo -e "${WHITE}  2. Панель не смогла передать конфиг ноде${NC}"
-        echo -e "${WHITE}  3. Проверьте: ${GREEN}docker logs remnanode${NC}"
-        echo -e "${WHITE}  4. Проверьте: ${GREEN}docker logs remnawave${NC}"
-        echo
-        echo -e "${YELLOW}  Конфигурация НЕ откачена — нода создана в панели.${NC}"
-        echo -e "${YELLOW}  Попробуйте: ${GREEN}cd /opt/remnawave && docker compose restart${NC}"
-        echo
+        printf "\r${YELLOW}⚠️${NC}  Порт 443 не ответил за %s сек — проверьте: docker logs remnanode\n" "$verify_timeout"
     fi
+    tput cnorm 2>/dev/null || true
 
     # Автоматически включаем доступ по 8443 (нода занимает 443)
     local local_cookie_name="$COOKIE_NAME"

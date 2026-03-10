@@ -196,7 +196,7 @@ manage_ufw() {
                 # Удалить UFW
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}            ❌  Удалить Firewall (UFW)${NC}"
+                echo -e "${GREEN}      ❌  Удалить Firewall (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 echo -e "${YELLOW}Вы уверены, что хотите удалить UFW?${NC}"
@@ -218,6 +218,7 @@ manage_ufw() {
                     print_error "Не удалось удалить UFW"
                 fi
                 echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
                 ;;
             5) continue ;;
