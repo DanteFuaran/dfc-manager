@@ -303,6 +303,9 @@ installation_full() {
         trap - INT TERM
     fi
 
+    # Автоматически включаем доступ по 8443 для panel+node
+    auto_enable_panel_access_8443 "$PANEL_DOMAIN" "$COOKIE_NAME" "$COOKIE_VALUE"
+
     # Итог
     clear
     tput civis 2>/dev/null
@@ -310,10 +313,13 @@ installation_full() {
     echo -e "                   ${GREEN}🎉 УСТАНОВКА ЗАВЕРШЕНА!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
+    echo -e "${YELLOW}⚠️  Xray занимает порт 443 для работы ноды.${NC}"
+    echo -e "${WHITE}   Панель доступна через порт 8443.${NC}"
+    echo
     echo -e "${DARKGRAY}──────────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для входа в панель:${NC}"
-    echo -e "${WHITE}https://${PANEL_DOMAIN}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
+    echo -e "${WHITE}https://${PANEL_DOMAIN}:8443/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
