@@ -154,6 +154,7 @@ manage_ufw() {
                         echo
                         print_warning "Нет правил для удаления"
                         echo
+                        echo -e "${BLUE}══════════════════════════════════════${NC}"
                         show_continue_prompt || return 1
                         break
                     fi
@@ -193,17 +194,22 @@ manage_ufw() {
             3) continue ;;
             4)
                 # Удалить UFW
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}            ❌  Удалить Firewall (UFW)${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 echo -e "${YELLOW}Вы уверены, что хотите удалить UFW?${NC}"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 if ! confirm_action; then
-                    print_error "Операция отменена"
-                    sleep 2
                     continue
                 fi
                 echo
                 (
                     ufw disable >/dev/null 2>&1 || true
-                    apt-get remove -y ufw >/dev/null 2>&1
+                    apt-get purge -y ufw >/dev/null 2>&1
+                    apt-get autoremove -y >/dev/null 2>&1
                 ) &
                 show_spinner "Удаление UFW"
                 if ! command -v ufw >/dev/null 2>&1; then

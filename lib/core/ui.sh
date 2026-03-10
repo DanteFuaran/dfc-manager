@@ -339,12 +339,18 @@ confirm_action() {
     echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     tput civis  # Скрыть курсор
 
-    local key
+    local key seq
     while true; do
-        read -s -n 1 key
+        IFS= read -rsn1 key
         if [[ "$key" == $'\x1b' ]]; then
-            tput cnorm  # Показать курсор
-            return 1
+            IFS= read -rsn1 -t 0.1 seq 2>/dev/null || true
+            if [[ -z "$seq" ]]; then
+                tput cnorm  # Показать курсор
+                return 1
+            else
+                # Поглощаем третий символ escape-последовательности (стрелки)
+                IFS= read -rsn1 -t 0.1 2>/dev/null || true
+            fi
         elif [[ "$key" == "" ]]; then
             tput cnorm  # Показать курсор
             return 0
