@@ -103,22 +103,6 @@ install_warp_native() {
         return 0
     fi
 
-    # Спрашиваем порт для WARP-подключения
-    local warp_install_port=""
-    while true; do
-        reading_inline "Порт для WARP-инбаунда (По умолчанию: 8443):" warp_install_port
-        local _rc_wp=$?
-        if [[ $_rc_wp -eq 2 ]]; then return 0; fi
-        if [ -z "$warp_install_port" ]; then
-            warp_install_port=8443
-            break
-        fi
-        if [[ "$warp_install_port" =~ ^[0-9]+$ ]] && [ "$warp_install_port" -ge 1024 ] && [ "$warp_install_port" -le 65535 ]; then
-            break
-        fi
-        print_error "Введите корректный порт (1024–65535)"
-    done
-
     # Спрашиваем WARP+ ключ
     reading_inline "WARP+ ключ (Enter для бесплатной версии):" warp_key
     local _rc_wk=$?
@@ -208,17 +192,12 @@ install_warp_native() {
         systemctl start wg-quick@warp 2>&1
         systemctl enable wg-quick@warp 2>&1
 
-        # Открываем порт в UFW
-        if command -v ufw >/dev/null 2>&1; then
-            ufw allow "${warp_install_port}/tcp" >/dev/null 2>&1 || true
-        fi
     ) > "$_warp_log" 2>&1 &
     show_spinner "Установка WARP"
 
     # Проверяем результат
     if ip link show warp 2>/dev/null | grep -q "warp"; then
         rm -f "$_warp_log"
-        echo "${warp_install_port}" > /etc/wireguard/.warp_port
         print_success "Создание WARP интерфейса"
         print_success "WARP успешно установлен"
         echo
@@ -457,17 +436,22 @@ add_warp_to_config() {
     # Запрашиваем порт для WARP-инбаунда
     local warp_port=""
     while true; do
-        reading_inline "Порт для WARP-инбаунда (Enter = 8443):" warp_port
+        reading_inline "Порт для WARP-инбаунда (Enter = 9443):" warp_port
         local _rc_port=$?
         if [[ $_rc_port -eq 2 ]]; then return; fi
         if [ -z "$warp_port" ]; then
-            warp_port=8443
+            warp_port=9443
             break
         fi
         if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
-            break
+            if ss -tuln 2>/dev/null | grep -qE ":${warp_port}[^0-9]"; then
+                print_error "Порт ${warp_port} уже занят (например, nginx). Выберите другой порт."
+            else
+                break
+            fi
+        else
+            print_error "Введите корректный порт (1024–65535)"
         fi
-        print_error "Введите корректный порт (1024–65535)"
     done
 
     clear
@@ -642,6 +626,7 @@ add_warp_to_config() {
     # Открываем порт в UFW на этом сервере
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${warp_port}/tcp" >/dev/null 2>&1 || true
+        echo "${warp_port}" > /etc/wireguard/.warp_port
     fi
 
     echo
