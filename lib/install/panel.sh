@@ -199,7 +199,11 @@ installation_panel() {
 
     # 4. Сброс суперадмина — при первом входе пользователь задаст свои данные
     print_action "Сброс суперадмина для первого входа..."
-    if docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1; then
+    local db_user db_name
+    db_user=$(grep '^POSTGRES_USER=' /opt/remnawave/.env 2>/dev/null | cut -d= -f2)
+    db_name=$(grep '^POSTGRES_DB='   /opt/remnawave/.env 2>/dev/null | cut -d= -f2)
+    db_user="${db_user:-postgres}"; db_name="${db_name:-postgres}"
+    if docker exec -i remnawave-db psql -U "$db_user" -d "$db_name" -c "DELETE FROM admin;" >/dev/null 2>&1; then
         print_success "Суперадмин сброшен"
     else
         print_error "Не удалось сбросить суперадмина"
