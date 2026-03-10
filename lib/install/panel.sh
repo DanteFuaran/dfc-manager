@@ -75,6 +75,11 @@ installation_panel() {
             setup_cloudflare_credentials || return
         fi
 
+        echo
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
+
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
             [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null
@@ -89,6 +94,9 @@ installation_panel() {
             print_success "Сертификат для $domain уже существует"
         done
         echo
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
     fi
 
     local PANEL_CERT_DOMAIN SUB_CERT_DOMAIN

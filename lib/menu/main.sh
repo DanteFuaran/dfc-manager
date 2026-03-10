@@ -93,21 +93,9 @@ main_menu() {
                     [[ $install_choice -eq 255 ]] && break
                     local inst_action="${inst_actions[$install_choice]:-back}"
                     case "$inst_action" in
-                        full)
-                            if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
-                                install_packages
-                            fi
-                            installation_full || break ;;
-                        panel)
-                            if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
-                                install_packages
-                            fi
-                            installation_panel || break ;;
-                        node)
-                            if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
-                                install_packages
-                            fi
-                            installation_node || break ;;
+                        full)  installation_full  || break ;;
+                        panel) installation_panel || break ;;
+                        node)  installation_node  || break ;;
                         add_node) add_node_to_panel || break ;;
                         *) break ;;
                     esac

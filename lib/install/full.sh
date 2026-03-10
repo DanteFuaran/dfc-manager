@@ -95,6 +95,11 @@ installation_full() {
             setup_cloudflare_credentials || return
         fi
 
+        echo
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
+
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
             [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null
@@ -108,6 +113,9 @@ installation_full() {
         for domain in "${!domains_to_check[@]}"; do
             print_success "Сертификат для $domain уже существует"
         done
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
     fi
 
     # Определяем домены сертификатов

@@ -599,6 +599,11 @@ installation_node_remote() {
             setup_cloudflare_credentials || return
         fi
 
+        echo
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
+
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
             [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
@@ -610,6 +615,9 @@ installation_node_remote() {
         echo
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
         echo
+        if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+            install_packages
+        fi
     fi
 
     local NODE_CERT_DOMAIN
