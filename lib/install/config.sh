@@ -219,6 +219,7 @@ services:
       valkey-server
       --save ""
       --appendonly no
+      --maxmemory 128mb
       --maxmemory-policy noeviction
       --loglevel warning
     healthcheck:
@@ -243,8 +244,7 @@ services:
         soft: 1048576
         hard: 1048576
     volumes:
-      - ./nginx-main.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 COMPOSE_HEAD
 
     # Монтируем сертификаты для каждого домена
@@ -448,6 +448,7 @@ services:
       valkey-server
       --save ""
       --appendonly no
+      --maxmemory 128mb
       --maxmemory-policy noeviction
       --loglevel warning
     healthcheck:
@@ -471,8 +472,7 @@ services:
         soft: 1048576
         hard: 1048576
     volumes:
-      - ./nginx-main.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 COMPOSE_HEAD
 
     # Монтируем сертификаты для каждого домена
@@ -557,10 +557,11 @@ volumes:
 COMPOSE_VOLUMES
 }
 
-# ─── Nginx: Главный конфиг (заменяет /etc/nginx/nginx.conf) ───
-generate_nginx_main_conf() {
-    local target_dir="${1:-/opt/remnawave}"
-    cat > "${target_dir}/nginx-main.conf" <<'NGINX_MAIN'
+# ─── Nginx: Главный конфиг — объединённый (заменяет /etc/nginx/nginx.conf) ───
+# Общая http-обёртка, используемая всеми вариантами nginx.conf.
+# Вызывается из generate_nginx_conf_full / generate_nginx_conf_panel / generate_nginx_conf_node.
+_nginx_http_header() {
+    cat <<'NGINX_HTTP_HEAD'
 user  nginx;
 worker_processes  auto;
 
@@ -594,9 +595,7 @@ http {
     # Лимит body (защита от DoS)
     client_max_body_size 1m;
 
-    include /etc/nginx/conf.d/*.conf;
-}
-NGINX_MAIN
+NGINX_HTTP_HEAD
 }
 
 # ─── Nginx: Панель + Нода (Full) ───
@@ -610,7 +609,10 @@ generate_nginx_conf_full() {
     local cookie_name=$7
     local cookie_value=$8
 
-    cat > /opt/remnawave/nginx.conf <<EOL
+    # http-обёртка
+    _nginx_http_header > /opt/remnawave/nginx.conf
+
+    cat >> /opt/remnawave/nginx.conf <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -836,6 +838,7 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+} # ─── end http ───
 EOL
 }
 
@@ -848,7 +851,10 @@ generate_nginx_conf_panel() {
     local cookie_name=$5
     local cookie_value=$6
 
-    cat > /opt/remnawave/nginx.conf <<EOL
+    # http-обёртка
+    _nginx_http_header > /opt/remnawave/nginx.conf
+
+    cat >> /opt/remnawave/nginx.conf <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -978,6 +984,7 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
+} # ─── end http ───
 EOL
 }
 
@@ -990,7 +997,10 @@ generate_nginx_conf_node() {
     # Удаляем если nginx.conf — директория (может быть создана Docker)
     [ -d "${target_dir}/nginx.conf" ] && rm -rf "${target_dir}/nginx.conf"
 
-    cat > "${target_dir}/nginx.conf" <<EOL
+    # http-обёртка
+    _nginx_http_header > "${target_dir}/nginx.conf"
+
+    cat >> "${target_dir}/nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 map \$http_upgrade \$connection_upgrade {
@@ -1109,5 +1119,6 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+} # ─── end http ───
 EOL
 }

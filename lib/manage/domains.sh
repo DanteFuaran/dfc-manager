@@ -91,8 +91,21 @@ obtain_cert_for_domain() {
 
     print_success "SSL-сертификат получен"
 
-    local cron_rule="0 3 * * * certbot renew --quiet --deploy-hook 'cd ${panel_dir} && docker compose restart remnawave-nginx' 2>/dev/null"
-    if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+    local _deploy_hook='for d in /opt/remnawave /opt/remnanode; do [ -f "$d/docker-compose.yml" ] && cd "$d" && docker compose restart remnawave-nginx 2>/dev/null; done'
+    local cron_rule
+    if [ "$cert_method" != "1" ]; then
+        # ACME (standalone) — нужно открывать/закрывать порт 80
+        local _pre_hook='ufw allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true; sleep 2'
+        local _post_hook='ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true'
+        cron_rule="0 3 * * * certbot renew --quiet --pre-hook '${_pre_hook}' --post-hook '${_post_hook}' --deploy-hook '${_deploy_hook}' 2>/dev/null"
+    else
+        # Cloudflare DNS-01 — порт 80 не нужен
+        cron_rule="0 3 * * * certbot renew --quiet --deploy-hook '${_deploy_hook}' 2>/dev/null"
+    fi
+    # Заменяем существующий cron или добавляем новый
+    if crontab -l 2>/dev/null | grep -q "certbot renew"; then
+        (crontab -l 2>/dev/null | grep -v "certbot renew"; echo "$cron_rule") | crontab -
+    else
         (crontab -l 2>/dev/null; echo "$cron_rule") | crontab -
     fi
 
