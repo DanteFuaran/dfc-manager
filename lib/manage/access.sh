@@ -642,17 +642,13 @@ change_credentials() {
     echo
     print_action "Сброс суперадмина..."
 
-    local _db_user _db_name
-    _db_user=$(grep '^POSTGRES_USER=' /opt/remnawave/.env 2>/dev/null | cut -d= -f2); _db_user="${_db_user:-postgres}"
-    _db_name=$(grep '^POSTGRES_DB='   /opt/remnawave/.env 2>/dev/null | cut -d= -f2); _db_name="${_db_name:-postgres}"
-
     (
         cd /opt/remnawave
         docker compose stop remnawave >/dev/null 2>&1
     ) &
     show_spinner "Остановка панели"
 
-    if docker exec -i remnawave-db psql -U "$_db_user" -d "$_db_name" <<'EOSQL' >/dev/null 2>&1
+    if docker exec -i remnawave-db psql -U postgres -d postgres <<'EOSQL' >/dev/null 2>&1
 DELETE FROM admin;
 EOSQL
     then

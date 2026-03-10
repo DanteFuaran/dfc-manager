@@ -29,10 +29,6 @@ generate_env_file() {
     metrics_user=$(generate_username)
     local metrics_pass
     metrics_pass=$(generate_password)
-    local db_user
-    db_user=$(generate_username)
-    local db_pass
-    db_pass=$(generate_db_password)
 
     cat > /opt/remnawave/.env <<EOL
 ### APP ###
@@ -47,7 +43,7 @@ API_INSTANCES=$(nproc)
 
 ### DATABASE ###
 # FORMAT: postgresql://{user}:{password}@{host}:{port}/{database}
-DATABASE_URL="postgresql://$db_user:$db_pass@remnawave-db:5432/remnawave"
+DATABASE_URL="postgresql://postgres:postgres@remnawave-db:5432/postgres"
 
 ### REDIS ###
 REDIS_HOST=remnawave-redis
@@ -118,9 +114,9 @@ CLOUDFLARE_TOKEN=ey...
 ### Database ###
 ### For Postgres Docker container ###
 # NOT USED BY THE APP ITSELF
-POSTGRES_USER=$db_user
-POSTGRES_PASSWORD=$db_pass
-POSTGRES_DB=remnawave
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=postgres
 
 ### SUBSCRIPTION PAGE ###
 REMNAWAVE_API_TOKEN=

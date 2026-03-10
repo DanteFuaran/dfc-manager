@@ -182,23 +182,20 @@ db_restore() {
     show_spinner "Остановка панели"
 
     # Очищаем базу данных перед восстановлением
-    local _db_user _db_name
-    _db_user=$(grep '^POSTGRES_USER=' /opt/remnawave/.env 2>/dev/null | cut -d= -f2); _db_user="${_db_user:-postgres}"
-    _db_name=$(grep '^POSTGRES_DB='   /opt/remnawave/.env 2>/dev/null | cut -d= -f2); _db_name="${_db_name:-postgres}"
     (
-        docker exec remnawave-db psql -U "$_db_user" -d "$_db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+        docker exec remnawave-db psql -U postgres -d postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
     ) &
     show_spinner "Подготовка базы данных"
 
     # Восстанавливаем дамп
     (
-        zcat "$selected_dump" | docker exec -i remnawave-db psql -U "$_db_user" -d "$_db_name" >/dev/null 2>&1
+        zcat "$selected_dump" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
     ) &
     show_spinner "Загрузка данных из бэкапа"
 
     # Очищаем таблицу admin для перевода панели в режим регистрации
     (
-        docker exec remnawave-db psql -U "$_db_user" -d "$_db_name" -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
+        docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
     ) &
     show_spinner "Подготовка к регистрации"
 
@@ -245,7 +242,7 @@ db_restore() {
 
             # Сброс администратора (CASCADE удалит и API токены)
             (
-                docker exec remnawave-db psql -U "$_db_user" -d "$_db_name" -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
+                docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
             ) &
             show_spinner "Сброс данных суперадмина"
 
@@ -254,7 +251,7 @@ db_restore() {
                 local token_uuid
                 token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
                 (
-                    docker exec remnawave-db psql -U "$_db_user" -d "$_db_name" -c \
+                    docker exec remnawave-db psql -U postgres -d postgres -c \
                         "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
                          VALUES ('$token_uuid', '$api_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
                 ) &
