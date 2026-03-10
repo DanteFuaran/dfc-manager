@@ -6,6 +6,10 @@ generate_password() {
     openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%' | head -c 24
 }
 
+generate_db_password() {
+    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 32
+}
+
 generate_username() {
     openssl rand -base64 12 | tr -dc 'a-zA-Z' | head -c 8
 }

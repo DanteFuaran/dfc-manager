@@ -65,11 +65,12 @@ manage_random_template() {
                 "🚗  AutoElite - Автомобильный портал" \
                 "🎨  Prisma Studio - Дизайн студия" \
                 "💼  Vertex Advisory - Консалтинг центр" \
+                "──────────────────────────────────────" \
                 "❌  Назад"
             local template_choice=$?
             [[ $template_choice -eq 255 ]] && return
 
-            if [ $template_choice -eq 20 ]; then
+            if [ $template_choice -eq 21 ]; then
                 return
             fi
             

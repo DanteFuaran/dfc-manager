@@ -29,6 +29,10 @@ generate_env_file() {
     metrics_user=$(generate_username)
     local metrics_pass
     metrics_pass=$(generate_password)
+    local db_user
+    db_user=$(generate_username)
+    local db_pass
+    db_pass=$(generate_db_password)
 
     cat > /opt/remnawave/.env <<EOL
 ### APP ###
@@ -39,11 +43,11 @@ METRICS_PORT=3001
 # Possible values: max (start instances on all cores), number (start instances on number of cores), -1 (start instances on all cores - 1)
 # !!! Do not set this value more than physical cores count in your machine !!!
 # Review documentation: https://remna.st/docs/install/environment-variables#scaling-api
-API_INSTANCES=1
+API_INSTANCES=$(nproc)
 
 ### DATABASE ###
 # FORMAT: postgresql://{user}:{password}@{host}:{port}/{database}
-DATABASE_URL="postgresql://postgres:postgres@remnawave-db:5432/postgres"
+DATABASE_URL="postgresql://$db_user:$db_pass@remnawave-db:5432/remnawave"
 
 ### REDIS ###
 REDIS_HOST=remnawave-redis
@@ -114,9 +118,9 @@ CLOUDFLARE_TOKEN=ey...
 ### Database ###
 ### For Postgres Docker container ###
 # NOT USED BY THE APP ITSELF
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=postgres
+POSTGRES_USER=$db_user
+POSTGRES_PASSWORD=$db_pass
+POSTGRES_DB=remnawave
 
 ### SUBSCRIPTION PAGE ###
 REMNAWAVE_API_TOKEN=
@@ -243,6 +247,7 @@ services:
         soft: 1048576
         hard: 1048576
     volumes:
+      - ./nginx-main.conf:/etc/nginx/nginx.conf:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 COMPOSE_HEAD
 
@@ -258,6 +263,12 @@ COMPOSE_CERT
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       - remnawave
       - remnawave-subscription-page
@@ -464,6 +475,7 @@ services:
         soft: 1048576
         hard: 1048576
     volumes:
+      - ./nginx-main.conf:/etc/nginx/nginx.conf:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 COMPOSE_HEAD
 
@@ -477,6 +489,12 @@ COMPOSE_CERT
 
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
     network_mode: host
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       - remnawave
       - remnawave-subscription-page
@@ -543,6 +561,48 @@ volumes:
 COMPOSE_VOLUMES
 }
 
+# ─── Nginx: Главный конфиг (заменяет /etc/nginx/nginx.conf) ───
+generate_nginx_main_conf() {
+    local target_dir="${1:-/opt/remnawave}"
+    cat > "${target_dir}/nginx-main.conf" <<'NGINX_MAIN'
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /run/nginx.pid;
+
+events {
+    worker_connections  8192;
+    use epoll;
+    multi_accept on;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log off;
+
+    sendfile        on;
+    tcp_nopush      on;
+    tcp_nodelay     on;
+
+    keepalive_timeout  65;
+
+    # Gzip для JSON-подписок и статики
+    gzip on;
+    gzip_types application/json text/plain text/css application/javascript;
+    gzip_min_length 256;
+    gzip_vary on;
+
+    # Лимит body (защита от DoS)
+    client_max_body_size 1m;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+NGINX_MAIN
+}
+
 # ─── Nginx: Панель + Нода (Full) ───
 generate_nginx_conf_full() {
     local panel_domain=$1
@@ -568,15 +628,17 @@ limit_req_zone \$binary_remote_addr zone=sub_limit:10m rate=10r/s;
 
 upstream remnawave {
     server 127.0.0.1:3000;
+    keepalive 32;
 }
 
 upstream json {
     server 127.0.0.1:3010;
+    keepalive 16;
 }
 
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
-    ""      close;
+    ""      "";
 }
 
 map \$http_cookie \$auth_cookie {
@@ -604,7 +666,7 @@ ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
+ssl_session_cache shared:MozSSL:50m;
 ssl_session_tickets off;
 
 real_ip_header   proxy_protocol;
@@ -804,15 +866,17 @@ limit_req_zone \$binary_remote_addr zone=sub_limit:10m rate=10r/s;
 
 upstream remnawave {
     server 127.0.0.1:3000;
+    keepalive 32;
 }
 
 upstream json {
     server 127.0.0.1:3010;
+    keepalive 16;
 }
 
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
-    ""      close;
+    ""      "";
 }
 
 map \$http_cookie \$auth_cookie {
@@ -840,7 +904,7 @@ ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
+ssl_session_cache shared:MozSSL:50m;
 ssl_session_tickets off;
 
 server {
@@ -949,7 +1013,7 @@ ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
+ssl_session_cache shared:MozSSL:50m;
 ssl_session_tickets off;
 
 server {

@@ -17,9 +17,9 @@ make_api_request() {
     )
 
     if [ -n "$data" ]; then
-        curl -s --max-time 30 -X "$method" "http://$url" "${headers[@]}" -d "$data"
+        curl -s --max-time 10 -X "$method" "http://$url" "${headers[@]}" -d "$data"
     else
-        curl -s --max-time 30 -X "$method" "http://$url" "${headers[@]}"
+        curl -s --max-time 10 -X "$method" "http://$url" "${headers[@]}"
     fi
 }
 

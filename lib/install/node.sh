@@ -296,7 +296,10 @@ installation_node_local() {
     mkdir -p /var/www/html
 
     # ─── Перегенерация docker-compose.yml (full: с нодой) ───
-    (generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN") &
+    (
+        generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN"
+        generate_nginx_main_conf
+    ) &
     show_spinner "Обновление docker-compose.yml" || true
 
     # Определяем gateway и subnet сети (после генерации docker-compose.yml)
