@@ -1187,3 +1187,36 @@ server {
 } # ─── end http ───
 EOL
 }
+
+# ═══════════════════════════════════════════════
+# Монитор subscription-page для beszel
+# ═══════════════════════════════════════════════
+
+setup_sub_monitor() {
+    cat > /opt/remnawave/sub-monitor.sh <<'MONITOR'
+#!/bin/bash
+FLAG="/dev/shm/.sub_disabled"
+docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
+state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 2>/dev/null)
+case "$state" in
+    running) ;;
+    exited|created|dead)
+        docker start remnawave-subscription-page >/dev/null 2>&1
+        [ ! -f "$FLAG" ] && touch "$FLAG"
+        ;;
+    *)
+        cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+        [ ! -f "$FLAG" ] && touch "$FLAG"
+        ;;
+esac
+if [ -f "$FLAG" ]; then
+    flag_age=$(( $(date +%s) - $(stat -c %Y "$FLAG") ))
+    if [ "$flag_age" -gt 86400 ]; then
+        cd /opt/remnawave && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1
+        rm -f "$FLAG"
+    fi
+fi
+MONITOR
+    chmod +x /opt/remnawave/sub-monitor.sh
+    (crontab -l 2>/dev/null | grep -v 'sub-monitor') | { cat; echo '* * * * * /opt/remnawave/sub-monitor.sh'; } | crontab -
+}
