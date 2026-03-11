@@ -127,8 +127,8 @@ installation_panel() {
     show_spinner "Настройка файрвола" || true
 
     echo
-    (
-        cd /opt/remnawave
+    (        # Удаляем старый том БД если остался от предыдущей установки
+        docker volume rm remnawave-db-data 2>/dev/null || true        cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 && sleep 20
     ) &
     if ! show_spinner "Запуск сервисов"; then
