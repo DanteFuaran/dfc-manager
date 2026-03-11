@@ -40,7 +40,5 @@ if [ ! -f "${_INSTALL_DIR}/remnawave.sh" ]; then
 fi
 
 chmod +x "${_INSTALL_DIR}/remnawave.sh"
-ln -sf "${_INSTALL_DIR}/remnawave.sh" /usr/local/bin/remnawave
-ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
 
 exec "${_INSTALL_DIR}/remnawave.sh"

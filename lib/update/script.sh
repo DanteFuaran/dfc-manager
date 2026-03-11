@@ -23,8 +23,7 @@ install_script() {
     fi
 
     chmod +x "${DIR_REMNAWAVE}remnawave.sh"
-    ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
-    ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
+    # Симлинки не создаём — они появятся после установки компонентов
 }
 
 update_script() {

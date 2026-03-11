@@ -5,13 +5,21 @@
 main_menu() {
     alias rw="/usr/local/bin/remnawave" 2>/dev/null || true
 
-    while true; do
+    while true; {
         local has_panel=false
         local has_node=false
         is_panel_installed && has_panel=true
         is_node_installed  && has_node=true
         local is_installed=false
         { [ "$has_panel" = true ] || [ "$has_node" = true ]; } && is_installed=true
+
+        # Управляем симлинками в зависимости от установки
+        if [ "$is_installed" = true ]; then
+            ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave 2>/dev/null || true
+            ln -sf /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+        else
+            rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+        fi
 
         # Заголовок
         local update_notice=""
@@ -55,7 +63,7 @@ main_menu() {
         items+=("──────────────────────────────────────"); actions+=("sep")
 
         if [ "$is_installed" = false ]; then
-            items+=("🗑️   Удалить скрипт с сервера"); actions+=("remove_script_only")
+
             items+=("──────────────────────────────────────"); actions+=("sep")
         fi
 
@@ -136,7 +144,6 @@ main_menu() {
                     remove_script) remove_script ;;
                     *) continue ;;
                 esac ;;
-            remove_script_only) remove_script ;;
             sep)    continue ;;
             exit)   cleanup_terminal; clear; exit 0 ;;
             *)      continue ;;
