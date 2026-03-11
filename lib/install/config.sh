@@ -1211,6 +1211,7 @@ case "$state" in
     *)
         cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
         [ ! -f "$FLAG" ] && touch "$FLAG"
+        docker restart beszel-agent >/dev/null 2>&1
         ;;
 esac
 if [ -f "$FLAG" ]; then
