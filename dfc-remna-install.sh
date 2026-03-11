@@ -32,6 +32,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
 fi
 
 # ─── Основной скрипт ─────────────────────────────────────────
+echo -e '\033[1;34mПодготовка скрипта к запуску...\033[0m'
 cd /opt >/dev/null 2>&1 || true
 
 set -euo pipefail

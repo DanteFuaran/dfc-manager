@@ -164,6 +164,7 @@ switch_panel_port() {
     if [ -n "$json_line" ]; then
         sub_domain=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
         sub_cert=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
+        [ -z "$sub_cert" ] && sub_cert="$sub_domain"
     fi
 
     # Определяем selfsteal_domain (третий домен, не панель и не подписка)
@@ -171,6 +172,7 @@ switch_panel_port() {
     selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "$dir/nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
     if [ -n "$selfsteal_domain" ]; then
         selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+        [ -z "$selfsteal_cert" ] && selfsteal_cert="$selfsteal_domain"
     fi
 
     # Удаляем любые существующие блоки прямого доступа
