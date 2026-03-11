@@ -52,6 +52,7 @@ install_beszel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}       📊 УСТАНОВКА BESZEL${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
 
     if is_beszel_installed; then
         echo
@@ -249,6 +250,7 @@ install_beszel_agent() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    🖥️  ПОДКЛЮЧЕНИЕ АГЕНТА BESZEL${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
 
     if is_beszel_agent_installed; then
         echo
