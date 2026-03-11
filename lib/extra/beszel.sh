@@ -67,58 +67,72 @@ install_beszel() {
     prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
 
     # ─── Сертификат ───
-    show_arrow_menu "🔒  SSL сертификат" \
-        "🌐  ACME (Let's Encrypt HTTP-01)" \
-        "☁️   Cloudflare (DNS-01 Wildcard)" \
-        "🔐  Самоподписанный сертификат" \
-        "──────────────────────────────────────" \
-        "❌  Отмена"
-    local cert_choice=$?
-    [[ $cert_choice -eq 255 ]] && return 0
+    local SSL_CERT SSL_KEY
+    local base_domain
+    base_domain=$(extract_domain "$BESZEL_DOMAIN")
 
-    case $cert_choice in
-        0) # ACME
-            reading "Email для Let's Encrypt:" BESZEL_EMAIL
-            if [ -z "$BESZEL_EMAIL" ]; then
-                print_error "Email не может быть пустым"
-                return 1
-            fi
-            echo
-            get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL" || return 1
-            local SSL_CERT="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
-            local SSL_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
-            ;;
-        1) # Cloudflare
-            local base_domain
-            base_domain=$(extract_domain "$BESZEL_DOMAIN")
-            reading "Email для Let's Encrypt:" BESZEL_EMAIL
-            if [ -z "$BESZEL_EMAIL" ]; then
-                print_error "Email не может быть пустым"
-                return 1
-            fi
-            if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
-                setup_cloudflare_credentials || return 1
-            fi
-            echo
-            get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL" || return 1
-            local SSL_CERT="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-            local SSL_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
-            ;;
-        2) # Самоподписанный
-            local SELF_SIGNED_DIR="${DIR_BESZEL}ssl"
-            mkdir -p "$SELF_SIGNED_DIR"
-            (
-                openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-                    -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
-                    -out "${SELF_SIGNED_DIR}/fullchain.pem" \
-                    -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
-            ) &
-            show_spinner "Генерация самоподписанного сертификата"
-            local SSL_CERT="${SELF_SIGNED_DIR}/fullchain.pem"
-            local SSL_KEY="${SELF_SIGNED_DIR}/privkey.pem"
-            ;;
-        *) return 0 ;;
-    esac
+    if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
+        print_success "Сертификат для ${BESZEL_DOMAIN} уже существует"
+        echo
+        SSL_CERT="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
+        SSL_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
+    elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
+        print_success "Сертификат для ${base_domain} уже существует"
+        echo
+        SSL_CERT="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+        SSL_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+    else
+        show_arrow_menu "🔒  SSL сертификат" \
+            "🌐  ACME (Let's Encrypt HTTP-01)" \
+            "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🔐  Самоподписанный сертификат" \
+            "──────────────────────────────────────" \
+            "❌  Отмена"
+        local cert_choice=$?
+        [[ $cert_choice -eq 255 ]] && return 0
+
+        case $cert_choice in
+            0) # ACME
+                reading "Email для Let's Encrypt:" BESZEL_EMAIL
+                if [ -z "$BESZEL_EMAIL" ]; then
+                    print_error "Email не может быть пустым"
+                    return 1
+                fi
+                echo
+                get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL" || return 1
+                SSL_CERT="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
+                SSL_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
+                ;;
+            1) # Cloudflare
+                reading "Email для Let's Encrypt:" BESZEL_EMAIL
+                if [ -z "$BESZEL_EMAIL" ]; then
+                    print_error "Email не может быть пустым"
+                    return 1
+                fi
+                if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
+                    setup_cloudflare_credentials || return 1
+                fi
+                echo
+                get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL" || return 1
+                SSL_CERT="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+                SSL_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+                ;;
+            2) # Самоподписанный
+                local SELF_SIGNED_DIR="${DIR_BESZEL}ssl"
+                mkdir -p "$SELF_SIGNED_DIR"
+                (
+                    openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+                        -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
+                        -out "${SELF_SIGNED_DIR}/fullchain.pem" \
+                        -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
+                ) &
+                show_spinner "Генерация самоподписанного сертификата"
+                SSL_CERT="${SELF_SIGNED_DIR}/fullchain.pem"
+                SSL_KEY="${SELF_SIGNED_DIR}/privkey.pem"
+                ;;
+            *) return 0 ;;
+        esac
+    fi
 
     # ─── Создаём директорию и docker-compose ───
     mkdir -p "${DIR_BESZEL}data"
