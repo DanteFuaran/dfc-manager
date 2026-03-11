@@ -75,22 +75,25 @@ install_beszel() {
         print_error "Некорректный порт: $BESZEL_PORT"
         return 1
     fi
+    echo
 
     # ─── Сертификат ───
-    local SSL_CERT SSL_KEY
+    local SSL_CERT SSL_KEY CERT_DOMAIN CERT_HOST_FULLCHAIN CERT_HOST_KEY
     local base_domain
     base_domain=$(extract_domain "$BESZEL_DOMAIN")
 
     if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
         print_success "Сертификат для ${BESZEL_DOMAIN} уже существует"
         echo
-        SSL_CERT="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
-        SSL_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
+        CERT_DOMAIN="$BESZEL_DOMAIN"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
     elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
         print_success "Сертификат для ${base_domain} уже существует"
         echo
-        SSL_CERT="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-        SSL_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+        CERT_DOMAIN="$base_domain"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
     else
         show_arrow_menu "🔒  SSL сертификат" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
@@ -110,8 +113,9 @@ install_beszel() {
                 fi
                 echo
                 get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL" || return 1
-                SSL_CERT="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
-                SSL_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
+                CERT_DOMAIN="$BESZEL_DOMAIN"
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
                 ;;
             1) # Cloudflare
                 reading "Email для Let's Encrypt:" BESZEL_EMAIL
@@ -124,8 +128,9 @@ install_beszel() {
                 fi
                 echo
                 get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL" || return 1
-                SSL_CERT="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-                SSL_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+                CERT_DOMAIN="$base_domain"
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
                 ;;
             2) # Самоподписанный
                 local SELF_SIGNED_DIR="${DIR_BESZEL}ssl"
@@ -137,12 +142,15 @@ install_beszel() {
                         -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
                 ) &
                 show_spinner "Генерация самоподписанного сертификата"
-                SSL_CERT="${SELF_SIGNED_DIR}/fullchain.pem"
-                SSL_KEY="${SELF_SIGNED_DIR}/privkey.pem"
+                CERT_DOMAIN="$BESZEL_DOMAIN"
+                CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
+                CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
                 ;;
             *) return 0 ;;
         esac
     fi
+    SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+    SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
 
     # ─── Создаём директорию и docker-compose ───
     mkdir -p "${DIR_BESZEL}data"
@@ -206,6 +214,15 @@ NGINX
         }' "$NGINX_CONF" > "${NGINX_CONF}.tmp" && mv "${NGINX_CONF}.tmp" "$NGINX_CONF"
     fi
 
+    # ─── Добавляем cert volume в nginx docker-compose ───
+    local DOCKER_COMPOSE="/opt/remnawave/docker-compose.yml"
+    if [ -f "$DOCKER_COMPOSE" ] && [ -n "$CERT_DOMAIN" ]; then
+        echo "$CERT_DOMAIN" > "${DIR_BESZEL}cert_domain"
+        if ! grep -q "/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem" "$DOCKER_COMPOSE" 2>/dev/null; then
+            sed -i "/\/dev\/shm:\/dev\/shm/i\\      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem:ro # beszel-cert\n      - ${CERT_HOST_KEY}:/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem:ro # beszel-cert" "$DOCKER_COMPOSE"
+        fi
+    fi
+
     # ─── Открываем порт в UFW ───
     ufw allow "${BESZEL_PORT}/tcp" >/dev/null 2>&1 || true
 
@@ -214,21 +231,21 @@ NGINX
     (
         cd "${DIR_BESZEL}" && docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Запуск Beszel"
+    show_spinner "Установка Beszel"
 
-    # Перезапускаем nginx если он есть
+    # Пересоздаём nginx (для применения новых volume-маунтов)
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "remnawave-nginx"; then
-        (docker restart remnawave-nginx >/dev/null 2>&1) &
+        (cd /opt/remnawave && docker compose up -d remnawave-nginx >/dev/null 2>&1) &
         show_spinner "Перезапуск nginx"
     fi
 
     echo
-    print_success "Beszel установлен"
+    print_success "Beszel успешно установлен"
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
-    echo
-    echo -e "${DARKGRAY}При первом входе создайте администратора.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
@@ -255,14 +272,18 @@ uninstall_beszel() {
     ) &
     show_spinner "Удаление контейнеров Beszel"
 
-    # Удаляем блок из nginx
+    # Удаляем блок из nginx и cert volumes из docker-compose
     local NGINX_CONF="/opt/remnawave/nginx.conf"
+    local DOCKER_COMPOSE_DEL="/opt/remnawave/docker-compose.yml"
     if [ -f "$NGINX_CONF" ]; then
         sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "remnawave-nginx"; then
-            (docker restart remnawave-nginx >/dev/null 2>&1) &
-            show_spinner "Перезапуск nginx"
-        fi
+    fi
+    if [ -f "$DOCKER_COMPOSE_DEL" ]; then
+        sed -i '/# beszel-cert$/d' "$DOCKER_COMPOSE_DEL"
+    fi
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "remnawave-nginx"; then
+        (cd /opt/remnawave && docker compose up -d remnawave-nginx >/dev/null 2>&1) &
+        show_spinner "Перезапуск nginx"
     fi
 
     # ─── Закрываем порт в UFW ───
