@@ -320,7 +320,6 @@ installation_node_local() {
 
     # ─── Открываем порты для ноды ───
     ufw allow 443/tcp >/dev/null 2>&1 || true
-    ufw allow 8443/tcp >/dev/null 2>&1 || true
 
     # ─── Запуск сервисов ───
     echo

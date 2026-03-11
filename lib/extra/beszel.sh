@@ -168,8 +168,6 @@ YAML
         BESZEL_BLOCK=$(cat <<NGINX
 # >>> BESZEL
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     server_name ${BESZEL_DOMAIN};
     http2 on;
@@ -191,18 +189,29 @@ server {
 # <<< BESZEL
 NGINX
 )
-        # Вставляем перед последней закрывающей } (конец http блока)
-        awk -v block="$BESZEL_BLOCK" '
-        {lines[NR]=$0}
-        END {
-            for(i=NR;i>=1;i--) {
-                if(lines[i] ~ /^}/) { insert_at=i; break }
-            }
-            for(i=1;i<=NR;i++) {
-                if(i==insert_at) { print block }
-                print lines[i]
-            }
-        }' "$NGINX_CONF" > "${NGINX_CONF}.tmp" && mv "${NGINX_CONF}.tmp" "$NGINX_CONF"
+        # Вставляем перед default_server блоком (до него), иначе — перед концом http {}
+        local beszel_tmp="/tmp/remnawave_beszel_$$.conf"
+        echo "$BESZEL_BLOCK" > "$beszel_tmp"
+
+        local insert_line=""
+        local ds_line
+        ds_line=$(grep -n 'default_server' "$NGINX_CONF" | tail -1 | cut -d: -f1)
+        if [ -n "$ds_line" ]; then
+            insert_line=$(head -n "$ds_line" "$NGINX_CONF" | grep -n '^server {' | tail -1 | cut -d: -f1)
+        fi
+        if [ -z "$insert_line" ]; then
+            insert_line=$(grep -n '^} # ─── end http' "$NGINX_CONF" | tail -1 | cut -d: -f1)
+        fi
+        if [ -z "$insert_line" ]; then
+            insert_line=$(grep -n '^}' "$NGINX_CONF" | tail -1 | cut -d: -f1)
+        fi
+
+        if [ -n "$insert_line" ]; then
+            sed -i "$((insert_line-1))r $beszel_tmp" "$NGINX_CONF"
+        else
+            cat "$beszel_tmp" >> "$NGINX_CONF"
+        fi
+        rm -f "$beszel_tmp"
     fi
 
     # ─── Добавляем cert volume в nginx docker-compose ───
