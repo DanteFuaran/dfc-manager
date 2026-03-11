@@ -14,6 +14,7 @@ manage_ufw() {
                 "📋  Показать открытые порты" \
                 "➕  Открыть порт" \
                 "➖  Удалить правило" \
+                "    Удалить все правила" \
                 "──────────────────────────────────────" \
                 "❌  Назад"
             local choice=$?
@@ -39,8 +40,8 @@ manage_ufw() {
             fi
             # Разделитель (index 1) — пропускаем
             [ "$choice" -eq 1 ] && continue
-            # Назад (index 6 в не-установленном меню) — возвращаемся
-            [ "$choice" -eq 6 ] && return 0
+            # Назад (index 7 в не-установленном меню) — возвращаемся
+            [ "$choice" -eq 7 ] && return 0
             # Остальные сдвинуты на 2 (убираем "Установить" и разделитель)
             choice=$((choice - 2))
         else
@@ -64,6 +65,7 @@ manage_ufw() {
                 "📋  Показать открытые порты" \
                 "➕  Открыть порт" \
                 "➖  Удалить правило" \
+                "    Удалить все правила" \
                 "──────────────────────────────────────" \
                 "🗑️   Удалить Firewall (ufw)" \
                 "──────────────────────────────────────" \
@@ -191,8 +193,45 @@ manage_ufw() {
                     # Продолжаем цикл — список правил обновится автоматически
                 done
                 ;;
-            3) continue ;;
-            4)
+            3)
+                # Удалить все правила
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}     🗑️  УДАЛИТЬ ВСЕ ПРАВИЛА${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+                local rule_count
+                rule_count=$(ufw status numbered 2>/dev/null | grep -c '^\[' || true)
+                if [ "$rule_count" -eq 0 ]; then
+                    print_warning "Нет правил для удаления"
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    show_continue_prompt || return 1
+                    continue
+                fi
+                echo -e "${YELLOW}Будет удалено правил: ${WHITE}${rule_count}${NC}"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                if ! confirm_action; then
+                    continue
+                fi
+                echo
+                (
+                    local cnt
+                    cnt=$(ufw status numbered 2>/dev/null | grep -c '^\[' || true)
+                    local i
+                    for ((i=0; i<cnt; i++)); do
+                        echo "y" | ufw delete 1 >/dev/null 2>&1
+                    done
+                ) &
+                show_spinner "Удаление всех правил"
+                print_success "Все правила удалены"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                show_continue_prompt || return 1
+                ;;
+            4) continue ;;
+            5)
                 # Удалить UFW
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -221,8 +260,8 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
                 ;;
-            5) continue ;;
-            6) return 0 ;;
+            6) continue ;;
+            7) return 0 ;;
         esac
     done
 }
