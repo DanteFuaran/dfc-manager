@@ -66,6 +66,16 @@ install_beszel() {
     local BESZEL_DOMAIN
     prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
 
+    # ─── Порт ───
+    local BESZEL_PORT
+    reading_inline "Порт для Beszel (по умолчанию 8090):" BESZEL_PORT
+    [[ $? -eq 2 ]] && return 1
+    [ -z "$BESZEL_PORT" ] && BESZEL_PORT="8090"
+    if ! [[ "$BESZEL_PORT" =~ ^[0-9]+$ ]] || [ "$BESZEL_PORT" -lt 1 ] || [ "$BESZEL_PORT" -gt 65535 ]; then
+        print_error "Некорректный порт: $BESZEL_PORT"
+        return 1
+    fi
+
     # ─── Сертификат ───
     local SSL_CERT SSL_KEY
     local base_domain
@@ -136,6 +146,7 @@ install_beszel() {
 
     # ─── Создаём директорию и docker-compose ───
     mkdir -p "${DIR_BESZEL}data"
+    echo "$BESZEL_PORT" > "${DIR_BESZEL}port"
 
     cat > "${DIR_BESZEL}docker-compose.yml" <<YAML
 services:
@@ -144,7 +155,7 @@ services:
     container_name: beszel
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8090:8090"
+      - "${BESZEL_PORT}:8090"
     volumes:
       - ./data:/beszel_data
 YAML
@@ -168,7 +179,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
 
     location / {
-        proxy_pass http://127.0.0.1:8090;
+        proxy_pass http://127.0.0.1:${BESZEL_PORT};
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -194,6 +205,9 @@ NGINX
             }
         }' "$NGINX_CONF" > "${NGINX_CONF}.tmp" && mv "${NGINX_CONF}.tmp" "$NGINX_CONF"
     fi
+
+    # ─── Открываем порт в UFW ───
+    ufw allow "${BESZEL_PORT}/tcp" >/dev/null 2>&1 || true
 
     # ─── Запускаем ───
     echo
@@ -249,6 +263,13 @@ uninstall_beszel() {
             (docker restart remnawave-nginx >/dev/null 2>&1) &
             show_spinner "Перезапуск nginx"
         fi
+    fi
+
+    # ─── Закрываем порт в UFW ───
+    local BESZEL_PORT_STORED
+    BESZEL_PORT_STORED=$(cat "${DIR_BESZEL}port" 2>/dev/null)
+    if [ -n "$BESZEL_PORT_STORED" ]; then
+        ufw delete allow "${BESZEL_PORT_STORED}/tcp" >/dev/null 2>&1 || true
     fi
 
     rm -rf "${DIR_BESZEL}"
