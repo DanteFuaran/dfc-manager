@@ -1198,10 +1198,15 @@ setup_sub_monitor() {
 FLAG="/dev/shm/.sub_disabled"
 docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
 state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 2>/dev/null)
+is_placeholder=$(docker inspect --format='{{index .Config.Labels "com.remnawave.placeholder"}}' remnawave-subscription-page 2>/dev/null)
 case "$state" in
     running)
-        if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
-            rm -f "$FLAG"
+        if [ "$is_placeholder" = "true" ]; then
+            [ ! -f "$FLAG" ] && touch "$FLAG"
+        else
+            if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
+                rm -f "$FLAG"
+            fi
         fi
         ;;
     exited|created|dead)
@@ -1209,7 +1214,16 @@ case "$state" in
         [ ! -f "$FLAG" ] && touch "$FLAG"
         ;;
     *)
-        cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+        docker run -d \
+            --name remnawave-subscription-page \
+            --restart unless-stopped \
+            --label com.remnawave.placeholder=true \
+            --health-cmd "exit 1" \
+            --health-interval 15s \
+            --health-retries 3 \
+            --health-start-period 5s \
+            alpine:latest \
+            sleep infinity >/dev/null 2>&1
         [ ! -f "$FLAG" ] && touch "$FLAG"
         docker restart beszel-agent >/dev/null 2>&1
         ;;
@@ -1217,7 +1231,7 @@ esac
 if [ -f "$FLAG" ]; then
     flag_age=$(( $(date +%s) - $(stat -c %Y "$FLAG") ))
     if [ "$flag_age" -gt 86400 ]; then
-        cd /opt/remnawave && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1
+        docker rm -f remnawave-subscription-page >/dev/null 2>&1
         rm -f "$FLAG"
     fi
 fi
