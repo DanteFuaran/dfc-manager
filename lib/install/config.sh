@@ -294,6 +294,12 @@ COMPOSE_CERT
       - '127.0.0.1:3010:3010'
     networks:
       - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     logging:
       driver: 'json-file'
       options:
@@ -315,6 +321,12 @@ COMPOSE_CERT
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     logging:
       driver: 'json-file'
       options:
@@ -520,6 +532,12 @@ COMPOSE_CERT
       - '127.0.0.1:3010:3010'
     networks:
       - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     logging:
       driver: 'json-file'
       options:

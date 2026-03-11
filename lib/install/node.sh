@@ -630,6 +630,12 @@ services:
       - SECRET_KEY=$(echo -e "$CERTIFICATE")
     volumes:
       - /dev/shm:/dev/shm:rw
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     logging:
       driver: 'json-file'
       options:

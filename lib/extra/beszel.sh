@@ -155,6 +155,12 @@ services:
     volumes:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket
+    healthcheck:
+      test: ["/beszel", "health", "--url", "http://127.0.0.1:8090"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 YAML
 
     # ─── Добавляем server block в nginx.conf ───
@@ -284,7 +290,6 @@ uninstall_beszel() {
 
     rm -rf "${DIR_BESZEL}"
 
-    echo
     print_success "Beszel удалён"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -362,6 +367,12 @@ services:
       KEY: "${BESZEL_KEY}"
       TOKEN: "${BESZEL_TOKEN}"
       HUB_URL: "${BESZEL_HUB_URL}"
+    healthcheck:
+      test: ["/agent", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 YAML
 
     # Сохраняем порт для удаления
@@ -374,13 +385,9 @@ YAML
     (
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Запуск агента Beszel"
+    show_spinner "Добавление агента Beszel"
 
-    echo
-    print_success "Агент Beszel запущен"
-    echo
-    echo -e "${DARKGRAY}Вернитесь в панель Beszel и нажмите Добавить систему.${NC}"
-    echo -e "${DARKGRAY}Порт агента: ${BESZEL_AGENT_PORT}${NC}"
+    print_success "Агент Beszel добавлен и запущен"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
@@ -416,8 +423,8 @@ uninstall_beszel_agent() {
 
     rm -rf "${DIR_BESZEL_AGENT}"
 
-    echo
     print_success "Агент Beszel удалён"
     echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
 }
