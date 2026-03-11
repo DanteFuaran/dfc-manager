@@ -5,9 +5,14 @@
 #   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
 # ═══════════════════════════════════════════════════════════
 
-# ─── Bootstrap: первый запуск через curl ─────────────────────
+# ─── Bootstrap: запуск через curl или не из установленной копии ─────────────
 _INSTALL_DIR="/usr/local/remnawave"
-if [ ! -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] || [ ! -d "${_INSTALL_DIR}/lib" ]; then
+_INSTALL_SCRIPT="${_INSTALL_DIR}/dfc-remna-install.sh"
+# Если запущены не из установленной копии (напр. через curl/pipe/tmp) — установить или переключиться
+if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; then
+    if [ -f "$_INSTALL_SCRIPT" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
+        exec "$_INSTALL_SCRIPT" "$@"
+    fi
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
     trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 130' INT TERM
     cd /opt >/dev/null 2>&1 || true
@@ -21,8 +26,8 @@ if [ ! -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] || [ ! -d "${_INSTALL_DIR}/li
         rm -rf "${_INSTALL_DIR}"
         exit 1
     fi
-    chmod +x "${_INSTALL_DIR}/dfc-remna-install.sh"
-    exec "${_INSTALL_DIR}/dfc-remna-install.sh" "$@"
+    chmod +x "$_INSTALL_SCRIPT"
+    exec "$_INSTALL_SCRIPT" "$@"
 fi
 
 # ─── Основной скрипт ─────────────────────────────────────────
