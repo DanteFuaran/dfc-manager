@@ -3,9 +3,14 @@
 # ═══════════════════════════════════════════════════
 
 DIR_BESZEL="/opt/beszel/"
+DIR_BESZEL_AGENT="/opt/beszel-agent/"
 
 is_beszel_installed() {
-    [ -f "${DIR_BESZEL}docker-compose.yml" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "beszel"
+    [ -f "${DIR_BESZEL}docker-compose.yml" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "beszel"
+}
+
+is_beszel_agent_installed() {
+    [ -f "${DIR_BESZEL_AGENT}docker-compose.yml" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "beszel-agent"
 }
 
 manage_beszel() {
@@ -13,20 +18,31 @@ manage_beszel() {
     local -a actions=()
 
     if is_beszel_installed; then
-        items+=("🗑️   Удалить Beszel");    actions+=("uninstall")
+        items+=("🗑️   Удалить панель Beszel"); actions+=("uninstall_hub")
     else
-        items+=("📥  Установить Beszel");  actions+=("install")
+        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
     fi
+
     items+=("──────────────────────────────────────"); actions+=("sep")
-    items+=("❌  Назад");                              actions+=("back")
+
+    if is_beszel_agent_installed; then
+        items+=("🗑️   Удалить агент Beszel");   actions+=("uninstall_agent")
+    else
+        items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
+    fi
+
+    items+=("──────────────────────────────────────"); actions+=("sep")
+    items+=("❌  Назад");                             actions+=("back")
 
     show_arrow_menu "📊  Beszel" "${items[@]}"
     local choice=$?
     local action="${actions[$choice]:-back}"
 
     case "$action" in
-        install)   install_beszel ;;
-        uninstall) uninstall_beszel ;;
+        install_hub)     install_beszel ;;
+        uninstall_hub)   uninstall_beszel ;;
+        install_agent)   install_beszel_agent ;;
+        uninstall_agent) uninstall_beszel_agent ;;
         *) return 0 ;;
     esac
 }
@@ -36,9 +52,9 @@ install_beszel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}       📊 УСТАНОВКА BESZEL${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     if is_beszel_installed; then
+        echo
         print_success "Beszel уже установлен"
         echo
         show_continue_prompt || return 0
@@ -46,28 +62,10 @@ install_beszel() {
     fi
 
     # ─── Домен ───
-    echo -e "${YELLOW}Укажите домен для панели мониторинга Beszel${NC}"
-    echo -e "${DARKGRAY}Пример: monitor.example.com${NC}"
-    reading "Домен для Beszel:" BESZEL_DOMAIN
-
-    if [ -z "$BESZEL_DOMAIN" ]; then
-        print_error "Домен не может быть пустым"
-        echo
-        show_continue_prompt || return 1
-        return 1
-    fi
-
-    # Проверяем DNS
-    if ! check_domain "$BESZEL_DOMAIN" "true"; then
-        echo
-        show_continue_prompt || return 1
-        return 1
-    fi
+    local BESZEL_DOMAIN
+    prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
 
     # ─── Сертификат ───
-    echo
-    echo -e "${YELLOW}Выберите способ получения SSL сертификата:${NC}"
-    echo
     show_arrow_menu "🔒  SSL сертификат" \
         "🌐  ACME (Let's Encrypt HTTP-01)" \
         "☁️   Cloudflare (DNS-01 Wildcard)" \
@@ -242,6 +240,115 @@ uninstall_beszel() {
 
     echo
     print_success "Beszel удалён"
+    echo
+    show_continue_prompt || return 0
+}
+
+install_beszel_agent() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    🖥️  ПОДКЛЮЧЕНИЕ АГЕНТА BESZEL${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    if is_beszel_agent_installed; then
+        echo
+        print_success "Агент Beszel уже установлен"
+        echo
+        show_continue_prompt || return 0
+        return 0
+    fi
+
+    echo
+    echo -e "${DARKGRAY}Агент собирает метрики и отправляет их на панель Beszel.${NC}"
+    echo -e "${DARKGRAY}Получите публичный ключ в панели: Настройки → Добавить сервер.${NC}"
+    echo
+
+    # ─── Адрес панели ───
+    local BESZEL_HUB
+    reading_inline "Адрес панели Beszel (например monitor.example.com):" BESZEL_HUB
+    [[ $? -eq 2 ]] && return 1
+    if [ -z "$BESZEL_HUB" ]; then
+        print_error "Адрес не может быть пустым"
+        echo; show_continue_prompt || return 1; return 1
+    fi
+
+    # ─── Порт агента ───
+    local BESZEL_AGENT_PORT
+    reading_inline "Порт агента (по умолчанию 45876):" BESZEL_AGENT_PORT
+    [[ $? -eq 2 ]] && return 1
+    [ -z "$BESZEL_AGENT_PORT" ] && BESZEL_AGENT_PORT="45876"
+
+    # ─── Публичный ключ ───
+    local BESZEL_KEY
+    reading_inline "Публичный ключ из панели Beszel:" BESZEL_KEY
+    [[ $? -eq 2 ]] && return 1
+    if [ -z "$BESZEL_KEY" ]; then
+        print_error "Публичный ключ не может быть пустым"
+        echo; show_continue_prompt || return 1; return 1
+    fi
+
+    # ─── Создаём docker-compose ───
+    mkdir -p "${DIR_BESZEL_AGENT}"
+
+    cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
+services:
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      PORT: "${BESZEL_AGENT_PORT}"
+      KEY: "${BESZEL_KEY}"
+YAML
+
+    # Открываем порт агента
+    ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
+
+    echo
+    (
+        cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner "Запуск агента Beszel"
+
+    echo
+    print_success "Агент Beszel запущен"
+    echo
+    echo -e "${YELLOW}📋 Агент подключён к:${NC} ${WHITE}${BESZEL_HUB}${NC}"
+    echo -e "${YELLOW}🔌 Порт агента:${NC}        ${WHITE}${BESZEL_AGENT_PORT}${NC}"
+    echo -e "${DARKGRAY}Убедитесь, что порт ${BESZEL_AGENT_PORT} открыт в файрволе.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 0
+}
+
+uninstall_beszel_agent() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}    🗑️  УДАЛЕНИЕ АГЕНТА BESZEL${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if ! confirm_action; then
+        return
+    fi
+
+    echo
+    (
+        cd "${DIR_BESZEL_AGENT}" 2>/dev/null
+        docker compose down -v --rmi all >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Удаление агента Beszel"
+
+    rm -rf "${DIR_BESZEL_AGENT}"
+
+    echo
+    print_success "Агент Beszel удалён"
     echo
     show_continue_prompt || return 0
 }
