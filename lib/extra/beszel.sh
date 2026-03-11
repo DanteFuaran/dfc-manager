@@ -308,7 +308,7 @@ install_beszel_agent() {
 
     echo
     echo -e "${DARKGRAY}Агент собирает метрики и отправляет их на панель Beszel.${NC}"
-    echo -e "${DARKGRAY}Добавьте сервер в панели: Add System → скопируйте KEY и TOKEN.${NC}"
+    echo -e "${DARKGRAY}В панели управления Beszel нажмите Добавить систему → скопируйте Ключ и Токен.${NC}"
     echo
 
     # ─── URL панели ───
@@ -328,19 +328,19 @@ install_beszel_agent() {
 
     # ─── Публичный ключ (KEY) ───
     local BESZEL_KEY
-    reading_inline "KEY (публичный ключ из панели):" BESZEL_KEY
+    reading_inline "Ключ (публичный ключ из панели):" BESZEL_KEY
     [[ $? -eq 2 ]] && return 1
     if [ -z "$BESZEL_KEY" ]; then
-        print_error "KEY не может быть пустым"
+        print_error "Ключ не может быть пустым"
         echo; show_continue_prompt || return 1; return 1
     fi
 
     # ─── TOKEN ───
     local BESZEL_TOKEN
-    reading_inline "TOKEN (токен из панели):" BESZEL_TOKEN
+    reading_inline "Токен (токен из панели):" BESZEL_TOKEN
     [[ $? -eq 2 ]] && return 1
     if [ -z "$BESZEL_TOKEN" ]; then
-        print_error "TOKEN не может быть пустым"
+        print_error "Токен не может быть пустым"
         echo; show_continue_prompt || return 1; return 1
     fi
 
@@ -379,9 +379,7 @@ YAML
     echo
     print_success "Агент Beszel запущен"
     echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${DARKGRAY}Вернитесь в панель Beszel и нажмите Add System.${NC}"
+    echo -e "${DARKGRAY}Вернитесь в панель Beszel и нажмите Добавить систему.${NC}"
     echo -e "${DARKGRAY}Порт агента: ${BESZEL_AGENT_PORT}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
