@@ -13,15 +13,15 @@ NC='\033[0m'
 
 trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; exit 130' INT TERM
 
-_INSTALL_DIR="/usr/local/dfc-remna-install"
+_INSTALL_DIR="/usr/local/remnawave"
 _REPO="DanteFuaran/dfc-remna-install"
 _BRANCH="main"
 
 echo -e "${BLUE}Подготовка скрипта к запуску...${NC}"
 
 # Если скрипт уже установлен — запускаем установленную версию
-if [ -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
-    exec "${_INSTALL_DIR}/dfc-remna-install.sh"
+if [ -f "${_INSTALL_DIR}/remnawave.sh" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
+    exec "${_INSTALL_DIR}/remnawave.sh"
 fi
 
 # ─── Первичная установка ─────────────────────────────────
@@ -33,14 +33,14 @@ if ! timeout 60 git clone --depth 1 -b "${_BRANCH}" "https://github.com/${_REPO}
     exit 1
 fi
 
-if [ ! -f "${_INSTALL_DIR}/dfc-remna-install.sh" ]; then
+if [ ! -f "${_INSTALL_DIR}/remnawave.sh" ]; then
     echo -e "${RED}✖ Файл скрипта не найден в репозитории.${NC}"
     rm -rf "${_INSTALL_DIR}"
     exit 1
 fi
 
-chmod +x "${_INSTALL_DIR}/dfc-remna-install.sh"
-ln -sf "${_INSTALL_DIR}/dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
-ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
+chmod +x "${_INSTALL_DIR}/remnawave.sh"
+ln -sf "${_INSTALL_DIR}/remnawave.sh" /usr/local/bin/remnawave
+ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
 
-exec "${_INSTALL_DIR}/dfc-remna-install.sh"
+exec "${_INSTALL_DIR}/remnawave.sh"

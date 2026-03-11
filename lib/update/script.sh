@@ -9,9 +9,9 @@ install_script() {
 
     # Уже установлен — только актуализируем симлинки
     if [ -d "${DIR_REMNAWAVE}lib" ]; then
-        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
-        ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
+        chmod +x "${DIR_REMNAWAVE}remnawave.sh"
+        ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
+        ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
         return
     fi
 
@@ -22,9 +22,9 @@ install_script() {
         exit 1
     fi
 
-    chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-    ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
-    ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
+    chmod +x "${DIR_REMNAWAVE}remnawave.sh"
+    ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
+    ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
 }
 
 update_script() {
@@ -94,19 +94,19 @@ update_script() {
         rm -rf "${DIR_REMNAWAVE}"
         mkdir -p "$(dirname "${DIR_REMNAWAVE%/}")"
         git clone --depth 1 -b main "https://github.com/DanteFuaran/dfc-remna-install.git" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
-        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/dfc-remna-install
-        ln -sf /usr/local/bin/dfc-remna-install /usr/local/bin/dfc-ri
+        chmod +x "${DIR_REMNAWAVE}remnawave.sh"
+        ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
+        ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
     ) &
     show_spinner "Загрузка обновлений"
 
-    if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
+    if [ -f "${DIR_REMNAWAVE}remnawave.sh" ]; then
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
         printf "\033[1;34m══════════════════════════════════════\033[0m\n"
         show_continue_prompt || return 0
-        exec /usr/local/bin/dfc-remna-install
+        exec /usr/local/bin/remnawave
     else
         print_error "Ошибка при обновлении скрипта"
         echo
@@ -139,8 +139,8 @@ remove_script_all() {
     show_spinner "Удаление контейнеров"
     rm -rf "${DIR_PANEL}"
     rm -rf "${DIR_NODE}"
-    rm -f /usr/local/bin/dfc-remna-install
-    rm -f /usr/local/bin/dfc-ri
+    rm -f /usr/local/bin/remnawave
+    rm -f /usr/local/bin/rw
     rm -rf "${DIR_REMNAWAVE}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases
@@ -163,8 +163,8 @@ remove_script() {
         return
     fi
 
-    rm -f /usr/local/bin/dfc-remna-install
-    rm -f /usr/local/bin/dfc-ri
+    rm -f /usr/local/bin/remnawave
+    rm -f /usr/local/bin/rw
     rm -rf "${DIR_REMNAWAVE}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases

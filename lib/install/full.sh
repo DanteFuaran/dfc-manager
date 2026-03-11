@@ -324,7 +324,7 @@ installation_full() {
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}dfc-remna-install${NC} или ${GREEN}dfc-ri${NC}"
+    echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo

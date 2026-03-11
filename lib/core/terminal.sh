@@ -33,6 +33,9 @@ cleanup_old_aliases() {
     fi
     rm -f /etc/profile.d/remna_install.sh 2>/dev/null || true
     rm -f /usr/local/bin/remna_install 2>/dev/null || true
+    # Удаляем старые команды dfc-remna-install / dfc-ri
+    rm -f /usr/local/bin/dfc-remna-install 2>/dev/null || true
+    rm -f /usr/local/bin/dfc-ri 2>/dev/null || true
     unalias ri 2>/dev/null || true
 }
 

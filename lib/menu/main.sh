@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════════
 
 main_menu() {
-    alias dfc-ri="/usr/local/bin/dfc-remna-install" 2>/dev/null || true
+    alias rw="/usr/local/bin/remnawave" 2>/dev/null || true
 
     while true; do
         local has_panel=false
@@ -23,7 +23,7 @@ main_menu() {
         elif [ "$has_node" = true ]; then
             install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода${NC}"
         fi
-        local menu_title="    🚀 DFC REMNA-INSTALL v$SCRIPT_VERSION${install_status}\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
+        local menu_title="    🚀 REMNAWAVE INSTALLER v$SCRIPT_VERSION${install_status}\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
         if [ -f "${UPDATE_AVAILABLE_FILE}" ]; then
             local new_version
             new_version=$(cat "${UPDATE_AVAILABLE_FILE}")
@@ -51,16 +51,18 @@ main_menu() {
             items+=("──────────────────────────────────────"); actions+=("sep")
         fi
 
-        items+=("⚙️   Дополнительные настройки"); actions+=("extra")
+        items+=("🧩  Дополнительные программы"); actions+=("extra")
         items+=("──────────────────────────────────────"); actions+=("sep")
 
         if [ "$is_installed" = true ]; then
             items+=("🔄  Обновить панель/ноду");    actions+=("update_components")
         fi
-        items+=("🔄  Обновить скрипт$update_notice"); actions+=("update_script")
-        items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("🗑️   Удаление компонентов");        actions+=("remove")
-        items+=("──────────────────────────────────────"); actions+=("sep")
+        if [ "$is_installed" = true ]; then
+            items+=("🔄  Обновить скрипт$update_notice"); actions+=("update_script")
+            items+=("──────────────────────────────────────"); actions+=("sep")
+            items+=("🗑️   Удаление компонентов");        actions+=("remove")
+            items+=("──────────────────────────────────────"); actions+=("sep")
+        fi
         items+=("❌  Выход");                         actions+=("exit")
 
         MENU_ESC_LABEL="Выход"
