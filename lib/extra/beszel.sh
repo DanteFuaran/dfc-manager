@@ -65,19 +65,10 @@ install_beszel() {
     # ─── Домен ───
     local BESZEL_DOMAIN
     prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
-
-    # ─── Порт ───
-    local BESZEL_PORT
-    reading_inline "Порт для Beszel (по умолчанию 8090):" BESZEL_PORT
-    [[ $? -eq 2 ]] && return 1
-    [ -z "$BESZEL_PORT" ] && BESZEL_PORT="8090"
-    if ! [[ "$BESZEL_PORT" =~ ^[0-9]+$ ]] || [ "$BESZEL_PORT" -lt 1 ] || [ "$BESZEL_PORT" -gt 65535 ]; then
-        print_error "Некорректный порт: $BESZEL_PORT"
-        return 1
-    fi
     echo
 
     # ─── Сертификат ───
+    local BESZEL_PORT="8090"
     local SSL_CERT SSL_KEY CERT_DOMAIN CERT_HOST_FULLCHAIN CERT_HOST_KEY
     local base_domain
     base_domain=$(extract_domain "$BESZEL_DOMAIN")
@@ -151,8 +142,7 @@ install_beszel() {
     SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
 
     # ─── Создаём директорию и docker-compose ───
-    mkdir -p "${DIR_BESZEL}data"
-    echo "$BESZEL_PORT" > "${DIR_BESZEL}port"
+    mkdir -p "${DIR_BESZEL}"
 
     cat > "${DIR_BESZEL}docker-compose.yml" <<YAML
 services:
@@ -161,9 +151,10 @@ services:
     container_name: beszel
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${BESZEL_PORT}:8090"
+      - "127.0.0.1:8090:8090"
     volumes:
-      - ./data:/beszel_data
+      - ./beszel_data:/beszel_data
+      - ./beszel_socket:/beszel_socket
 YAML
 
     # ─── Добавляем server block в nginx.conf ───
@@ -216,14 +207,10 @@ NGINX
     # ─── Добавляем cert volume в nginx docker-compose ───
     local DOCKER_COMPOSE="/opt/remnawave/docker-compose.yml"
     if [ -f "$DOCKER_COMPOSE" ] && [ -n "$CERT_DOMAIN" ]; then
-        echo "$CERT_DOMAIN" > "${DIR_BESZEL}cert_domain"
         if ! grep -q "/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem" "$DOCKER_COMPOSE" 2>/dev/null; then
             sed -i "/\/dev\/shm:\/dev\/shm/i\\      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem:ro # beszel-cert\n      - ${CERT_HOST_KEY}:/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem:ro # beszel-cert" "$DOCKER_COMPOSE"
         fi
     fi
-
-    # ─── Открываем порт в UFW ───
-    ufw allow "${BESZEL_PORT}/tcp" >/dev/null 2>&1 || true
 
     # ─── Запускаем ───
     echo
@@ -285,13 +272,6 @@ uninstall_beszel() {
         show_spinner "Перезапуск nginx"
     fi
 
-    # ─── Закрываем порт в UFW ───
-    local BESZEL_PORT_STORED
-    BESZEL_PORT_STORED=$(cat "${DIR_BESZEL}port" 2>/dev/null)
-    if [ -n "$BESZEL_PORT_STORED" ]; then
-        ufw delete allow "${BESZEL_PORT_STORED}/tcp" >/dev/null 2>&1 || true
-    fi
-
     rm -rf "${DIR_BESZEL}"
 
     echo
@@ -317,15 +297,15 @@ install_beszel_agent() {
 
     echo
     echo -e "${DARKGRAY}Агент собирает метрики и отправляет их на панель Beszel.${NC}"
-    echo -e "${DARKGRAY}Получите публичный ключ в панели: Настройки → Добавить сервер.${NC}"
+    echo -e "${DARKGRAY}Добавьте сервер в панели: Add System → скопируйте KEY и TOKEN.${NC}"
     echo
 
-    # ─── Адрес панели ───
-    local BESZEL_HUB
-    reading_inline "Адрес панели Beszel (например monitor.example.com):" BESZEL_HUB
+    # ─── URL панели ───
+    local BESZEL_HUB_URL
+    reading_inline "URL панели Beszel (например https://monitor.example.com):" BESZEL_HUB_URL
     [[ $? -eq 2 ]] && return 1
-    if [ -z "$BESZEL_HUB" ]; then
-        print_error "Адрес не может быть пустым"
+    if [ -z "$BESZEL_HUB_URL" ]; then
+        print_error "URL не может быть пустым"
         echo; show_continue_prompt || return 1; return 1
     fi
 
@@ -335,12 +315,21 @@ install_beszel_agent() {
     [[ $? -eq 2 ]] && return 1
     [ -z "$BESZEL_AGENT_PORT" ] && BESZEL_AGENT_PORT="45876"
 
-    # ─── Публичный ключ ───
+    # ─── Публичный ключ (KEY) ───
     local BESZEL_KEY
-    reading_inline "Публичный ключ из панели Beszel:" BESZEL_KEY
+    reading_inline "KEY (публичный ключ из панели):" BESZEL_KEY
     [[ $? -eq 2 ]] && return 1
     if [ -z "$BESZEL_KEY" ]; then
-        print_error "Публичный ключ не может быть пустым"
+        print_error "KEY не может быть пустым"
+        echo; show_continue_prompt || return 1; return 1
+    fi
+
+    # ─── TOKEN ───
+    local BESZEL_TOKEN
+    reading_inline "TOKEN (токен из панели):" BESZEL_TOKEN
+    [[ $? -eq 2 ]] && return 1
+    if [ -z "$BESZEL_TOKEN" ]; then
+        print_error "TOKEN не может быть пустым"
         echo; show_continue_prompt || return 1; return 1
     fi
 
@@ -355,13 +344,19 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
+      - ./beszel_agent_data:/var/lib/beszel-agent
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      PORT: "${BESZEL_AGENT_PORT}"
+      LISTEN: "${BESZEL_AGENT_PORT}"
       KEY: "${BESZEL_KEY}"
+      TOKEN: "${BESZEL_TOKEN}"
+      HUB_URL: "${BESZEL_HUB_URL}"
 YAML
 
-    # Открываем порт агента
+    # Сохраняем порт для удаления
+    echo "$BESZEL_AGENT_PORT" > "${DIR_BESZEL_AGENT}port"
+
+    # Открываем порт агента в UFW
     ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
 
     echo
@@ -373,9 +368,10 @@ YAML
     echo
     print_success "Агент Beszel запущен"
     echo
-    echo -e "${YELLOW}📋 Агент подключён к:${NC} ${WHITE}${BESZEL_HUB}${NC}"
-    echo -e "${YELLOW}🔌 Порт агента:${NC}        ${WHITE}${BESZEL_AGENT_PORT}${NC}"
-    echo -e "${DARKGRAY}Убедитесь, что порт ${BESZEL_AGENT_PORT} открыт в файрволе.${NC}"
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${DARKGRAY}Вернитесь в панель Beszel и нажмите Add System.${NC}"
+    echo -e "${DARKGRAY}Порт агента: ${BESZEL_AGENT_PORT}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
@@ -396,11 +392,18 @@ uninstall_beszel_agent() {
     fi
 
     echo
+    local AGENT_PORT_STORED
+    AGENT_PORT_STORED=$(cat "${DIR_BESZEL_AGENT}port" 2>/dev/null)
+
     (
         cd "${DIR_BESZEL_AGENT}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление агента Beszel"
+
+    if [ -n "$AGENT_PORT_STORED" ]; then
+        ufw delete allow "${AGENT_PORT_STORED}/tcp" >/dev/null 2>&1 || true
+    fi
 
     rm -rf "${DIR_BESZEL_AGENT}"
 
