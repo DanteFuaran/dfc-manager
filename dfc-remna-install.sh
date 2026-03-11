@@ -35,8 +35,14 @@ cd /opt >/dev/null 2>&1 || true
 
 set -euo pipefail
 
-# Определяем директорию скрипта (уже установлен), резолвим симлинки
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# Определяем директорию скрипта — bootstrap гарантирует запуск из _INSTALL_DIR
+_resolved="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" || true
+if [ -n "$_resolved" ] && [ -f "$_resolved" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$_resolved")" && pwd)"
+else
+    SCRIPT_DIR="${_INSTALL_DIR%/}"
+fi
+unset _resolved
 
 # ─── Загрузка модулей ───
 
