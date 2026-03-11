@@ -41,9 +41,13 @@ cleanup_old_aliases() {
 
 # Тихая самоочистка если ничего не установлено
 cleanup_uninstalled() {
-    # Не удаляем скрипт — он может понадобиться для установки
-    # Удаляем только если нет ни панели, ни ноды, ни скрипта в /usr/local
-    :  # Отключено — скрипт остаётся установленным после Ctrl+C
+    # Удаляем скрипт и симлинки только если ни панель, ни нода не установлены
+    if [ ! -f "${DIR_PANEL}docker-compose.yml" ] && \
+       [ ! -f "${DIR_NODE}docker-compose.yml" ] && \
+       ! grep -q 'container_name: remnanode' "${DIR_PANEL}docker-compose.yml" 2>/dev/null; then
+        rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+        rm -rf "${DIR_REMNAWAVE}" 2>/dev/null || true
+    fi
 }
 
 handle_interrupt() {
