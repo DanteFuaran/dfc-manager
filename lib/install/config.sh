@@ -259,16 +259,16 @@ COMPOSE_CERT
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
 COMPOSE_TAIL
-    cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_COMMAND
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_COMMAND'
     command: >
       sh -c '
         rm -f /dev/shm/nginx.sock &&
         CONF=/etc/nginx/nginx.conf &&
-        if ! ([ -f /etc/nginx/ssl/$sub_cert_domain/fullchain.pem ] && openssl x509 -checkend 0 -noout -in /etc/nginx/ssl/$sub_cert_domain/fullchain.pem 2>/dev/null); then
-          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "\$\$CONF" > /tmp/nginx_nosub.conf &&
+        if ! nginx -t -c "$$CONF" 2>/dev/null; then
+          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
           CONF=/tmp/nginx_nosub.conf;
         fi &&
-        exec nginx -c "\$\$CONF" -g "daemon off;"
+        exec nginx -c "$$CONF" -g "daemon off;"
       '
 COMPOSE_COMMAND
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
@@ -512,16 +512,16 @@ COMPOSE_CERT
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
 COMPOSE_TAIL
-    cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_COMMAND
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_COMMAND'
     command: >
       sh -c '
         rm -f /dev/shm/nginx.sock &&
         CONF=/etc/nginx/nginx.conf &&
-        if ! ([ -f /etc/nginx/ssl/$sub_cert_domain/fullchain.pem ] && openssl x509 -checkend 0 -noout -in /etc/nginx/ssl/$sub_cert_domain/fullchain.pem 2>/dev/null); then
-          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "\$\$CONF" > /tmp/nginx_nosub.conf &&
+        if ! nginx -t -c "$$CONF" 2>/dev/null; then
+          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
           CONF=/tmp/nginx_nosub.conf;
         fi &&
-        exec nginx -c "\$\$CONF" -g "daemon off;"
+        exec nginx -c "$$CONF" -g "daemon off;"
       '
 COMPOSE_COMMAND
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
