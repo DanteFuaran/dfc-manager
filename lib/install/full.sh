@@ -157,6 +157,7 @@ installation_full() {
     (
         setup_firewall
         ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
+        ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true

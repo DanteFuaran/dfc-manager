@@ -318,7 +318,8 @@ installation_node_local() {
         "$COOKIE_NAME" "$COOKIE_VALUE") &
     show_spinner "Обновление nginx.conf" || true
 
-    # ─── Открываем порт 8443 для ноды ───
+    # ─── Открываем порты для ноды ───
+    ufw allow 443/tcp >/dev/null 2>&1 || true
     ufw allow 8443/tcp >/dev/null 2>&1 || true
 
     # ─── Запуск сервисов ───

@@ -323,7 +323,7 @@ create_config_profile() {
             },
             inbounds: [{
                 tag: $inbound_tag,
-                port: 8443,
+                port: 443,
                 protocol: "vless",
                 settings: { clients: [], decryption: "none" },
                 sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },

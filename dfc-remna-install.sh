@@ -11,6 +11,7 @@ _INSTALL_SCRIPT="${_INSTALL_DIR}/dfc-remna-install.sh"
 # Если запущены не из установленной копии (напр. через curl/pipe/tmp) — установить или переключиться
 if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; then
     if [ -f "$_INSTALL_SCRIPT" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
+        echo -e '\033[1;34mПодготовка скрипта к запуску...\033[0m'
         exec "$_INSTALL_SCRIPT" "$@"
     fi
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
