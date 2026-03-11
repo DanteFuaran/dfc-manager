@@ -1199,7 +1199,11 @@ FLAG="/dev/shm/.sub_disabled"
 docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
 state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 2>/dev/null)
 case "$state" in
-    running) ;;
+    running)
+        if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
+            rm -f "$FLAG"
+        fi
+        ;;
     exited|created|dead)
         docker start remnawave-subscription-page >/dev/null 2>&1
         [ ! -f "$FLAG" ] && touch "$FLAG"
