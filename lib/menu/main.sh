@@ -54,6 +54,11 @@ main_menu() {
         items+=("🧩  Дополнительные программы"); actions+=("extra")
         items+=("──────────────────────────────────────"); actions+=("sep")
 
+        if [ "$is_installed" = false ]; then
+            items+=("🗑️   Удалить скрипт с сервера"); actions+=("remove_script_only")
+            items+=("──────────────────────────────────────"); actions+=("sep")
+        fi
+
         if [ "$is_installed" = true ]; then
             items+=("🔄  Обновить панель/ноду");    actions+=("update_components")
         fi
@@ -131,6 +136,7 @@ main_menu() {
                     remove_script) remove_script ;;
                     *) continue ;;
                 esac ;;
+            remove_script_only) remove_script ;;
             sep)    continue ;;
             exit)   cleanup_terminal; clear; exit 0 ;;
             *)      continue ;;
