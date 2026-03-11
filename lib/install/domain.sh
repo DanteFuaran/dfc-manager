@@ -121,7 +121,6 @@ check_domain() {
         echo
         echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} не соответствует IP вашего сервера ${YELLOW}$server_ip${NC}"
         echo -e "${RED}⚠️ Убедитесь что DNS записи настроены правильно.${NC}"
-        echo
         return 1
     fi
     
