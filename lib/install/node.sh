@@ -318,6 +318,9 @@ installation_node_local() {
         "$COOKIE_NAME" "$COOKIE_VALUE") &
     show_spinner "Обновление nginx.conf" || true
 
+    # ─── Открываем порт 8443 для ноды ───
+    ufw allow 8443/tcp >/dev/null 2>&1 || true
+
     # ─── Запуск сервисов ───
     echo
     print_action "Запуск сервисов..."
@@ -451,43 +454,6 @@ installation_node_local() {
         fi
     fi
 
-    # ─── Верификация: ждём пока remnanode запустит xray на порту 443 ───
-    local verify_ok=false
-    local verify_elapsed=0
-    local verify_timeout=60
-    local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local _si=0 _tick=0
-    tput civis 2>/dev/null || true
-    while [ $verify_elapsed -lt $verify_timeout ]; do
-        printf "\r${DARKGRAY}%s  Ожидание подключения ноды (порт 443)...${NC}" "${_spin[$_si]}"
-        _si=$(( (_si+1) % 10 ))
-        sleep 0.1
-        _tick=$((_tick + 1))
-        if [ $((_tick % 20)) -eq 0 ]; then
-            verify_elapsed=$((verify_elapsed + 2))
-            if ss -tuln 2>/dev/null | grep -q ':443 '; then
-                verify_ok=true
-                break
-            fi
-        fi
-    done
-    if [ "$verify_ok" = true ]; then
-        printf "\r${GREEN}✅${NC} Порт 443 активен — нода работает\n"
-    else
-        printf "\r${YELLOW}⚠️${NC}  Порт 443 не ответил за %s сек — проверьте: docker logs remnanode\n" "$verify_timeout"
-    fi
-    tput cnorm 2>/dev/null || true
-
-    # Автоматически включаем доступ по 8443 (нода занимает 443)
-    local local_cookie_name="$COOKIE_NAME"
-    local local_cookie_value="$COOKIE_VALUE"
-    if [ -z "$local_cookie_name" ] || [ -z "$local_cookie_value" ]; then
-        get_cookie_from_nginx
-        local_cookie_name="$COOKIE_NAME"
-        local_cookie_value="$COOKIE_VALUE"
-    fi
-    auto_enable_panel_access_8443 "$panel_domain" "$local_cookie_name" "$local_cookie_value"
-
     # ─── Итог ───
     clear
     echo
@@ -495,7 +461,7 @@ installation_node_local() {
     echo -e "    ${GREEN}🎉 Нода добавлена на сервер панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}Панель:${NC}       https://$panel_domain:8443"
+    echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
     echo -e "${WHITE}Подписка:${NC}     https://$sub_domain"
     echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
     echo
@@ -503,16 +469,10 @@ installation_node_local() {
     echo
     echo -e "${GREEN}✅ Нода зарегистрирована в панели${NC}"
     echo -e "${GREEN}✅ Docker Compose обновлён (nginx + remnanode)${NC}"
-    echo -e "${GREEN}✅ Nginx перенастроен (unix socket + proxy_protocol)${NC}"
-    echo -e "${GREEN}✅ Доступ к панели по порту 8443 автоматически включён${NC}"
-    if [ "$verify_ok" = true ]; then
-        echo -e "${GREEN}✅ Порт 443 активен — xray (remnanode) работает${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Порт 443 пока не активен — проверьте логи ноды${NC}"
-    fi
+    echo -e "${GREEN}✅ Nginx перенастроен (443 + unix socket)${NC}"
     echo
-    echo -e "${DARKGRAY}Архитектура: Xray (порт 443) → unix socket → Nginx → панель${NC}"
-    echo -e "${DARKGRAY}Панель доступна по порту 8443 (XRAY занимает 443)${NC}"
+    echo -e "${DARKGRAY}Панель доступна на порту 443${NC}"
+    echo -e "${DARKGRAY}Нода получит порт в настройках inbound (рекомендуется 8443)${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1

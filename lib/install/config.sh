@@ -672,6 +672,8 @@ set_real_ip_from unix:;
 
 server {
     server_name $panel_domain;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
@@ -711,6 +713,8 @@ server {
 
 server {
     server_name $sub_domain;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
@@ -751,6 +755,8 @@ server {
 
 server {
     server_name $selfsteal_domain;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
@@ -834,6 +840,8 @@ server {
 }
 
 server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
