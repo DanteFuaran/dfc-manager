@@ -156,7 +156,7 @@ services:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket
     healthcheck:
-      test: ["/beszel", "health", "--url", "http://127.0.0.1:8090"]
+      test: ["CMD", "/beszel", "health", "--url", "http://127.0.0.1:8090"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -368,7 +368,7 @@ services:
       TOKEN: "${BESZEL_TOKEN}"
       HUB_URL: "${BESZEL_HUB_URL}"
     healthcheck:
-      test: ["/agent", "health"]
+      test: ["CMD", "/agent", "health"]
       interval: 15s
       timeout: 5s
       retries: 3
