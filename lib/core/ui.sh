@@ -22,7 +22,7 @@ show_spinner() {
     local pid=$!
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local i=0 msg="$1"
+    local i=0 msg="$1" done_msg="${2:-$1}"
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
         printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
@@ -32,9 +32,9 @@ show_spinner() {
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r${GREEN}✅${NC} %s\n" "$msg"
+        printf "\r${GREEN}✅${NC} %s\n" "$done_msg"
     else
-        printf "\r${RED}✖${NC} %s\n" "$msg"
+        printf "\r${RED}✖${NC} %s\n" "$done_msg"
     fi
     tput cnorm 2>/dev/null || true
     return $exit_code

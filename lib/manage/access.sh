@@ -442,53 +442,45 @@ SERVERBLOCK_8443
         cd "$dir"
         docker compose down remnawave-nginx >/dev/null 2>&1
         docker compose up -d remnawave-nginx >/dev/null 2>&1
-        local _i=0
+        _i=0
+        _nginx_ok=0
         while [ $_i -lt 20 ]; do
-            docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$' && exit 0
+            if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+                _nginx_ok=1
+                break
+            fi
             sleep 0.5
             _i=$((_i + 1))
         done
-        exit 1
-    ) &
-    show_spinner "Перезапуск nginx"
+        [ "$_nginx_ok" -eq 0 ] && exit 1
 
-    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+        # UFW: при переключении на 8443 порт 443 не трогаем
+        if [ "$target_port" = "443" ]; then
+            ufw delete allow 8443/tcp >/dev/null 2>&1 || true
+        fi
+        ufw allow "${target_port}"/tcp >/dev/null 2>&1
+
+        # Получаем xray inbound port и обновляем хосты
+        _api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
+        [ -z "$_api_token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && _api_token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
+        _xray_port=""
+        if [ -n "$_api_token" ]; then
+            _profiles_resp=$(make_api_request "GET" "127.0.0.1:3000/api/config-profiles" "$_api_token" 2>/dev/null)
+            _xray_port=$(echo "$_profiles_resp" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
+        fi
+        if [ "$target_port" = "443" ] && [ -n "$_xray_port" ] && [ "$_xray_port" != "443" ]; then
+            ufw allow "${_xray_port}"/tcp >/dev/null 2>&1
+        fi
+        ufw reload >/dev/null 2>&1 || true
+        _update_hosts_port "$dir" "$target_port" "$_xray_port"
+        exit 0
+    ) &
+    if ! show_spinner "Перезапуск nginx" "Порт доступа к панели изменён на ${target_port}"; then
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
         show_continue_prompt || return 1
         return 1
     fi
-
-    # Получаем xray inbound port заранее (для UFW и обновления хостов)
-    local xray_inbound_port=""
-    local _api_token
-    _api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
-    [ -z "$_api_token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && _api_token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
-    if [ -n "$_api_token" ]; then
-        local _profiles_resp
-        _profiles_resp=$(make_api_request "GET" "127.0.0.1:3000/api/config-profiles" "$_api_token" 2>/dev/null)
-        xray_inbound_port=$(echo "$_profiles_resp" | jq -r '[.response.configProfiles[].config.inbounds[].port] | first // empty' 2>/dev/null)
-    fi
-
-    # UFW: закрываем старый порт, открываем новый
-    local old_port
-    if [ "$target_port" = "443" ]; then
-        old_port="8443"
-    else
-        old_port="443"
-    fi
-    ufw delete allow ${old_port}/tcp >/dev/null 2>&1 || true
-    ufw allow ${target_port}/tcp >/dev/null 2>&1
-    # При переключении на 443 открываем xray inbound port в UFW
-    if [ "$target_port" = "443" ] && [ -n "$xray_inbound_port" ] && [ "$xray_inbound_port" != "443" ]; then
-        ufw allow ${xray_inbound_port}/tcp >/dev/null 2>&1
-    fi
-    ufw reload >/dev/null 2>&1 || true
-
-    # Обновляем порт хостов, привязанных к локальной ноде (передаём уже полученный порт)
-    _update_hosts_port "$dir" "$target_port" "$xray_inbound_port"
-
-    print_success "Порт доступа к панели изменён на ${target_port}"
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
