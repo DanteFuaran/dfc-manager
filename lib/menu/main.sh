@@ -15,7 +15,7 @@ main_menu() {
 
         # Управляем симлинками в зависимости от установки
         if [ "$is_installed" = true ]; then
-            ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave 2>/dev/null || true
+            ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave 2>/dev/null || true
             ln -sf /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
         else
             rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true

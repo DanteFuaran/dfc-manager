@@ -2,12 +2,12 @@
 # ═══════════════════════════════════════════════════════════
 #   DFC REMNA-INSTALL — Установщик Remnawave VPN Panel
 #   https://github.com/DanteFuaran/dfc-remna-install
-#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/remnawave.sh)
+#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
 # ═══════════════════════════════════════════════════════════
 
 # ─── Bootstrap: первый запуск через curl ─────────────────────
 _INSTALL_DIR="/usr/local/remnawave"
-if [ ! -f "${_INSTALL_DIR}/remnawave.sh" ] || [ ! -d "${_INSTALL_DIR}/lib" ]; then
+if [ ! -f "${_INSTALL_DIR}/dfc-remna-install.sh" ] || [ ! -d "${_INSTALL_DIR}/lib" ]; then
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
     trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 130' INT TERM
     cd /opt >/dev/null 2>&1 || true
@@ -21,8 +21,8 @@ if [ ! -f "${_INSTALL_DIR}/remnawave.sh" ] || [ ! -d "${_INSTALL_DIR}/lib" ]; th
         rm -rf "${_INSTALL_DIR}"
         exit 1
     fi
-    chmod +x "${_INSTALL_DIR}/remnawave.sh"
-    exec "${_INSTALL_DIR}/remnawave.sh" "$@"
+    chmod +x "${_INSTALL_DIR}/dfc-remna-install.sh"
+    exec "${_INSTALL_DIR}/dfc-remna-install.sh" "$@"
 fi
 
 # ─── Основной скрипт ─────────────────────────────────────────

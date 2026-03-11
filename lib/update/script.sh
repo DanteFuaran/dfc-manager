@@ -9,8 +9,8 @@ install_script() {
 
     # Уже установлен — только актуализируем симлинки
     if [ -d "${DIR_REMNAWAVE}lib" ]; then
-        chmod +x "${DIR_REMNAWAVE}remnawave.sh"
-        ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
+        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
+        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
         ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
         return
     fi
@@ -22,7 +22,7 @@ install_script() {
         exit 1
     fi
 
-    chmod +x "${DIR_REMNAWAVE}remnawave.sh"
+    chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
     # Симлинки не создаём — они появятся после установки компонентов
 }
 
@@ -93,13 +93,13 @@ update_script() {
         rm -rf "${DIR_REMNAWAVE}"
         mkdir -p "$(dirname "${DIR_REMNAWAVE%/}")"
         git clone --depth 1 -b main "https://github.com/DanteFuaran/dfc-remna-install.git" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
-        chmod +x "${DIR_REMNAWAVE}remnawave.sh"
-        ln -sf "${DIR_REMNAWAVE}remnawave.sh" /usr/local/bin/remnawave
+        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
+        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
         ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
     ) &
     show_spinner "Загрузка обновлений"
 
-    if [ -f "${DIR_REMNAWAVE}remnawave.sh" ]; then
+    if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
