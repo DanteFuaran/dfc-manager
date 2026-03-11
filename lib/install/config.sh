@@ -672,8 +672,6 @@ set_real_ip_from unix:;
 
 server {
     server_name $panel_domain;
-    listen 8443 ssl;
-    listen [::]:8443 ssl;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
