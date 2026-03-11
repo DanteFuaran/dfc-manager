@@ -266,7 +266,10 @@ COMPOSE_TAIL
         CONF=/etc/nginx/nginx.conf &&
         if ! nginx -t -c "$$CONF" 2>/dev/null; then
           sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
-          CONF=/tmp/nginx_nosub.conf;
+          CONF=/tmp/nginx_nosub.conf &&
+          touch /dev/shm/.sub_disabled;
+        else
+          rm -f /dev/shm/.sub_disabled;
         fi &&
         exec nginx -c "$$CONF" -g "daemon off;"
       '
@@ -305,10 +308,12 @@ COMPOSE_COMMAND
       - REMNAWAVE_API_TOKEN
     ports:
       - '127.0.0.1:3010:3010'
+    volumes:
+      - /dev/shm:/dev/shm:ro
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010 && [ ! -f /dev/shm/.sub_disabled ]']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -519,7 +524,10 @@ COMPOSE_TAIL
         CONF=/etc/nginx/nginx.conf &&
         if ! nginx -t -c "$$CONF" 2>/dev/null; then
           sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
-          CONF=/tmp/nginx_nosub.conf;
+          CONF=/tmp/nginx_nosub.conf &&
+          touch /dev/shm/.sub_disabled;
+        else
+          rm -f /dev/shm/.sub_disabled;
         fi &&
         exec nginx -c "$$CONF" -g "daemon off;"
       '
@@ -559,10 +567,12 @@ COMPOSE_COMMAND
       - REMNAWAVE_API_TOKEN
     ports:
       - '127.0.0.1:3010:3010'
+    volumes:
+      - /dev/shm:/dev/shm:ro
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010 && [ ! -f /dev/shm/.sub_disabled ]']
       interval: 15s
       timeout: 5s
       retries: 3
