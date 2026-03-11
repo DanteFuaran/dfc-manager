@@ -84,13 +84,11 @@ install_beszel() {
 
     if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
         print_success "Сертификат для ${BESZEL_DOMAIN} уже существует"
-        echo
         CERT_DOMAIN="$BESZEL_DOMAIN"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
     elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
         print_success "Сертификат для ${base_domain} уже существует"
-        echo
         CERT_DOMAIN="$base_domain"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
@@ -163,7 +161,7 @@ services:
     container_name: beszel
     restart: unless-stopped
     ports:
-      - "${BESZEL_PORT}:8090"
+      - "127.0.0.1:${BESZEL_PORT}:8090"
     volumes:
       - ./data:/beszel_data
 YAML
@@ -179,8 +177,9 @@ YAML
         BESZEL_BLOCK=$(cat <<NGINX
 # >>> BESZEL
 server {
-    listen 443 ssl;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     server_name ${BESZEL_DOMAIN};
+    http2 on;
 
     ssl_certificate     ${SSL_CERT};
     ssl_certificate_key ${SSL_KEY};
@@ -189,8 +188,8 @@ server {
     location / {
         proxy_pass http://127.0.0.1:${BESZEL_PORT};
         proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP \$proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For \$proxy_protocol_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
