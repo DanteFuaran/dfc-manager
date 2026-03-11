@@ -5,7 +5,7 @@
 main_menu() {
     alias rw="/usr/local/bin/remnawave" 2>/dev/null || true
 
-    while true; {
+    while true; do
         local has_panel=false
         local has_node=false
         is_panel_installed && has_panel=true
