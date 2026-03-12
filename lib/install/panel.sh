@@ -128,9 +128,10 @@ installation_panel() {
 
     echo
     (
-        # Удаляем старый том БД если остался от предыдущей установки
-        docker volume rm remnawave-db-data 2>/dev/null || true
+        # Останавливаем старые контейнеры и удаляем том БД если остались от предыдущей установки
         cd /opt/remnawave
+        docker compose down -v >/dev/null 2>&1 || true
+        docker volume rm remnawave-db-data 2>/dev/null || true
         docker compose up -d >/dev/null 2>&1 || true
         sleep 20
     ) &

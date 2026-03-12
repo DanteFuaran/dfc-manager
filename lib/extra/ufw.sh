@@ -243,7 +243,8 @@ manage_ufw() {
                     true
                 ) &
                 show_spinner "Удаление UFW"
-                if ! command -v ufw >/dev/null 2>&1; then
+                hash -r
+                if ! dpkg -l ufw 2>/dev/null | grep -q '^ii'; then
                     print_success "UFW успешно удалён"
                 else
                     print_error "Не удалось удалить UFW"
