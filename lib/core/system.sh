@@ -51,19 +51,10 @@ install_packages() {
         apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
         apt-get install -y -qq $DPKG_OPTS ca-certificates curl jq ufw wget gnupg unzip nano dialog git \
             certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils \
-            coreutils grep gawk logrotate >/dev/null 2>&1
+            coreutils grep gawk logrotate cron bash-completion >/dev/null 2>&1
 
-        # Cron
-        if ! dpkg -l | grep -q '^ii.*cron '; then
-            apt-get install -y -qq $DPKG_OPTS cron >/dev/null 2>&1
-        fi
         systemctl start cron 2>/dev/null || true
         systemctl enable cron 2>/dev/null || true
-
-        # Logrotate
-        if ! dpkg -l | grep -q '^ii.*logrotate '; then
-            apt-get install -y -qq $DPKG_OPTS logrotate >/dev/null 2>&1
-        fi
 
         # Docker
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
@@ -141,7 +132,6 @@ SYSCTL
         echo "y" | ufw enable >/dev/null 2>&1
 
         # Автодополнение команд UFW
-        apt-get install --reinstall -y -qq bash-completion ufw >/dev/null 2>&1
         ln -sf /usr/share/bash-completion/completions/ufw /etc/bash_completion.d/ufw 2>/dev/null || true
         if ! grep -q "/usr/share/bash-completion/bash_completion" /root/.bashrc 2>/dev/null; then
             printf 'if [ -f /usr/share/bash-completion/bash_completion ]; then\n    . /usr/share/bash-completion/bash_completion\nfi\n' >> /root/.bashrc

@@ -132,7 +132,7 @@ installation_panel() {
         docker volume rm remnawave-db-data 2>/dev/null || true
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
-        sleep 20
+        sleep 5
     ) &
     show_spinner "Запуск сервисов" || true
 

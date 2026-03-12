@@ -14,7 +14,7 @@ installation_node() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${DARKGRAY}⚠️  На этом сервере уже установлена нода.${NC}"
-        echo -e "   ${DARKGRAY}Что бы переустановить ноду нажмите ${BLUE}Enter${DARKGRAY}.${NC}"
+        echo -e "   ${DARKGRAY}Чтобы переустановить ноду, нажмите ${BLUE}Enter${DARKGRAY}.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -193,10 +193,10 @@ installation_node_local() {
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
                 break
             else
-                print_error "Имя должно содержать от 3 до 20 символов"
+                print_error "Название должно быть от 3 до 20 символов"
             fi
         else
-            print_error "Имя должно содержать только английские буквы, цифры и дефис"
+            print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
         fi
     done
 

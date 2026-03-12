@@ -339,7 +339,7 @@ show_install_error() {
 
 confirm_action() {
     echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    tput civis  # Скрыть курсор
+    tput civis 2>/dev/null || true
 
     local key seq
     while true; do
@@ -347,14 +347,14 @@ confirm_action() {
         if [[ "$key" == $'\x1b' ]]; then
             IFS= read -rsn1 -t 0.1 seq 2>/dev/null || true
             if [[ -z "$seq" ]]; then
-                tput cnorm  # Показать курсор
+                tput cnorm 2>/dev/null || true
                 return 1
             else
                 # Поглощаем третий символ escape-последовательности (стрелки)
                 IFS= read -rsn1 -t 0.1 2>/dev/null || true
             fi
         elif [[ "$key" == "" ]]; then
-            tput cnorm  # Показать курсор
+            tput cnorm 2>/dev/null || true
             return 0
         fi
     done
