@@ -1195,46 +1195,23 @@ EOL
 setup_sub_monitor() {
     cat > /opt/remnawave/sub-monitor.sh <<'MONITOR'
 #!/bin/bash
+# Мониторинг subscription-page: управляет флагом /dev/shm/.sub_disabled для healthcheck.
 FLAG="/dev/shm/.sub_disabled"
+
 docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
+
 state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 2>/dev/null)
-is_placeholder=$(docker inspect --format='{{index .Config.Labels "com.remnawave.placeholder"}}' remnawave-subscription-page 2>/dev/null)
+
 case "$state" in
     running)
-        if [ "$is_placeholder" = "true" ]; then
-            [ ! -f "$FLAG" ] && touch "$FLAG"
-        else
-            if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
-                rm -f "$FLAG"
-            fi
+        if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
+            rm -f "$FLAG"
         fi
         ;;
-    exited|created|dead)
-        docker start remnawave-subscription-page >/dev/null 2>&1
-        [ ! -f "$FLAG" ] && touch "$FLAG"
-        ;;
     *)
-        docker run -d \
-            --name remnawave-subscription-page \
-            --restart unless-stopped \
-            --label com.remnawave.placeholder=true \
-            --health-cmd "exit 1" \
-            --health-interval 15s \
-            --health-retries 3 \
-            --health-start-period 5s \
-            alpine:latest \
-            sleep infinity >/dev/null 2>&1
         [ ! -f "$FLAG" ] && touch "$FLAG"
-        docker restart beszel-agent >/dev/null 2>&1
         ;;
 esac
-if [ -f "$FLAG" ]; then
-    flag_age=$(( $(date +%s) - $(stat -c %Y "$FLAG") ))
-    if [ "$flag_age" -gt 86400 ]; then
-        docker rm -f remnawave-subscription-page >/dev/null 2>&1
-        rm -f "$FLAG"
-    fi
-fi
 MONITOR
     chmod +x /opt/remnawave/sub-monitor.sh
     (crontab -l 2>/dev/null | grep -v 'sub-monitor') | { cat; echo '* * * * * /opt/remnawave/sub-monitor.sh'; } | crontab -

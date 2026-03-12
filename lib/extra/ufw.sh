@@ -240,6 +240,7 @@ manage_ufw() {
                     ufw disable >/dev/null 2>&1 || true
                     apt-get purge -y ufw >/dev/null 2>&1
                     apt-get autoremove -y >/dev/null 2>&1
+                    true
                 ) &
                 show_spinner "Удаление UFW"
                 if ! command -v ufw >/dev/null 2>&1; then

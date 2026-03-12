@@ -128,16 +128,14 @@ installation_panel() {
     show_spinner "Настройка файрвола" || true
 
     echo
-    (        # Удаляем старый том БД если остался от предыдущей установки
-        docker volume rm remnawave-db-data 2>/dev/null || true        cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1 && sleep 20
+    (
+        # Удаляем старый том БД если остался от предыдущей установки
+        docker volume rm remnawave-db-data 2>/dev/null || true
+        cd /opt/remnawave
+        docker compose up -d 2>&1 || true
+        sleep 20
     ) &
-    if ! show_spinner "Запуск сервисов"; then
-        print_error "Не удалось запустить контейнеры. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
-        echo
-        show_continue_prompt || true
-        return
-    fi
+    show_spinner "Запуск сервисов" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
