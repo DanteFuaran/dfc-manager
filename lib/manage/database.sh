@@ -56,13 +56,15 @@ db_backup() {
     ) &
     show_spinner "Архивирование директории"
 
+    local mn_size
     (
         tar -czf "$mn_final" -C "$mn_tmp" "$(basename "$mn_dump")" "$(basename "$mn_dir")" 2>/dev/null
+        rm -rf "$mn_tmp" 2>/dev/null || true
     ) &
-    show_spinner "Создание финального архива"
-    rm -rf "$mn_tmp" 2>/dev/null
+    show_spinner "Сохранение бекапа"
 
     if [ ! -s "$mn_final" ]; then
+        rm -rf "$mn_tmp" 2>/dev/null || true
         print_error "Не удалось создать архив"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -70,16 +72,16 @@ db_backup() {
         return 1
     fi
 
-    local mn_size
     mn_size=$(du -h "$mn_final" | awk '{print $1}')
     local mn_date
     mn_date=$(date '+%d.%m.%Y %H:%M')
 
     echo
-    print_success "Бекап сохранён!"
+    print_success "Бекап успешно создан!"
+    echo
     echo -e "  📄 $(basename "$mn_final")"
     echo -e "  📏 Размер: ${YELLOW}${mn_size}${NC}"
-    echo -e "  📂 ${DARKGRAY}${backup_dir}${NC}"
+    echo
 
     # Отправка в Telegram (если настроен автобекап)
     if [ -f "$AUTOBACKUP_CONFIG" ]; then
@@ -670,11 +672,11 @@ manage_database() {
         menu_items+=("──────────────────────────────────────"); db_actions+=("sep")
         menu_items+=("❌  Назад");                              db_actions+=("back")
 
-        local menu_title="       💾  Работа с базой данных"
+        local menu_title="💾  Работа с базой данных"
         if _rw_autobackup_is_active; then
             local freq
             freq=$(_rw_autobackup_get_frequency)
-            menu_title="       💾  Работа с базой данных\n   📊 Автобекап: ${GREEN}${freq}${NC}"
+            menu_title="   💾  Работа с базой данных\n   📊 Автобекап: ${GREEN}${freq}${NC}"
         fi
 
         show_arrow_menu "$menu_title" "${menu_items[@]}"
