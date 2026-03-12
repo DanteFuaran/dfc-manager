@@ -188,10 +188,22 @@ db_restore() {
     local menu_items=()
     while IFS= read -r file; do
         backup_files+=("$file")
-        local fname fsize
+        local fname fsize display_label
         fname=$(basename "$file")
         fsize=$(du -h "$file" | cut -f1)
-        menu_items+=("📄  ${fname} (${fsize})")
+        if [[ "$fname" =~ ^([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})-([0-9]{2})\.(tar\.gz|sql\.gz)$ ]]; then
+            local pname pyear pmon pday phour pmin
+            pname="${BASH_REMATCH[1]}"
+            pyear="${BASH_REMATCH[2]}"
+            pmon="${BASH_REMATCH[3]}"
+            pday="${BASH_REMATCH[4]}"
+            phour="${BASH_REMATCH[5]}"
+            pmin="${BASH_REMATCH[6]}"
+            display_label="${pname} | ${pday}.${pmon}.${pyear} | ${phour}:${pmin} | ${fsize}"
+        else
+            display_label="${fname} (${fsize})"
+        fi
+        menu_items+=("📄  ${display_label}")
     done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" \) | sort -r)
 
     if [ ${#backup_files[@]} -eq 0 ]; then
