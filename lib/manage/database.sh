@@ -79,8 +79,8 @@ db_backup() {
     # Отправка в Telegram (если настроен автобекап)
     if [ -f "$AUTOBACKUP_CONFIG" ]; then
         local mn_token mn_chat
-        mn_token=$(grep '^bot_token:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
-        mn_chat=$(grep '^chat_id:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+        mn_token=$(grep '^BACKUP_BOT_TOKEN=' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d= -f2-)
+        mn_chat=$(grep '^BACKUP_CHAT_ID=' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d= -f2-)
 
         if [ -n "$mn_token" ] && [ -n "$mn_chat" ]; then
             local mn_caption
@@ -461,7 +461,7 @@ db_restore() {
 # ═══════════════════════════════════════════════
 
 AUTOBACKUP_SCRIPT="${DIR_REMNAWAVE}autobackup.sh"
-AUTOBACKUP_CONFIG="/opt/remnawave/.autobackup"
+AUTOBACKUP_CONFIG="/opt/remnawave/.env"
 
 # Создание скрипта автобекапа (только отправка в Telegram)
 _rw_create_autobackup_script() {
@@ -470,10 +470,10 @@ _rw_create_autobackup_script() {
 #!/bin/bash
 set -euo pipefail
 
-CONFIG="/opt/remnawave/.autobackup"
+CONFIG="/opt/remnawave/.env"
 [ -f "$CONFIG" ] || exit 0
-BOT_TOKEN=$(grep '^bot_token:' "$CONFIG" | cut -d: -f2- | tr -d ' ')
-CHAT_ID=$(grep '^chat_id:' "$CONFIG" | cut -d: -f2- | tr -d ' ')
+BOT_TOKEN=$(grep '^BACKUP_BOT_TOKEN=' "$CONFIG" | cut -d= -f2-)
+CHAT_ID=$(grep '^BACKUP_CHAT_ID=' "$CONFIG" | cut -d= -f2-)
 [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ] && exit 1
 
 TMPDIR="/tmp/_rw_autobackup_$$"
@@ -560,7 +560,7 @@ _rw_configure_autobackup() {
     # Токен бота
     local backup_bot_token=""
     if [ -f "$AUTOBACKUP_CONFIG" ]; then
-        backup_bot_token=$(grep '^bot_token:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+        backup_bot_token=$(grep '^BACKUP_BOT_TOKEN=' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d= -f2-)
     fi
     local current_hint=""
     [ -n "$backup_bot_token" ] && current_hint=" (Enter = оставить текущий)"
@@ -578,7 +578,7 @@ _rw_configure_autobackup() {
     # Chat ID
     local backup_chat_id=""
     if [ -f "$AUTOBACKUP_CONFIG" ]; then
-        backup_chat_id=$(grep '^chat_id:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+        backup_chat_id=$(grep '^BACKUP_CHAT_ID=' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d= -f2-)
     fi
     current_hint=""
     [ -n "$backup_chat_id" ] && current_hint=" (Enter = оставить текущий)"
@@ -610,13 +610,17 @@ _rw_configure_autobackup() {
         255) return ;;
     esac
 
-    # Сохраняем конфиг
+    # Сохраняем настройки в .env
     mkdir -p "$(dirname "$AUTOBACKUP_CONFIG")" 2>/dev/null || true
-    cat > "$AUTOBACKUP_CONFIG" << EOF
-bot_token: $new_backup_token
-chat_id: $new_chat_id
-frequency: $frequency
-EOF
+    local _rw_envfile="$AUTOBACKUP_CONFIG"
+    for _rw_pair in "BACKUP_BOT_TOKEN=$new_backup_token" "BACKUP_CHAT_ID=$new_chat_id" "BACKUP_FREQUENCY=$frequency"; do
+        local _rw_key="${_rw_pair%%=*}" _rw_val="${_rw_pair#*=}"
+        if grep -q "^${_rw_key}=" "$_rw_envfile" 2>/dev/null; then
+            sed -i "s|^${_rw_key}=.*|${_rw_key}=${_rw_val}|" "$_rw_envfile"
+        else
+            echo "${_rw_key}=${_rw_val}" >> "$_rw_envfile"
+        fi
+    done
 
     # Создаём скрипт бекапа
     _rw_create_autobackup_script
@@ -650,7 +654,7 @@ EOF
 # Остановка автобекапа
 _rw_stop_autobackup() {
     (crontab -l 2>/dev/null | grep -v "$AUTOBACKUP_SCRIPT") | crontab -
-    rm -f "$AUTOBACKUP_CONFIG" 2>/dev/null || true
+    sed -i '/^BACKUP_BOT_TOKEN=\|^BACKUP_CHAT_ID=\|^BACKUP_FREQUENCY=/d' "$AUTOBACKUP_CONFIG" 2>/dev/null || true
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}       💾 АВТОБЕКАП${NC}"
