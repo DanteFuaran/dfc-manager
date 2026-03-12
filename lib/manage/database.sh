@@ -84,10 +84,12 @@ db_backup() {
 
         if [ -n "$mn_token" ] && [ -n "$mn_chat" ]; then
             local mn_caption
-            mn_caption="✅ Бекап создан вручную
+            mn_caption="📦 Приложение: Remnawave
 📁 БД + Директория
 📏 Размер: ${mn_size}
-📅 ${mn_date} МСК"
+📅 ${mn_date} МСК
+
+✅ Бекап создан вручную"
             (
                 curl -s \
                     -F "chat_id=$mn_chat" \
@@ -117,7 +119,6 @@ db_backup() {
     # Удаляем бекапы старше 7 дней
     find "$backup_dir" -maxdepth 1 -name "Remnawave_*.tar.gz" -mtime +7 -delete 2>/dev/null || true
 
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
