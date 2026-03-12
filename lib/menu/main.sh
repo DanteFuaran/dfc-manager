@@ -54,7 +54,8 @@ main_menu() {
             items+=("📋  Просмотр логов");            actions+=("logs")
             items+=("──────────────────────────────────────"); actions+=("sep")
             items+=("💾  База данных");               actions+=("database")
-            items+=("🔓  Доступ к панели");           actions+=("access")
+            items+=("�  Автобекап");                  actions+=("autobackup")
+            items+=("�🔓  Доступ к панели");           actions+=("access")
             items+=("🎨  Сменить сайт-заглушку");     actions+=("template")
             items+=("──────────────────────────────────────"); actions+=("sep")
         fi
@@ -115,6 +116,7 @@ main_menu() {
             stop)             manage_stop ;;
             logs)             manage_logs ;;
             database)         manage_database ;;
+            autobackup)       manage_autobackup ;;
             access)           manage_panel_access ;;
             template)         manage_random_template ;;
             extra)            manage_extra_settings ;;

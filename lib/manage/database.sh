@@ -297,3 +297,229 @@ manage_database() {
         esac
     done
 }
+
+# ═══════════════════════════════════════════════
+# АВТОБЕКАП
+# ═══════════════════════════════════════════════
+
+AUTOBACKUP_SCRIPT="${DIR_REMNAWAVE}autobackup.sh"
+AUTOBACKUP_CONFIG="/opt/remnawave/.autobackup"
+
+# Создание скрипта автобекапа
+_rw_create_autobackup_script() {
+    sudo mkdir -p "$(dirname "$AUTOBACKUP_SCRIPT")" 2>/dev/null || true
+    cat > "$AUTOBACKUP_SCRIPT" << 'BACKUP_SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+CONFIG="/opt/remnawave/.autobackup"
+[ -f "$CONFIG" ] || exit 0
+BOT_TOKEN=$(grep '^bot_token:' "$CONFIG" | cut -d: -f2- | tr -d ' ')
+CHAT_ID=$(grep '^chat_id:' "$CONFIG" | cut -d: -f2- | tr -d ' ')
+[ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ] && exit 1
+
+BACKUP_DIR="/opt/remnawave/backups"
+mkdir -p "$BACKUP_DIR"
+TIMESTAMP=$(date +%d-%m-%y_%H-%M)
+BACKUP_FILE="${BACKUP_DIR}/auto_${TIMESTAMP}.sql.gz"
+
+docker exec remnawave-db pg_dump -U postgres -d postgres 2>/dev/null | gzip > "$BACKUP_FILE"
+
+if [ -s "$BACKUP_FILE" ]; then
+    CAPTION="💾 Автобекап Remnawave
+📅 $(date '+%d.%m.%Y %H:%M') MSK"
+    curl -s -F "chat_id=$CHAT_ID" \
+         -F "document=@$BACKUP_FILE" \
+         -F "caption=$CAPTION" \
+         "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" >/dev/null 2>&1
+    find "$BACKUP_DIR" -name "auto_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+fi
+BACKUP_SCRIPT
+    chmod +x "$AUTOBACKUP_SCRIPT"
+}
+
+# Получение cron-выражения по частоте
+_rw_get_cron_schedule() {
+    local freq="$1"
+    case "$freq" in
+        hourly)  echo "0 * * * *" ;;
+        daily)   echo "0 21 * * *" ;;
+        weekly)  echo "0 21 * * 0" ;;
+        monthly) echo "0 21 1 * *" ;;
+    esac
+}
+
+# Проверка активности автобекапа
+_rw_autobackup_is_active() {
+    crontab -l 2>/dev/null | grep -q "$AUTOBACKUP_SCRIPT"
+}
+
+# Получение текущей частоты
+_rw_autobackup_get_frequency() {
+    if ! _rw_autobackup_is_active; then
+        echo ""
+        return
+    fi
+    local cron_line
+    cron_line=$(crontab -l 2>/dev/null | grep "$AUTOBACKUP_SCRIPT")
+    case "$cron_line" in
+        "0 * * * *"*)    echo "Каждый час" ;;
+        "0 21 * * *"*)   echo "Каждый день (00:00 МСК)" ;;
+        "0 21 * * 0"*)   echo "Каждую неделю (Вс 00:00 МСК)" ;;
+        "0 21 1 * *"*)   echo "Каждый месяц (1-е число, 00:00 МСК)" ;;
+        *)               echo "Пользовательское расписание" ;;
+    esac
+}
+
+manage_autobackup() {
+    while true; do
+        local status_label
+        if _rw_autobackup_is_active; then
+            local freq
+            freq=$(_rw_autobackup_get_frequency)
+            status_label="📊 Статус: ${GREEN}Активен${NC} (${freq})"
+        else
+            status_label="📊 Статус: ${RED}Не настроен${NC}"
+        fi
+
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${GREEN}       💾 АВТОБЕКАП REMNAWAVE${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        echo -e "  $status_label"
+        echo
+
+        local menu_items=()
+        if _rw_autobackup_is_active; then
+            menu_items+=("⚙️   Изменить настройки")
+            menu_items+=("⛔  Остановить автобекап")
+        else
+            menu_items+=("⚙️   Настройка автобекапа")
+        fi
+        menu_items+=("──────────────────────────────────────")
+        menu_items+=("⬅️   Назад")
+
+        show_arrow_menu "💾 АВТОБЕКАП" "${menu_items[@]}"
+        local choice=$?
+
+        case $choice in
+            0)
+                # Настройка / Изменение
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}   ⚙️  НАСТРОЙКА АВТОБЕКАПА${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+
+                # Токен бота
+                local backup_bot_token=""
+                if [ -f "$AUTOBACKUP_CONFIG" ]; then
+                    backup_bot_token=$(grep '^bot_token:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+                fi
+                local current_hint=""
+                [ -n "$backup_bot_token" ] && current_hint=" (Enter = оставить текущий)"
+                tput cnorm 2>/dev/null || true
+                reading "Токен бота для бекапов${current_hint}:" new_backup_token
+                if [ -z "$new_backup_token" ] && [ -n "$backup_bot_token" ]; then
+                    new_backup_token="$backup_bot_token"
+                fi
+                if [ -z "$new_backup_token" ]; then
+                    print_error "Токен не может быть пустым"
+                    show_continue_prompt || continue
+                    continue
+                fi
+
+                # Chat ID
+                local backup_chat_id=""
+                if [ -f "$AUTOBACKUP_CONFIG" ]; then
+                    backup_chat_id=$(grep '^chat_id:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+                fi
+                current_hint=""
+                [ -n "$backup_chat_id" ] && current_hint=" (Enter = оставить текущий)"
+                reading "Telegram ID для получения бекапов${current_hint}:" new_chat_id
+                if [ -z "$new_chat_id" ] && [ -n "$backup_chat_id" ]; then
+                    new_chat_id="$backup_chat_id"
+                fi
+                if [ -z "$new_chat_id" ]; then
+                    print_error "ID не может быть пустым"
+                    show_continue_prompt || continue
+                    continue
+                fi
+
+                # Частота
+                echo
+                show_arrow_menu "Частота бекапа" \
+                    "⏱️   Каждый час" \
+                    "📅  Каждый день (00:00 МСК)" \
+                    "📆  Каждую неделю (Вс 00:00 МСК)" \
+                    "🗓️   Каждый месяц (1-е число, 00:00 МСК)"
+                local freq_choice=$?
+
+                local frequency=""
+                case $freq_choice in
+                    0) frequency="hourly" ;;
+                    1) frequency="daily" ;;
+                    2) frequency="weekly" ;;
+                    3) frequency="monthly" ;;
+                    255) continue ;;
+                esac
+
+                # Сохраняем конфиг
+                mkdir -p "$(dirname "$AUTOBACKUP_CONFIG")" 2>/dev/null || true
+                cat > "$AUTOBACKUP_CONFIG" << EOF
+bot_token: $new_backup_token
+chat_id: $new_chat_id
+frequency: $frequency
+EOF
+
+                # Создаём скрипт бекапа
+                _rw_create_autobackup_script
+
+                # Устанавливаем cron
+                local cron_schedule
+                cron_schedule=$(_rw_get_cron_schedule "$frequency")
+                (crontab -l 2>/dev/null | grep -v "$AUTOBACKUP_SCRIPT"; echo "$cron_schedule $AUTOBACKUP_SCRIPT") | crontab -
+
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}       💾 АВТОБЕКАП НАСТРОЕН${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+                echo -e "${GREEN}✅ Автобекап успешно настроен${NC}"
+                echo
+                local freq_label
+                case $frequency in
+                    hourly)  freq_label="Каждый час" ;;
+                    daily)   freq_label="Каждый день (00:00 МСК)" ;;
+                    weekly)  freq_label="Каждую неделю (Вс 00:00 МСК)" ;;
+                    monthly) freq_label="Каждый месяц (1-е число, 00:00 МСК)" ;;
+                esac
+                echo -e "  Частота: ${YELLOW}${freq_label}${NC}"
+                echo -e "  Получатель: ${YELLOW}${new_chat_id}${NC}"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                show_continue_prompt || continue
+                ;;
+            1)
+                if _rw_autobackup_is_active; then
+                    # Остановить автобекап
+                    (crontab -l 2>/dev/null | grep -v "$AUTOBACKUP_SCRIPT") | crontab -
+                    rm -f "$AUTOBACKUP_CONFIG" 2>/dev/null || true
+                    clear
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo -e "${GREEN}       💾 АВТОБЕКАП${NC}"
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo
+                    echo -e "${GREEN}✅ Автобекап остановлен${NC}"
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    show_continue_prompt || continue
+                else
+                    return
+                fi
+                ;;
+            *) return ;;
+        esac
+    done
+}
