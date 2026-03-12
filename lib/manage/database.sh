@@ -688,7 +688,7 @@ manage_database() {
         menu_items+=("──────────────────────────────────────"); db_actions+=("sep")
         menu_items+=("❌  Назад");                              db_actions+=("back")
 
-        local menu_title="   💾  Работа с базой данных"
+        local menu_title="💾  Работа с базой данных"
         if _rw_autobackup_is_active; then
             local freq
             freq=$(_rw_autobackup_get_frequency)
