@@ -76,13 +76,6 @@ db_backup() {
     local mn_date
     mn_date=$(date '+%d.%m.%Y %H:%M')
 
-    echo
-    print_success "Бекап успешно создан!"
-    echo
-    echo -e "  📄 $(basename "$mn_final")"
-    echo -e "  📏 Размер: ${YELLOW}${mn_size}${NC}"
-    echo
-
     # Отправка в Telegram (если настроен автобекап)
     if [ -f "$AUTOBACKUP_CONFIG" ]; then
         local mn_token mn_chat
@@ -91,12 +84,10 @@ db_backup() {
 
         if [ -n "$mn_token" ] && [ -n "$mn_chat" ]; then
             local mn_caption
-            mn_caption="💾 #remnawave_backup
-➖➖➖➖➖➖➖➖➖
-✅ Бекап создан вручную
+            mn_caption="✅ Бекап создан вручную
 📁 БД + Директория
 📏 Размер: ${mn_size}
-📅 ${mn_date} MSK"
+📅 ${mn_date} МСК"
             (
                 curl -s \
                     -F "chat_id=$mn_chat" \
@@ -110,13 +101,18 @@ db_backup() {
             grep -q '"ok":true' /tmp/_rw_ab_result 2>/dev/null && send_ok=true
             rm -f /tmp/_rw_ab_result 2>/dev/null || true
 
-            if $send_ok; then
-                print_success "Отправлен в Telegram"
-            else
+            if ! $send_ok; then
                 print_error "Не удалось отправить в Telegram"
             fi
         fi
     fi
+
+    echo
+    print_success "Бекап успешно создан!"
+    echo
+    echo -e "  📄 $(basename "$mn_final")"
+    echo -e "  📏 Размер: ${YELLOW}${mn_size}${NC}"
+    echo
 
     # Удаляем бекапы старше 7 дней
     find "$backup_dir" -maxdepth 1 -name "Remnawave_*.tar.gz" -mtime +7 -delete 2>/dev/null || true
@@ -282,6 +278,7 @@ db_restore() {
     fi
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
     echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
     if [ "$restore_type" = "users_only" ]; then
         echo -e "${WHITE}Пользователи будут заменены из бекапа.${NC}"
@@ -290,6 +287,8 @@ db_restore() {
         echo -e "${WHITE}Все текущие данные панели будут потеряны.${NC}"
         echo -e "${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}"
     fi
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if ! confirm_action; then
         print_error "Операция отменена"
@@ -298,7 +297,7 @@ db_restore() {
         return 0
     fi
 
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
 
     # Для "только пользователи" — сохраняем данные администратора и API токенов
     local admin_backup_file=""
