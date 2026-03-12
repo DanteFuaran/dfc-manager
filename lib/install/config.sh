@@ -1195,8 +1195,10 @@ EOL
 setup_sub_monitor() {
     cat > /opt/remnawave/sub-monitor.sh <<'MONITOR'
 #!/bin/bash
-# Мониторинг subscription-page: управляет флагом /dev/shm/.sub_disabled для healthcheck.
+# Мониторинг subscription-page: видимость в beszel + healthcheck флаг.
+# Если контейнер не запущен — поднимает через compose и ставит флаг (unhealthy в beszel).
 FLAG="/dev/shm/.sub_disabled"
+COMPOSE_DIR="/opt/remnawave"
 
 docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
 
@@ -1209,6 +1211,7 @@ case "$state" in
         fi
         ;;
     *)
+        cd "$COMPOSE_DIR" && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
         [ ! -f "$FLAG" ] && touch "$FLAG"
         ;;
 esac

@@ -166,7 +166,7 @@ installation_full() {
         # Удаляем старый том БД если остался от предыдущей установки
         docker volume rm remnawave-db-data 2>/dev/null || true
         cd /opt/remnawave
-        docker compose up -d 2>&1 || true
+        docker compose up -d >/dev/null 2>&1 || true
         sleep 20
     ) &
     show_spinner "Установка сервисов" || true
