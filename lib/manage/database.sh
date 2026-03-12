@@ -676,7 +676,7 @@ manage_database() {
         if _rw_autobackup_is_active; then
             local freq
             freq=$(_rw_autobackup_get_frequency)
-            menu_title="   💾  Работа с базой данных\n   📊 Автобекап: ${GREEN}${freq}${NC}"
+            menu_title="   💾  Работа с базой данных\n   📊  Автобекап: ${GREEN}${freq}${NC}"
         fi
 
         show_arrow_menu "$menu_title" "${menu_items[@]}"
