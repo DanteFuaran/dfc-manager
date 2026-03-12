@@ -1195,9 +1195,15 @@ EOL
 setup_sub_monitor() {
     cat > /opt/remnawave/sub-monitor.sh <<'MONITOR'
 #!/bin/bash
-# Мониторинг subscription-page: видимость в beszel + healthcheck флаг.
-# Если контейнер не запущен — поднимает через compose и ставит флаг (unhealthy в beszel).
+# Sub-monitor: видимость subscription-page в Beszel при остановке.
+# Контейнер упал → поднимает через compose → ставит unhealthy флаг.
+# Unhealthy отображается до 24ч, затем контейнер останавливается (исчезает из Beszel).
+# Если юзер пересоздаёт контейнер (новый ID) → флаг снимается → healthy.
+# Флаг от nginx (сертификаты) не трогается — нет ID_FILE = не наш флаг.
+
 FLAG="/dev/shm/.sub_disabled"
+EXPIRED="/dev/shm/.sub_expired"
+ID_FILE="/dev/shm/.sub_monitor_id"
 COMPOSE_DIR="/opt/remnawave"
 
 docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
@@ -1206,13 +1212,32 @@ state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 
 
 case "$state" in
     running)
-        if [ -f "$FLAG" ] && ! docker exec remnawave-nginx test -f /tmp/nginx_nosub.conf 2>/dev/null; then
-            rm -f "$FLAG"
+        if [ -f "$EXPIRED" ]; then
+            rm -f "$EXPIRED" "$FLAG" "$ID_FILE"
+        elif [ -f "$ID_FILE" ]; then
+            current_id=$(docker inspect --format='{{.Id}}' remnawave-subscription-page 2>/dev/null)
+            saved_id=$(cat "$ID_FILE" 2>/dev/null)
+            if [ "$current_id" != "$saved_id" ]; then
+                rm -f "$FLAG" "$ID_FILE"
+            elif [ -f "$FLAG" ]; then
+                flag_age=$(( $(date +%s) - $(stat -c %Y "$FLAG") ))
+                if [ "$flag_age" -gt 86400 ]; then
+                    cd "$COMPOSE_DIR" && docker compose stop remnawave-subscription-page >/dev/null 2>&1
+                    rm -f "$FLAG" "$ID_FILE"
+                    touch "$EXPIRED"
+                fi
+            fi
         fi
         ;;
     *)
-        cd "$COMPOSE_DIR" && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
-        [ ! -f "$FLAG" ] && touch "$FLAG"
+        if [ ! -f "$EXPIRED" ]; then
+            cd "$COMPOSE_DIR" && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+            new_id=$(docker inspect --format='{{.Id}}' remnawave-subscription-page 2>/dev/null)
+            if [ -n "$new_id" ]; then
+                echo "$new_id" > "$ID_FILE"
+                [ ! -f "$FLAG" ] && touch "$FLAG"
+            fi
+        fi
         ;;
 esac
 MONITOR
