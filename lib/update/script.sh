@@ -23,7 +23,8 @@ install_script() {
     fi
 
     chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-    # Симлинки не создаём — они появятся после установки компонентов
+    ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
+    ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
 }
 
 update_script() {

@@ -549,7 +549,6 @@ installation_node_remote() {
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
-        echo
     fi
 
     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -642,11 +641,9 @@ services:
         max-size: '30m'
         max-file: '5'
 EOL
+        generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_INSTALL_DIR"
     ) &
-    show_spinner "Создание docker-compose.yml" || true
-
-    (generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_INSTALL_DIR") &
-    show_spinner "Создание nginx.conf" || true
+    show_spinner "Подготовка файлов" || true
 
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
@@ -656,12 +653,13 @@ EOL
     show_spinner "Настройка файрвола" || true
 
     randomhtml
+    echo
 
     (
         cd "${NODE_INSTALL_DIR}"
         docker compose up -d >/dev/null 2>&1
     ) &
-    if ! show_spinner "Запуск Docker контейнеров"; then
+    if ! show_spinner "Запуск контейнеров"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
@@ -673,30 +671,12 @@ EOL
     local health_ok=true
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
         health_ok=false
-        echo
-        print_error "Контейнер remnawave-nginx не запущен"
-        echo -e "${DARKGRAY}Логи remnawave-nginx:${NC}"
-        docker logs remnawave-nginx --tail 15 2>&1 | while IFS= read -r line; do
-            echo -e "${DARKGRAY}  $line${NC}"
-        done
     elif [ ! -S /dev/shm/nginx.sock ]; then
         health_ok=false
-        echo
-        print_error "Unix-сокет /dev/shm/nginx.sock не создан"
-        echo -e "${DARKGRAY}Логи remnawave-nginx:${NC}"
-        docker logs remnawave-nginx --tail 15 2>&1 | while IFS= read -r line; do
-            echo -e "${DARKGRAY}  $line${NC}"
-        done
     fi
 
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
         health_ok=false
-        echo
-        print_error "Контейнер remnanode не запущен"
-        echo -e "${DARKGRAY}Логи remnanode:${NC}"
-        docker logs remnanode --tail 15 2>&1 | while IFS= read -r line; do
-            echo -e "${DARKGRAY}  $line${NC}"
-        done
     fi
 
     # Удаляем trap при успешном завершении
@@ -704,22 +684,14 @@ EOL
         trap - INT TERM
     fi
 
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ "$health_ok" = true ]; then
-        echo -e "${GREEN}   🎉 НОДА УСТАНОВЛЕНА!${NC}"
+        echo
+        print_success "Нода успешно подключена"
     else
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${YELLOW}   ⚠️  НОДА УСТАНОВЛЕНА С ПРЕДУПРЕЖДЕНИЯМИ${NC}"
-    fi
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${WHITE}Директория:${NC}   ${NODE_INSTALL_DIR}"
-    echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
-    echo -e "${WHITE}IP панели:${NC}    $PANEL_IP"
-    if [ "$health_ok" = true ]; then
-        echo -e "${GREEN}✅ Все контейнеры запущены${NC}"
-        echo -e "${GREEN}✅ Unix-сокет создан${NC}"
-    else
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}Диагностика:${NC}"
         echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
@@ -727,8 +699,6 @@ EOL
         echo -e "${WHITE}  ls -la /dev/shm/nginx.sock${NC}"
         echo -e "${WHITE}  cd ${NODE_INSTALL_DIR} && docker compose restart${NC}"
     fi
-    echo
-    echo -e "${YELLOW}Проверьте подключение ноды в панели Remnawave${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
