@@ -501,12 +501,12 @@ rm -f "$DUMP_FILE" "$DIR_ARCHIVE"
 if [ -s "$FINAL_FILE" ]; then
     SIZE=$(du -h "$FINAL_FILE" | awk '{print $1}')
     DATE=$(date '+%d.%m.%Y %H:%M')
-    CAPTION="💾 #remnawave_backup
-➖➖➖➖➖➖➖➖➖
-✅ Бекап успешно создан
+    CAPTION="� Приложение: Remnawave
 📁 БД + Директория
 📏 Размер: ${SIZE}
-📅 ${DATE} MSK"
+📅 ${DATE} МСК
+
+✅ Бекап создан автоматически"
     curl -s -F "chat_id=$CHAT_ID" \
          -F "document=@$FINAL_FILE" \
          -F "caption=$CAPTION" \
