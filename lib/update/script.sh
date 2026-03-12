@@ -130,12 +130,68 @@ remove_script_all() {
     fi
 
     echo
+
+    # Beszel Hub
+    if [ -f "/opt/beszel/docker-compose.yml" ]; then
+        (
+            cd /opt/beszel 2>/dev/null
+            docker compose down -v --rmi all >/dev/null 2>&1 || true
+            local NGINX_CONF="/opt/remnawave/nginx.conf"
+            local DOCKER_COMPOSE_DEL="/opt/remnawave/docker-compose.yml"
+            [ -f "$NGINX_CONF" ] && sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
+            [ -f "$DOCKER_COMPOSE_DEL" ] && sed -i '/# beszel-cert$/d' "$DOCKER_COMPOSE_DEL"
+        ) &
+        show_spinner "Удаление Beszel"
+        rm -rf /opt/beszel
+    fi
+
+    # Beszel Agent
+    if [ -f "/opt/beszel-agent/docker-compose.yml" ]; then
+        local AGENT_PORT
+        AGENT_PORT=$(cat /opt/beszel-agent/port 2>/dev/null)
+        (
+            cd /opt/beszel-agent 2>/dev/null
+            docker compose down -v --rmi all >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Удаление агента Beszel"
+        [ -n "$AGENT_PORT" ] && ufw delete allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
+        rm -rf /opt/beszel-agent
+    fi
+
+    # WARP
+    if ip link show warp >/dev/null 2>&1; then
+        (
+            wg-quick down warp >/dev/null 2>&1 || true
+            systemctl disable wg-quick@warp >/dev/null 2>&1 || true
+            rm -f /etc/wireguard/warp.conf /usr/local/bin/wgcf \
+                  /tmp/wgcf-account.toml /tmp/wgcf-profile.conf 2>/dev/null || true
+            DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y wireguard >/dev/null 2>&1 || true
+            DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Удаление WARP"
+        local WARP_PORT
+        WARP_PORT=$(cat /etc/wireguard/.warp_port 2>/dev/null)
+        [ -n "$WARP_PORT" ] && ufw delete allow "${WARP_PORT}/tcp" >/dev/null 2>&1 || true
+        rm -f /etc/wireguard/.warp_port 2>/dev/null || true
+    fi
+
+    # UFW
+    if command -v ufw >/dev/null 2>&1; then
+        (
+            ufw disable >/dev/null 2>&1 || true
+            DEBIAN_FRONTEND=noninteractive apt-get purge -y ufw >/dev/null 2>&1 || true
+            DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Удаление UFW"
+    fi
+
+    # Remnawave
     (
         cd "${DIR_PANEL}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
         docker system prune -af >/dev/null 2>&1 || true
     ) &
-    show_spinner "Удаление контейнеров"
+    show_spinner "Удаление контейнеров Remnawave"
     rm -rf "${DIR_PANEL}"
     rm -rf "${DIR_NODE}"
     rm -f /usr/local/bin/remnawave
