@@ -308,12 +308,10 @@ COMPOSE_COMMAND
       - REMNAWAVE_API_TOKEN
     ports:
       - '127.0.0.1:3010:3010'
-    volumes:
-      - /dev/shm:/dev/shm:ro
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010 && [ ! -f /dev/shm/.sub_disabled ]']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -567,12 +565,10 @@ COMPOSE_COMMAND
       - REMNAWAVE_API_TOKEN
     ports:
       - '127.0.0.1:3010:3010'
-    volumes:
-      - /dev/shm:/dev/shm:ro
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010 && [ ! -f /dev/shm/.sub_disabled ]']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -1189,62 +1185,4 @@ EOL
 }
 
 # ═══════════════════════════════════════════════
-# Монитор subscription-page для beszel
-# ═══════════════════════════════════════════════
 
-setup_sub_monitor() {
-    cat > /opt/remnawave/sub-monitor.sh <<'MONITOR'
-#!/bin/bash
-# Sub-monitor: видимость subscription-page в Beszel при остановке.
-#
-# Beszel показывает ТОЛЬКО существующие контейнеры. Чтобы отобразить unhealthy,
-# контейнер должен работать, но с провалом healthcheck (флаг .sub_disabled).
-#
-# Логика:
-#   Контейнер упал → монитор поднимает через compose → ставит флаг → unhealthy в Beszel
-#   Юзер делает: docker compose restart remnawave-subscription-page → healthy
-#   Через 24ч без восстановления → контейнер останавливается → исчезает из Beszel
-
-FLAG="/dev/shm/.sub_disabled"
-EXPIRED="/dev/shm/.sub_expired"
-STATE_FILE="/dev/shm/.sub_monitor_state"
-COMPOSE_DIR="/opt/remnawave"
-
-docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null | grep -q healthy || exit 0
-
-state=$(docker inspect --format='{{.State.Status}}' remnawave-subscription-page 2>/dev/null)
-
-case "$state" in
-    running)
-        if [ -f "$EXPIRED" ]; then
-            rm -f "$EXPIRED" "$FLAG" "$STATE_FILE"
-        elif [ -f "$STATE_FILE" ]; then
-            saved_started=$(cat "$STATE_FILE" 2>/dev/null)
-            current_started=$(docker inspect --format='{{.State.StartedAt}}' remnawave-subscription-page 2>/dev/null)
-            if [ "$current_started" != "$saved_started" ]; then
-                rm -f "$FLAG" "$STATE_FILE"
-            elif [ -f "$FLAG" ]; then
-                flag_age=$(( $(date +%s) - $(stat -c %Y "$FLAG") ))
-                if [ "$flag_age" -gt 86400 ]; then
-                    cd "$COMPOSE_DIR" && docker compose stop remnawave-subscription-page >/dev/null 2>&1
-                    rm -f "$FLAG" "$STATE_FILE"
-                    touch "$EXPIRED"
-                fi
-            fi
-        fi
-        ;;
-    *)
-        if [ ! -f "$EXPIRED" ]; then
-            cd "$COMPOSE_DIR" && docker compose up -d remnawave-subscription-page >/dev/null 2>&1
-            started=$(docker inspect --format='{{.State.StartedAt}}' remnawave-subscription-page 2>/dev/null)
-            if [ -n "$started" ]; then
-                echo "$started" > "$STATE_FILE"
-                [ ! -f "$FLAG" ] && touch "$FLAG"
-            fi
-        fi
-        ;;
-esac
-MONITOR
-    chmod +x /opt/remnawave/sub-monitor.sh
-    (crontab -l 2>/dev/null | grep -v 'sub-monitor') | { cat; echo '* * * * * /opt/remnawave/sub-monitor.sh'; } | crontab -
-}

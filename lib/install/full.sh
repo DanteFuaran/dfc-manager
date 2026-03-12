@@ -151,7 +151,6 @@ installation_full() {
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
-        setup_sub_monitor
     ) &
     show_spinner "Создание необходимых файлов" || true
 
