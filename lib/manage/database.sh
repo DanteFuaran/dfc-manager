@@ -501,7 +501,7 @@ rm -f "$DUMP_FILE" "$DIR_ARCHIVE"
 if [ -s "$FINAL_FILE" ]; then
     SIZE=$(du -h "$FINAL_FILE" | awk '{print $1}')
     DATE=$(date '+%d.%m.%Y %H:%M')
-    CAPTION="� Приложение: Remnawave
+    CAPTION="📦 Приложение: Remnawave
 📁 БД + Директория
 📏 Размер: ${SIZE}
 📅 ${DATE} МСК
