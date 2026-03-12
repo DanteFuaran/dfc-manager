@@ -391,20 +391,25 @@ manage_autobackup() {
         echo
 
         local menu_items=()
+        local -a _ab_actions=()
+
         if _rw_autobackup_is_active; then
-            menu_items+=("⚙️   Изменить настройки")
-            menu_items+=("⛔  Остановить автобекап")
+            menu_items+=("⚙️   Изменить настройки");    _ab_actions+=("configure")
+            menu_items+=("📤  Создать бекап сейчас");   _ab_actions+=("backup_now")
+            menu_items+=("⛔  Остановить автобекап");   _ab_actions+=("stop")
         else
-            menu_items+=("⚙️   Настройка автобекапа")
+            menu_items+=("⚙️   Настройка автобекапа");  _ab_actions+=("configure")
         fi
-        menu_items+=("──────────────────────────────────────")
-        menu_items+=("⬅️   Назад")
+        menu_items+=("──────────────────────────────────────"); _ab_actions+=("sep")
+        menu_items+=("❌  Назад");                             _ab_actions+=("back")
 
         show_arrow_menu "💾 АВТОБЕКАП" "${menu_items[@]}"
         local choice=$?
+        [[ $choice -eq 255 ]] && return
+        local _ab_action="${_ab_actions[$choice]:-back}"
 
-        case $choice in
-            0)
+        case "$_ab_action" in
+            configure)
                 # Настройка / Изменение
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -501,23 +506,75 @@ EOF
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || continue
                 ;;
-            1)
-                if _rw_autobackup_is_active; then
-                    # Остановить автобекап
-                    (crontab -l 2>/dev/null | grep -v "$AUTOBACKUP_SCRIPT") | crontab -
-                    rm -f "$AUTOBACKUP_CONFIG" 2>/dev/null || true
-                    clear
-                    echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo -e "${GREEN}       💾 АВТОБЕКАП${NC}"
-                    echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo
-                    echo -e "${GREEN}✅ Автобекап остановлен${NC}"
+            backup_now)
+                # Ручной бекап с отправкой в Telegram
+                local mn_token mn_chat
+                mn_token=$(grep '^bot_token:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+                mn_chat=$(grep '^chat_id:' "$AUTOBACKUP_CONFIG" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}       📤 СОЗДАНИЕ БЕКАПА${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+
+                local mn_file
+                mn_file="/tmp/rw_manual_backup_$(date +%d-%m-%y_%H-%M).sql.gz"
+
+                (
+                    docker exec remnawave-db pg_dump -U postgres -d postgres 2>/dev/null | gzip > "$mn_file"
+                ) &
+                show_spinner "Создание дампа базы данных"
+
+                if [ ! -s "$mn_file" ]; then
+                    print_error "Не удалось создать дамп"
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     show_continue_prompt || continue
-                else
-                    return
+                    continue
                 fi
+
+                local mn_caption
+                mn_caption="💾 Ручной бекап Remnawave
+📅 $(date '+%d.%m.%Y %H:%M') MSK"
+
+                local mn_result
+                (
+                    mn_result=$(curl -s \
+                        -F "chat_id=$mn_chat" \
+                        -F "document=@$mn_file" \
+                        -F "caption=$mn_caption" \
+                        "https://api.telegram.org/bot${mn_token}/sendDocument")
+                    echo "$mn_result" > /tmp/_rw_ab_result
+                ) &
+                show_spinner "Отправка в Telegram"
+                rm -f "$mn_file" 2>/dev/null || true
+
+                local send_ok=false
+                grep -q '"ok":true' /tmp/_rw_ab_result 2>/dev/null && send_ok=true
+                rm -f /tmp/_rw_ab_result 2>/dev/null || true
+
+                if $send_ok; then
+                    print_success "Бекап успешно отправлен в Telegram"
+                else
+                    print_error "Не удалось отправить бекап (проверьте токен/chat_id)"
+                fi
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                show_continue_prompt || continue
+                ;;
+            stop)
+                (crontab -l 2>/dev/null | grep -v "$AUTOBACKUP_SCRIPT") | crontab -
+                rm -f "$AUTOBACKUP_CONFIG" 2>/dev/null || true
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}       💾 АВТОБЕКАП${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+                echo -e "${GREEN}✅ Автобекап остановлен${NC}"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                show_continue_prompt || continue
                 ;;
             *) return ;;
         esac
