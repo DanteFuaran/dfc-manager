@@ -54,7 +54,7 @@ main_menu() {
             items+=("📋  Просмотр логов");            actions+=("logs")
             items+=("──────────────────────────────────────"); actions+=("sep")
             items+=("💾  База данных");               actions+=("database")
-            items+=("  Доступ к панели");            actions+=("access")
+            items+=("🔓  Доступ к панели");            actions+=("access")
             items+=("🎨  Сменить сайт-заглушку");     actions+=("template")
             items+=("──────────────────────────────────────"); actions+=("sep")
         fi
