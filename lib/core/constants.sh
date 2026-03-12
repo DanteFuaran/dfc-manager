@@ -2,7 +2,7 @@
 # КОНСТАНТЫ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 # ═══════════════════════════════════════════════
 
-SCRIPT_VERSION="0.5.14"
+SCRIPT_VERSION="0.5.15"
 DIR_REMNAWAVE="/usr/local/remnawave/"
 DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
