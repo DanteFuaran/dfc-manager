@@ -154,12 +154,13 @@ db_restore() {
     if [ -d "$backup_dir" ]; then
         compgen -G "$backup_dir/*.tar.gz" > /dev/null 2>&1 && has_files=true
         compgen -G "$backup_dir/*.sql.gz" > /dev/null 2>&1 && has_files=true
+        compgen -G "$backup_dir/*.sql" > /dev/null 2>&1 && has_files=true
     fi
 
     if [ "$has_files" = false ]; then
         echo -e "${YELLOW}⚠️  Бекапы не найдены в ${WHITE}${backup_dir}${NC}"
         echo
-        echo -e "${WHITE}Поместите файл бекапа (.tar.gz или .sql.gz) в эту папку${NC}"
+        echo -e "${WHITE}Поместите файл бекапа (.tar.gz, .sql.gz или .sql) в эту папку${NC}"
         echo -e "${WHITE}или укажите путь к файлу вручную.${NC}"
         echo
 
@@ -191,7 +192,7 @@ db_restore() {
         local fname fsize display_label
         fname=$(basename "$file")
         fsize=$(du -h "$file" | cut -f1)
-        if [[ "$fname" =~ ^([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})-([0-9]{2})\.(tar\.gz|sql\.gz)$ ]]; then
+        if [[ "$fname" =~ ^([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})-([0-9]{2})\.(tar\.gz|sql\.gz|sql)$ ]]; then
             local pname pyear pmon pday phour pmin
             pname="${BASH_REMATCH[1]}"
             pyear="${BASH_REMATCH[2]}"
@@ -204,7 +205,7 @@ db_restore() {
             display_label="${fname} (${fsize})"
         fi
         menu_items+=("📄  ${display_label}")
-    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" \) | sort -r)
+    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" \) | sort -r)
 
     if [ ${#backup_files[@]} -eq 0 ]; then
         print_error "Файлы бэкапов не найдены"
@@ -257,7 +258,7 @@ db_restore() {
             return 1
         fi
     else
-        # Обычный .sql.gz файл
+        # Обычный .sql.gz или .sql файл
         dump_to_restore="$selected_file"
     fi
 
@@ -338,7 +339,11 @@ db_restore() {
 
     # Восстанавливаем дамп
     (
-        zcat "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+        if [[ "$dump_to_restore" == *.gz ]]; then
+            zcat "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+        else
+            cat "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+        fi
     ) &
     show_spinner "Загрузка данных из бэкапа"
 
