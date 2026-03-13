@@ -167,8 +167,7 @@ SYSCTL
     ) &
     echo
     show_spinner "Установка необходимых пакетов"
-    
-    # Активация автодополнения для текущей shell сессии
+    echo
     source /usr/share/bash-completion/bash_completion 2>/dev/null || true
     source /usr/share/bash-completion/completions/ufw 2>/dev/null || true
 }
