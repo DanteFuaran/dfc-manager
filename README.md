@@ -2,16 +2,18 @@
   <img src="assets/logo.jpg" alt="DFC Remna Install" width="100%">
 </p>
 
-<h1 align="center">🛡️ DFC Remna Install</h1>
-<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой и полным набором инструментов управления</p>
+<p align="center">
+  <a href="README.md">Русский</a> | <a href="README.en.md">English</a>
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
-  <a href="README.md"><img src="https://img.shields.io/badge/lang-RU-blue?style=flat-square" alt="RU"></a>
-  <a href="README.en.md"><img src="https://img.shields.io/badge/lang-EN-lightgrey?style=flat-square" alt="EN"></a>
 </p>
+
+<h1 align="center">🛡️ DFC Remna Install</h1>
+<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой и полным набором инструментов управления</p>
 
 ---
 
@@ -25,9 +27,10 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 ---
 
+<h2> $${\color{blue}📦 Варианты\ установки}$$ </h2>
+
 <details>
-<summary><b>📦 Варианты установки</b></summary>
-<br>
+<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
 
 | Вариант | Описание |
 |---|---|
@@ -40,50 +43,34 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 ---
 
-<details>
-<summary><b>✨ Возможности</b></summary>
-<br>
+<h2> $${\color{blue}✨ Возможности}$$ </h2>
 
 <details>
-<summary><b>🔐 Безопасность</b></summary>
-<br>
+<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
 
-- **Cookie-защита доступа** — уникальная cookie-ссылка на панель вместо прямого URL
-- **Мгновенная смена cookie** — инвалидация всех старых ссылок в один клик
-- **Переключение порта панели** — работа на 443 или 8443 на выбор
-- **Сброс суперадмина** — генерация новых учётных данных без переустановки
-- **SSL-сертификаты** — Let's Encrypt HTTP-01 или Cloudflare DNS-01 wildcard
+### 🔐 Безопасность
+> **Cookie-защита доступа** — уникальная cookie-ссылка на панель вместо прямого URL<br>
+> **Мгновенная смена cookie** — инвалидация всех старых ссылок в один клик<br>
+> **Переключение порта панели** — работа на 443 или 8443 на выбор<br>
+> **Сброс суперадмина** — генерация новых учётных данных без переустановки<br>
+> **SSL-сертификаты** — Let's Encrypt HTTP-01 или Cloudflare DNS-01 wildcard
 
-</details>
+### 🌐 Управление доменами
+> **Смена домена панели** — с автоматическим перевыпуском SSL<br>
+> **Смена домена страницы подписки** — с автоматическим перевыпуском SSL<br>
+> **Смена домена ноды / selfsteal** — обновление конфигурации<br>
+> **Проверка DNS перед установкой** — скрипт убеждается что домен указывает на сервер
 
-<details>
-<summary><b>🌐 Управление доменами</b></summary>
-<br>
+### 💾 База данных и резервные копии
+> **Ручной бэкап** — архив БД PostgreSQL + директория `/opt/remnawave` в один `.tar.gz`<br>
+> **Восстановление из бэкапа** — загрузка из любого сохранённого архива<br>
+> **Автоматические бэкапы** — по расписанию (cron) с отправкой в Telegram<br>
+> **Настройка расписания** — каждые 6 ч / 12 ч / 24 ч / 48 ч<br>
+> **Telegram-нотификации** — архив отправляется напрямую в чат или канал
 
-- **Смена домена панели** — с автоматическим перевыпуском SSL
-- **Смена домена страницы подписки** — с автоматическим перевыпуском SSL
-- **Смена домена ноды / selfsteal** — обновление конфигурации
-- **Проверка DNS перед установкой** — скрипт убеждается что домен указывает на сервер
-
-</details>
-
-<details>
-<summary><b>💾 База данных и резервные копии</b></summary>
-<br>
-
-- **Ручной бэкап** — архив БД PostgreSQL + директория `/opt/remnawave` в один `.tar.gz`
-- **Восстановление из бэкапа** — загрузка из любого сохранённого архива
-- **Автоматические бэкапы** — по расписанию (cron) с отправкой в Telegram
-- **Настройка расписания** — каждые 6 ч / 12 ч / 24 ч / 48 ч
-- **Telegram-нотификации** — архив отправляется напрямую в чат или канал
-
-</details>
-
-<details>
-<summary><b>🎨 Сайт-заглушка (маскировка)</b></summary>
-<br>
-
-Скрипт устанавливает HTML-шаблон на корневой домен ноды — сервер выглядит как обычный сайт. Доступно **20 шаблонов** или случайный:
+### 🎨 Сайт-заглушка (маскировка)
+> Скрипт устанавливает HTML-шаблон на корневой домен ноды — сервер выглядит как обычный сайт.<br>
+> Доступно **20 шаблонов** или случайный:
 
 | | | |
 |---|---|---|
@@ -95,86 +82,88 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 | 🏠 HomeNest — Недвижимость | 🍕 FastBite — Доставка еды | 🚗 AutoElite — Автомобили |
 | 🎨 Prisma Studio — Дизайн | 💼 Vertex Advisory — Консалтинг | 🎲 Случайный шаблон |
 
-</details>
+### 🧩 Дополнительные инструменты
+> **🔥 Firewall (UFW)** — настройка и управление правилами<br>
+> **🌐 WARP** — установка и управление Cloudflare WARP<br>
+> **💾 SWAP** — создание и управление swap-разделом<br>
+> **🚀 BBR** — включение TCP BBR для оптимизации сети<br>
+> **🛡️ Fail2ban** — защита от брутфорса<br>
+> **📝 Logrotate** — ротация логов Docker-контейнеров<br>
+> **📊 Beszel** — мониторинг сервера (агент + hub)
 
-<details>
-<summary><b>🧩 Дополнительные инструменты</b></summary>
-<br>
-
-- **🔥 Firewall (UFW)** — настройка и управление правилами
-- **🌐 WARP** — установка и управление Cloudflare WARP
-- **💾 SWAP** — создание и управление swap-разделом
-- **🚀 BBR** — включение TCP BBR для оптимизации сети
-- **🛡️ Fail2ban** — защита от брутфорса
-- **📝 Logrotate** — ротация логов Docker-контейнеров
-- **📊 Beszel** — мониторинг сервера (агент + hub)
-
-</details>
-
-<details>
-<summary><b>⚙️ Управление сервисами</b></summary>
-<br>
-
-- **Запуск / остановка** всех сервисов одной командой
-- **Обновление панели и ноды** — pull новых Docker-образов
-- **Переустановка** — полная переустановка с сохранением данных
-- **Просмотр логов** — панель, нода, NGINX, PostgreSQL в реальном времени
-- **Удаление ноды с сервера панели** — с реконфигурацией NGINX на порт 443
-- **Полное удаление** — все компоненты, данные и конфигурации
-
-</details>
+### ⚙️ Управление сервисами
+> **Запуск / остановка** всех сервисов одной командой<br>
+> **Обновление панели и ноды** — pull новых Docker-образов<br>
+> **Переустановка** — полная переустановка с сохранением данных<br>
+> **Просмотр логов** — панель, нода, NGINX, PostgreSQL в реальном времени<br>
+> **Удаление ноды с сервера панели** — с реконфигурацией NGINX на порт 443<br>
+> **Полное удаление** — все компоненты, данные и конфигурации
 
 </details>
 
 ---
 
+<h2> $${\color{blue}📋 Требования}$$ </h2>
+
 <details>
-<summary><b>📋 Требования</b></summary>
-<br>
+<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
 
-| | |
-|---|---|
-| **ОС** | Ubuntu 22.04 / 24.04, Debian 11 / 12 |
-| **Права** | root или sudo |
-| **Домены** | 2–3 поддомена с A-записями на IP сервера |
-| **SSL** | Email для Let's Encrypt **или** Cloudflare API Token |
-| **Remnawave** | версия **2.5.24** или выше |
+### 🖥️ Система
+> **Ubuntu** 22.04 / 24.04<br>
+> **Debian** 11 / 12<br>
+> Доступ **root** или `sudo`
 
-> ⚠️ Docker, Docker Compose и Certbot устанавливаются **автоматически**.
+### 🌐 Домены и DNS
+> 2–3 поддомена с **A-записями** на IP сервера
+
+### 🔐 SSL
+> Email для **Let's Encrypt**<br>
+> или API Token для **Cloudflare DNS-01** (для wildcard)
+
+<sub>⚠️ $${\color{orange}Все\ зависимости\ (Docker,\ Docker\ Compose,\ Certbot)\ устанавливаются\ автоматически.}$$</sub>
 
 </details>
 
 ---
 
+<h2> $${\color{green}💰 Поддержать\ проект}$$ </h2>
+
 <details>
-<summary><b>💰 Поддержать проект</b></summary>
+<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+
 <br>
 
-| Метод | Реквизиты |
-|---|---|
-| **USDT (TRC-20)** | `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ` |
-| **BTC (BEP-20)** | `0x657685922d7a9c50e3e90cae3ba9905985349fbb` |
-| **ЮMoney** | `4100118836481809` |
+### 💵 Криптовалюта
+> **USDT (TRC-20):** `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ`<br>
+> **BTC (BEP-20):** `0x657685922d7a9c50e3e90cae3ba9905985349fbb`
 
-❤️ Спасибо за поддержку — она помогает развивать проект!
+### 🇷🇺 ЮMoney
+> **Номер карты:** `4100118836481809`
+
+<br>
+
+<sub>❤️ Спасибо за вашу поддержку! Она помогает развивать проект.</sub>
 
 </details>
 
 ---
 
+<h2> $${\color{red}🔧 Решение\ проблем}$$ </h2>
+
 <details>
-<summary><b>🔧 Решение проблем</b></summary>
-<br>
+<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
 
-**Перед установкой убедитесь:**
-- Все домены имеют корректные A-записи на IP сервера
-- Порты **80** и **443** свободны
-- Firewall разрешает входящие соединения на 80, 443, 8443
+### Убедитесь что:
+> ✅ Все домены корректно указывают на IP сервера через **A-записи** в DNS<br>
+> ✅ Порты **80** и **443** свободны и не заняты другими службами<br>
+> ✅ Firewall разрешает входящие подключения на портах **80**, **443**, **8443**<br>
+> ✅ Email для Let's Encrypt указан правильно<br>
+> ✅ При использовании Cloudflare DNS-01 указан корректный **API Token**
 
-**Инструменты диагностики:**
-- Просмотр логов: `remnawave` → Просмотр логов
-- Перезапуск: `remnawave` → Запустить сервисы
-- При неразрешимой проблеме — откройте [Issue на GitHub](https://github.com/DanteFuaran/dfc-remna-install/issues) с текстом ошибки
+### Решение проблем:
+> 📜 Проверьте логи компонентов через `remnawave` → Просмотр логов<br>
+> 🔄 Попробуйте перезапустить сервисы через `remnawave` → Запустить сервисы<br>
+> 🆘 Если проблема не решается — откройте [Issue на GitHub](https://github.com/DanteFuaran/dfc-remna-install/issues) с текстом ошибки
 
 </details>
 
@@ -182,7 +171,7 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 ## 📜 Лицензия
 
-[MIT](LICENSE)
+Проект распространяется под лицензией [MIT](LICENSE)
 
 ---
 
