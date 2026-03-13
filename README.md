@@ -1,20 +1,17 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="DFC Remna Install" width="320"/>
+  <img src="assets/logo.jpg" alt="DFC Remna Install" width="100%">
 </p>
 
-<p align="center">
-  <a href="README.md">🇷🇺 Русский</a> | <a href="README.en.md">🇬🇧 English</a>
-</p>
+<h1 align="center">🛡️ DFC Remna Install</h1>
+<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой и полным набором инструментов управления</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
-  <img src="https://img.shields.io/badge/shell-bash-lightgrey?style=flat-square" alt="shell"/>
+  <a href="README.md"><img src="https://img.shields.io/badge/lang-RU-blue?style=flat-square" alt="RU"></a>
+  <a href="README.en.md"><img src="https://img.shields.io/badge/lang-EN-lightgrey?style=flat-square" alt="EN"></a>
 </p>
-
-<h1 align="center">🛡️ DFC Remna Install</h1>
-<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой и полным набором инструментов управления</p>
 
 ---
 
@@ -28,7 +25,9 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 ---
 
-## 📦 Варианты установки
+<details>
+<summary><b>📦 Варианты установки</b></summary>
+<br>
 
 | Вариант | Описание |
 |---|---|
@@ -37,9 +36,13 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 | **Только нода** | Установка ноды для подключения к удалённой панели |
 | **Подключить ноду к панели** | Добавление новой ноды на сервер с уже установленной панелью |
 
+</details>
+
 ---
 
-## ✨ Возможности
+<details>
+<summary><b>✨ Возможности</b></summary>
+<br>
 
 <details>
 <summary><b>🔐 Безопасность</b></summary>
@@ -121,9 +124,13 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 </details>
 
+</details>
+
 ---
 
-## 📋 Требования
+<details>
+<summary><b>📋 Требования</b></summary>
+<br>
 
 | | |
 |---|---|
@@ -135,12 +142,28 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 > ⚠️ Docker, Docker Compose и Certbot устанавливаются **автоматически**.
 
+</details>
+
 ---
 
-## 🔧 Решение проблем
+<details>
+<summary><b>💰 Поддержать проект</b></summary>
+<br>
+
+| Метод | Реквизиты |
+|---|---|
+| **USDT (TRC-20)** | `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ` |
+| **BTC (BEP-20)** | `0x657685922d7a9c50e3e90cae3ba9905985349fbb` |
+| **ЮMoney** | `4100118836481809` |
+
+❤️ Спасибо за поддержку — она помогает развивать проект!
+
+</details>
+
+---
 
 <details>
-<summary><b>Показать</b></summary>
+<summary><b>🔧 Решение проблем</b></summary>
 <br>
 
 **Перед установкой убедитесь:**
@@ -152,24 +175,6 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 - Просмотр логов: `remnawave` → Просмотр логов
 - Перезапуск: `remnawave` → Запустить сервисы
 - При неразрешимой проблеме — откройте [Issue на GitHub](https://github.com/DanteFuaran/dfc-remna-install/issues) с текстом ошибки
-
-</details>
-
----
-
-## 💰 Поддержать проект
-
-<details>
-<summary><b>Показать реквизиты</b></summary>
-<br>
-
-| Метод | Реквизиты |
-|---|---|
-| **USDT (TRC-20)** | `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ` |
-| **BTC (BEP-20)** | `0x657685922d7a9c50e3e90cae3ba9905985349fbb` |
-| **ЮMoney** | `4100118836481809` |
-
-❤️ Спасибо за поддержку — она помогает развивать проект!
 
 </details>
 

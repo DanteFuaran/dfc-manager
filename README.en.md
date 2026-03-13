@@ -1,20 +1,17 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="DFC Remna Install" width="320"/>
+  <img src="assets/logo.jpg" alt="DFC Remna Install" width="100%">
 </p>
 
-<p align="center">
-  <a href="README.md">🇷🇺 Русский</a> | <a href="README.en.md">🇬🇧 English</a>
-</p>
+<h1 align="center">🛡️ DFC Remna Install</h1>
+<p align="center">Interactive installer and manager for <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>with NGINX, SSL, cookie-protection and a full suite of management tools</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
-  <img src="https://img.shields.io/badge/shell-bash-lightgrey?style=flat-square" alt="shell"/>
+  <a href="README.md"><img src="https://img.shields.io/badge/lang-RU-blue?style=flat-square" alt="RU"></a>
+  <a href="README.en.md"><img src="https://img.shields.io/badge/lang-EN-lightgrey?style=flat-square" alt="EN"></a>
 </p>
-
-<h1 align="center">🛡️ DFC Remna Install</h1>
-<p align="center">Interactive installer and manager for <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>with NGINX, SSL, cookie-protection and a full suite of management tools</p>
 
 ---
 
@@ -28,7 +25,9 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 
 ---
 
-## 📦 Installation Options
+<details>
+<summary><b>📦 Installation Options</b></summary>
+<br>
 
 | Option | Description |
 |---|---|
@@ -37,9 +36,13 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 | **Node only** | Install a node to connect to a remote panel |
 | **Add node to panel** | Add a new node to a server with an already installed panel |
 
+</details>
+
 ---
 
-## ✨ Features
+<details>
+<summary><b>✨ Features</b></summary>
+<br>
 
 <details>
 <summary><b>🔐 Security</b></summary>
@@ -121,9 +124,13 @@ Installs an HTML template on the node's root domain — the server looks like an
 
 </details>
 
+</details>
+
 ---
 
-## 📋 Requirements
+<details>
+<summary><b>📋 Requirements</b></summary>
+<br>
 
 | | |
 |---|---|
@@ -135,12 +142,28 @@ Installs an HTML template on the node's root domain — the server looks like an
 
 > ⚠️ Docker, Docker Compose and Certbot are installed **automatically**.
 
+</details>
+
 ---
 
-## 🔧 Troubleshooting
+<details>
+<summary><b>💰 Support the Project</b></summary>
+<br>
+
+| Method | Details |
+|---|---|
+| **USDT (TRC-20)** | `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ` |
+| **BTC (BEP-20)** | `0x657685922d7a9c50e3e90cae3ba9905985349fbb` |
+| **YooMoney** | `4100118836481809` |
+
+❤️ Thank you for your support — it helps keep the project alive!
+
+</details>
+
+---
 
 <details>
-<summary><b>Show</b></summary>
+<summary><b>🔧 Troubleshooting</b></summary>
 <br>
 
 **Before installation, make sure:**
@@ -152,24 +175,6 @@ Installs an HTML template on the node's root domain — the server looks like an
 - View logs: `remnawave` → View logs
 - Restart services: `remnawave` → Start services
 - If the issue persists — open an [Issue on GitHub](https://github.com/DanteFuaran/dfc-remna-install/issues) with the error output
-
-</details>
-
----
-
-## 💰 Support the Project
-
-<details>
-<summary><b>Show donation details</b></summary>
-<br>
-
-| Method | Details |
-|---|---|
-| **USDT (TRC-20)** | `THqJQsgbWY7Tw1BxdLA6SQAkBGVmMhzeLZ` |
-| **BTC (BEP-20)** | `0x657685922d7a9c50e3e90cae3ba9905985349fbb` |
-| **YooMoney** | `4100118836481809` |
-
-❤️ Thank you for your support — it helps keep the project alive!
 
 </details>
 
