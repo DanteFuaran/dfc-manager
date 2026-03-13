@@ -45,13 +45,44 @@ get_server_ip() {
     echo "unknown"
 }
 
+resolve_domain_ip() {
+    local domain="$1"
+    local ip=""
+
+    # 1. dig (bind-utils)
+    if command -v dig &>/dev/null; then
+        ip=$(dig +short "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        [ -n "$ip" ] && echo "$ip" && return 0
+    fi
+
+    # 2. nslookup
+    if command -v nslookup &>/dev/null; then
+        ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address:/{print $2}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        [ -n "$ip" ] && echo "$ip" && return 0
+    fi
+
+    # 3. host
+    if command -v host &>/dev/null; then
+        ip=$(host -t A "$domain" 2>/dev/null | awk '/has address/{print $NF}' | head -1)
+        [ -n "$ip" ] && echo "$ip" && return 0
+    fi
+
+    # 4. getent (всегда доступен на Linux)
+    if command -v getent &>/dev/null; then
+        ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        [ -n "$ip" ] && echo "$ip" && return 0
+    fi
+
+    echo ""
+}
+
 check_domain() {
     local domain="$1"
     local check_ip="${2:-true}"
     
     # Получаем IP домена
     local domain_ip
-    domain_ip=$(dig +short "$domain" A 2>/dev/null | head -1)
+    domain_ip=$(resolve_domain_ip "$domain")
 
     # Получаем IP сервера для сообщений об ошибках
     local server_ip
