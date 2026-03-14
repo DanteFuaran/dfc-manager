@@ -34,6 +34,16 @@ obtain_cert_for_domain() {
         return 0
     fi
 
+    # Получаем email из существующей регистрации certbot
+    local _cert_email
+    _cert_email=$(grep -r '"email"' /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
+    local _email_flag
+    if [ -n "$_cert_email" ]; then
+        _email_flag="--email $_cert_email"
+    else
+        _email_flag="--register-unsafely-without-email"
+    fi
+
     # Нужно получить новый сертификат
     if [ "$cert_method" = "1" ] && [ -f "/etc/letsencrypt/cloudflare.ini" ]; then
         (
@@ -41,7 +51,7 @@ obtain_cert_for_domain() {
                 --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
                 --dns-cloudflare-propagation-seconds 30 \
                 -d "$_cert_dom" -d "*.$_cert_dom" \
-                --agree-tos --register-unsafely-without-email --non-interactive \
+                --agree-tos $_email_flag --non-interactive \
                 --key-type ecdsa >/dev/null 2>&1
         ) &
         show_spinner "Получение wildcard сертификата для *.$_cert_dom"
@@ -60,7 +70,7 @@ obtain_cert_for_domain() {
         (
             certbot certonly --standalone \
                 -d "$new_domain" \
-                --agree-tos --register-unsafely-without-email --non-interactive \
+                --agree-tos $_email_flag --non-interactive \
                 --http-01-port 80 \
                 --key-type ecdsa >/dev/null 2>&1
         ) &

@@ -331,6 +331,34 @@ db_restore() {
     ) &
     show_spinner "Остановка панели"
 
+    # Делаем страховочный бэкап текущей БД перед восстановлением
+    local safety_backup="${panel_dir}/backups/pre_restore_$(date +%Y-%m-%d_%H-%M).sql.gz"
+    mkdir -p "${panel_dir}/backups"
+    (
+        docker exec remnawave-db pg_dumpall -c -U postgres 2>/dev/null | gzip -9 > "$safety_backup"
+    ) &
+    show_spinner "Страховочный бэкап текущей БД"
+
+    if [ ! -s "$safety_backup" ]; then
+        rm -f "$safety_backup" 2>/dev/null
+        echo -e "${YELLOW}⚠️  Не удалось создать страховочный бэкап. Продолжить?${NC}"
+        if ! confirm_action; then
+            print_error "Операция отменена"
+            rm -rf "$tmp_extract" 2>/dev/null
+            (
+                cd "$panel_dir"
+                docker compose start remnawave remnawave-subscription-page >/dev/null 2>&1
+            ) &
+            show_spinner "Запуск панели"
+            sleep 2
+            return 0
+        fi
+    else
+        local _sb_size
+        _sb_size=$(du -h "$safety_backup" | awk '{print $1}')
+        echo -e "${GREEN}✅${NC} Страховочный бэкап: ${WHITE}${_sb_size}${NC}"
+    fi
+
     # Очищаем базу данных перед восстановлением
     (
         docker exec remnawave-db psql -U postgres -d postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
