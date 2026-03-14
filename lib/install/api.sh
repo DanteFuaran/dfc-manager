@@ -319,7 +319,11 @@ create_config_profile() {
             log: { loglevel: "warning" },
             dns: {
                 queryStrategy: "UseIPv4",
-                servers: [{ address: "https://dns.google/dns-query", skipFallback: false }]
+                servers: [
+                    { address: "https://dns.google/dns-query", skipFallback: false },
+                    { address: "https://1.1.1.1/dns-query", skipFallback: false },
+                    { address: "https://dns.quad9.net/dns-query", skipFallback: false }
+                ]
             },
             inbounds: [{
                 tag: $inbound_tag,
