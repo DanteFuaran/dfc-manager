@@ -161,6 +161,16 @@ SYSCTL
         sed -i '/^#.*en_US.UTF-8/s/^#//' /etc/locale.gen 2>/dev/null || true
         locale-gen >/dev/null 2>&1 || true
 
+        # DNS fallback — защита от потери DNS при перезагрузке systemd-resolved
+        if [ -d /etc/systemd/resolved.conf.d ] || mkdir -p /etc/systemd/resolved.conf.d 2>/dev/null; then
+            cat > /etc/systemd/resolved.conf.d/dns-fallback.conf <<'DNSCONF'
+[Resolve]
+DNS=8.8.8.8 1.1.1.1
+FallbackDNS=8.8.4.4 9.9.9.9
+DNSCONF
+            systemctl restart systemd-resolved >/dev/null 2>&1 || true
+        fi
+
         # Создаём директорию для флага, если её нет
         mkdir -p "${DIR_REMNAWAVE}" 2>/dev/null || true
         touch "${DIR_REMNAWAVE}install_packages"
