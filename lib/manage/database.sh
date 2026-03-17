@@ -366,11 +366,13 @@ db_restore() {
     show_spinner "Подготовка базы данных"
 
     # Восстанавливаем дамп
+    # Фильтруем ALTER ROLE ... PASSWORD — pg_dumpall включает хэш пароля с исходного
+    # сервера, что перезаписывает текущий пароль и ломает аутентификацию после восстановления
     (
         if [[ "$dump_to_restore" == *.gz ]]; then
-            zcat "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+            zcat "$dump_to_restore" | grep -v -E "^ALTER ROLE .* PASSWORD " | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
         else
-            cat "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+            grep -v -E "^ALTER ROLE .* PASSWORD " "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
         fi
     ) &
     show_spinner "Загрузка данных из бэкапа"
