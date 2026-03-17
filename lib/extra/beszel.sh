@@ -169,15 +169,25 @@ YAML
         # Удаляем существующий блок beszel если есть
         sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
 
+        # Определяем режим: panel+node (unix socket) или panel-only (порт 443)
+        local LISTEN_BLOCK REAL_IP_BLOCK
+        if grep -q 'listen unix:/dev/shm/nginx.sock' "$NGINX_CONF"; then
+            LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+            REAL_IP_BLOCK="    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;"
+        else
+            LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+            REAL_IP_BLOCK=""
+        fi
+
         # Вставляем перед закрывающей скобкой http {}
         local BESZEL_BLOCK
         BESZEL_BLOCK=$(cat <<NGINX
 # >>> BESZEL
 server {
     server_name ${BESZEL_DOMAIN};
-    listen 443 ssl;
-    listen [::]:443 ssl;
+$(echo -e "$LISTEN_BLOCK")
     http2 on;
+$([ -n "$REAL_IP_BLOCK" ] && echo -e "\n$REAL_IP_BLOCK")
 
     ssl_certificate     ${SSL_CERT};
     ssl_certificate_key ${SSL_KEY};
