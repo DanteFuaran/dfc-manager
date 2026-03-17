@@ -174,12 +174,16 @@ YAML
         BESZEL_BLOCK=$(cat <<NGINX
 # >>> BESZEL
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     server_name ${BESZEL_DOMAIN};
+    listen 443 ssl;
+    listen [::]:443 ssl;
     http2 on;
 
     ssl_certificate     ${SSL_CERT};
     ssl_certificate_key ${SSL_KEY};
+    ssl_trusted_certificate ${SSL_CERT};
+
+    access_log /dev/stdout combined;
 
     location / {
         proxy_pass http://127.0.0.1:8090;
