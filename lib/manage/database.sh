@@ -29,11 +29,12 @@ db_backup() {
     local backup_dir="${panel_dir}/backups"
     mkdir -p "$backup_dir"
 
-    local mn_ts mn_dump mn_dir mn_final mn_tmp
+    local mn_ts mn_dump mn_dir mn_final mn_tmp mn_bot_dump
     mn_ts=$(date +%Y-%m-%d_%H-%M)
     mn_tmp="/tmp/_rw_backup_$$"
     mkdir -p "$mn_tmp"
     mn_dump="${mn_tmp}/dump_${mn_ts}.sql.gz"
+    mn_bot_dump="${mn_tmp}/bot_dump_${mn_ts}.sql.gz"
     mn_dir="${mn_tmp}/dir_${mn_ts}.tar.gz"
     mn_final="${backup_dir}/Remnawave_${mn_ts}.tar.gz"
 
@@ -49,6 +50,18 @@ db_backup() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
         return 1
+    fi
+
+    # Бекап базы бота (remnasale-db), если контейнер запущен
+    if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
+        (
+            docker exec remnasale-db pg_dump -U remnasale -d remnasale 2>/dev/null | gzip -9 > "$mn_bot_dump"
+        ) &
+        show_spinner "Создание дампа базы бота"
+
+        if [ ! -s "$mn_bot_dump" ]; then
+            rm -f "$mn_bot_dump" 2>/dev/null
+        fi
     fi
 
     (
@@ -232,6 +245,7 @@ db_restore() {
 
     # Определяем формат и извлекаем дамп
     local dump_to_restore=""
+    local bot_dump_to_restore=""
     local tmp_extract=""
     local is_archive=false
 
@@ -248,6 +262,7 @@ db_restore() {
 
         # Ищем дамп внутри
         dump_to_restore=$(find "$tmp_extract" -maxdepth 1 -name "dump_*.sql.gz" | head -1)
+        bot_dump_to_restore=$(find "$tmp_extract" -maxdepth 1 -name "bot_dump_*.sql.gz" | head -1)
 
         if [ -z "$dump_to_restore" ] || [ ! -s "$dump_to_restore" ]; then
             print_error "Дамп БД не найден в архиве"
@@ -315,6 +330,7 @@ db_restore() {
 
     # Для "только пользователи" — сохраняем данные администратора и API токенов
     local admin_backup_file=""
+    local referral_backup_file=""
     if [ "$restore_type" = "users_only" ]; then
         admin_backup_file="/tmp/_rw_admin_save_$$.sql"
         (
@@ -322,6 +338,16 @@ db_restore() {
                 --data-only --table=admin --table=api_tokens 2>/dev/null > "$admin_backup_file"
         ) &
         show_spinner "Сохранение данных администратора"
+
+        # Сохраняем реферальные данные из базы бота
+        if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
+            referral_backup_file="/tmp/_rw_referral_save_$$.sql"
+            (
+                docker exec remnasale-db pg_dump -U remnasale -d remnasale \
+                    --data-only --table=referrals --table=referral_rewards 2>/dev/null > "$referral_backup_file"
+            ) &
+            show_spinner "Сохранение реферальных данных"
+        fi
     fi
 
     # Останавливаем панель и страницу подписки
@@ -377,8 +403,32 @@ db_restore() {
     ) &
     show_spinner "Загрузка данных из бэкапа"
 
+    # Восстановление базы бота (remnasale-db), если дамп найден в архиве
+    if [ -n "$bot_dump_to_restore" ] && [ -s "$bot_dump_to_restore" ]; then
+        if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
+            (
+                docker exec remnasale-db psql -U remnasale -d remnasale -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+                zcat "$bot_dump_to_restore" | docker exec -i remnasale-db psql -U remnasale -d remnasale >/dev/null 2>&1
+            ) &
+            show_spinner "Загрузка базы бота из бэкапа"
+        fi
+    fi
+
     # Очистка временных файлов извлечения
     rm -rf "$tmp_extract" 2>/dev/null
+
+    # Очистка кеша Redis бота (удаляет стеки диалогов, FSM состояния)
+    if docker ps --filter "name=remnasale-redis" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-redis"; then
+        local redis_pass
+        redis_pass=$(grep '^REDIS_PASSWORD=' /opt/remnasale/.env 2>/dev/null | cut -d= -f2-)
+        if [ -n "$redis_pass" ]; then
+            (
+                docker exec remnasale-redis valkey-cli -a "$redis_pass" FLUSHALL >/dev/null 2>&1 || \
+                docker exec remnasale-redis redis-cli -a "$redis_pass" FLUSHALL >/dev/null 2>&1
+            ) &
+            show_spinner "Очистка кеша бота"
+        fi
+    fi
 
     if [ "$restore_type" = "users_only" ]; then
         # Восстанавливаем сохранённого администратора и API токены
@@ -390,6 +440,18 @@ db_restore() {
         ) &
         show_spinner "Восстановление администратора"
         rm -f "$admin_backup_file" 2>/dev/null
+
+        # Восстанавливаем реферальные данные в базу бота
+        if [ -n "$referral_backup_file" ] && [ -s "$referral_backup_file" ]; then
+            if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
+                (
+                    docker exec remnasale-db psql -U remnasale -d remnasale -c "TRUNCATE TABLE referral_rewards CASCADE; TRUNCATE TABLE referrals CASCADE;" >/dev/null 2>&1
+                    cat "$referral_backup_file" | docker exec -i remnasale-db psql -U remnasale -d remnasale >/dev/null 2>&1
+                ) &
+                show_spinner "Восстановление реферальных данных"
+            fi
+            rm -f "$referral_backup_file" 2>/dev/null
+        fi
 
         # Запускаем панель
         (
