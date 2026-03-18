@@ -31,7 +31,7 @@ manage_stop() {
 manage_update() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔄 ОБНОВЛЕНИЕ КОМПОНЕНТОВ${NC}"
+    echo -e "${GREEN}           🔄 ОБНОВЛЕНИЕ КОМПОНЕНТОВ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -63,8 +63,10 @@ manage_update() {
     ) &
     show_spinner "Очистка старых образов"
 
+    echo
     print_success "Обновление завершено"
     echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
