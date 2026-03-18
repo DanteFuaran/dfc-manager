@@ -7,16 +7,17 @@ DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
 
 # Версия, ветка и репозиторий — единый источник: version
-SCRIPT_VERSION=""
+SCRIPT_VERSION="0.1.2"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-remna-install.git"
 if [ -f "${DIR_REMNAWAVE}version" ]; then
-    SCRIPT_VERSION=$(grep '^version:' "${DIR_REMNAWAVE}version" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+    _sv=$(grep '^version:' "${DIR_REMNAWAVE}version" 2>/dev/null | cut -d: -f2 | tr -d ' ')
     _br=$(grep '^branch:' "${DIR_REMNAWAVE}version" 2>/dev/null | cut -d: -f2 | tr -d ' ')
     _rp=$(grep '^repo:' "${DIR_REMNAWAVE}version" 2>/dev/null | cut -d: -f2- | tr -d ' ')
+    [ -n "$_sv" ] && SCRIPT_VERSION="$_sv"
     [ -n "$_br" ] && SCRIPT_BRANCH="$_br"
     [ -n "$_rp" ] && SCRIPT_REPO="$_rp"
-    unset _br _rp
+    unset _sv _br _rp
 fi
 
 SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/remnawave.sh"
