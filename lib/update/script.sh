@@ -93,7 +93,7 @@ update_script() {
     (
         rm -rf "${DIR_REMNAWAVE}"
         mkdir -p "$(dirname "${DIR_REMNAWAVE%/}")"
-        git clone --depth 1 -b main "https://github.com/DanteFuaran/dfc-remna-install.git" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
+        git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
         chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
         ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
         ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
@@ -101,6 +101,12 @@ update_script() {
     show_spinner "Загрузка обновлений"
 
     if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
+        # Гарантируем наличие version файла (fallback если git clone не принёс)
+        if [ ! -f "${DIR_REMNAWAVE}version" ] || ! grep -q '^version:' "${DIR_REMNAWAVE}version" 2>/dev/null; then
+            printf 'version: %s\nbranch: %s\nrepo: %s\n' \
+                "${remote_version}" "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
+                > "${DIR_REMNAWAVE}version"
+        fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo

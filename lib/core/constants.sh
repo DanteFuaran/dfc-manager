@@ -7,7 +7,7 @@ DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
 
 # Версия, ветка и репозиторий — единый источник: version
-SCRIPT_VERSION="0.1.3"
+SCRIPT_VERSION="0.1.4"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-remna-install.git"
 if [ -f "${DIR_REMNAWAVE}version" ]; then
