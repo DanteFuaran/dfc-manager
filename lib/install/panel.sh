@@ -120,6 +120,7 @@ installation_panel() {
         generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN"
         generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
+        cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Создание файлов" || true
 

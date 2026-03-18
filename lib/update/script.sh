@@ -101,11 +101,15 @@ update_script() {
     show_spinner "Загрузка обновлений"
 
     if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
-        # Гарантируем наличие version файла (fallback если git clone не принёс)
+        # Гарантируем наличие version файла (в директории скрипта)
         if [ ! -f "${DIR_REMNAWAVE}version" ] || ! grep -q '^version:' "${DIR_REMNAWAVE}version" 2>/dev/null; then
             printf 'version: %s\nbranch: %s\nrepo: %s\n' \
                 "${remote_version}" "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
                 > "${DIR_REMNAWAVE}version"
+        fi
+        # Копируем version файл в директорию панели (рядом с .env)
+        if [ -d "${DIR_PANEL}" ]; then
+            cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
         fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
