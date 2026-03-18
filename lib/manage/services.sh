@@ -31,7 +31,7 @@ manage_stop() {
 manage_update() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}           🔄 ОБНОВЛЕНИЕ КОМПОНЕНТОВ${NC}"
+    echo -e "${GREEN}        🔄 ОБНОВЛЕНИЕ КОМПОНЕНТОВ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -43,14 +43,28 @@ manage_update() {
         return
     fi
 
-    local rw_path
+    local rw_path pull_tmp pull_count
     rw_path=$(detect_remnawave_path) || return
+    pull_tmp=$(mktemp)
 
     (
         cd "$rw_path"
-        docker compose pull >/dev/null 2>&1
+        docker compose pull > "$pull_tmp" 2>&1
     ) &
     show_spinner "Скачивание обновлений"
+
+    pull_count=$(grep -cE 'Pull complete|Downloaded newer|Pulled' "$pull_tmp" 2>/dev/null || true)
+    pull_count="${pull_count:-0}"
+    rm -f "$pull_tmp"
+
+    if [ "${pull_count}" -eq 0 ]; then
+        echo
+        print_success "Обновление компонентов не требуется."
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return
+    fi
 
     (
         cd "$rw_path"
