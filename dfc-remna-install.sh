@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════
 #   DFC REMNA-INSTALL — Установщик Remnawave VPN Panel
 #   https://github.com/DanteFuaran/dfc-remna-install
-#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
+#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/dfc-remna-install.sh)
 # ═══════════════════════════════════════════════════════════
 
 # ─── Bootstrap: запуск через curl или не из установленной копии ─────────────
@@ -18,7 +18,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
-    if ! timeout 60 git clone --depth 1 -b main \
+    if ! timeout 60 git clone --depth 1 -b dev \
             "https://github.com/DanteFuaran/dfc-remna-install.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
         echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${_NC}"

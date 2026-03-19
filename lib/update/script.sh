@@ -16,7 +16,7 @@ install_script() {
     fi
 
     # Первичная установка — скачиваем полный архив
-    if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-remna-install/archive/refs/heads/main.tar.gz" \
+    if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-remna-install/archive/refs/heads/dev.tar.gz" \
         | tar -xz -C "${DIR_REMNAWAVE}" --strip-components=1; then
         echo -e "${RED}✖ Не удалось скачать скрипт${NC}"
         exit 1

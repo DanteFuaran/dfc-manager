@@ -20,7 +20,7 @@
 ## 🚀 Быстрый старт
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
+cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/dfc-remna-install.sh)
 ```
 
 <sub>После установки управление доступно через команду <b><code>remnawave</code></b> или <b><code>rw</code></b></sub>

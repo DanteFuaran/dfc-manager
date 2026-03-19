@@ -8,7 +8,7 @@ DIR_NODE="/opt/remnanode/"
 
 # Версия, ветка и репозиторий — единый источник: /opt/remnawave/version
 SCRIPT_VERSION="0.1.7"
-SCRIPT_BRANCH="main"
+SCRIPT_BRANCH="dev"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-remna-install.git"
 # Приоритет: /opt/remnawave/version (рядом с .env), затем /usr/local/remnawave/version
 for _vf in "${DIR_PANEL}version" "${DIR_REMNAWAVE}version"; do
@@ -25,7 +25,7 @@ for _vf in "${DIR_PANEL}version" "${DIR_REMNAWAVE}version"; do
 done
 unset _vf
 
-SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/remnawave.sh"
 # Файлы кэша проверки обновлений (в стабильной директории, а не в /tmp)
 UPDATE_AVAILABLE_FILE="${DIR_REMNAWAVE}update_available"
 UPDATE_CHECK_TIME_FILE="${DIR_REMNAWAVE}last_update_check"

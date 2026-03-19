@@ -20,7 +20,7 @@
 ## 🚀 Quick Start
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/main/dfc-remna-install.sh)
+cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/dfc-remna-install.sh)
 ```
 
 <sub>After installation, manage everything with <b><code>remnawave</code></b> or <b><code>rw</code></b></sub>
