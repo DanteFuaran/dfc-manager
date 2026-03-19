@@ -8,10 +8,12 @@ main_menu() {
     while true; do
         local has_panel=false
         local has_node=false
+        local has_subpage=false
         is_panel_installed && has_panel=true
         is_node_installed  && has_node=true
+        is_subpage_remote_installed && has_subpage=true
         local is_installed=false
-        { [ "$has_panel" = true ] || [ "$has_node" = true ]; } && is_installed=true
+        { [ "$has_panel" = true ] || [ "$has_node" = true ] || [ "$has_subpage" = true ]; } && is_installed=true
 
         # Управляем симлинками в зависимости от установки
         if [ "$is_installed" = true ]; then
@@ -28,8 +30,12 @@ main_menu() {
             install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель и Нода${NC}"
         elif [ "$has_panel" = true ]; then
             install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель${NC}"
+        elif [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
+            install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода и Страница подписки${NC}"
         elif [ "$has_node" = true ]; then
             install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода${NC}"
+        elif [ "$has_subpage" = true ]; then
+            install_status="\n${DARKGRAY}    Установлено: ${GREEN}Страница подписки${NC}"
         fi
         local menu_title="    🚀 REMNAWAVE INSTALLER v$SCRIPT_VERSION${install_status}\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
         if [ -f "${UPDATE_AVAILABLE_FILE}" ]; then
@@ -84,13 +90,15 @@ main_menu() {
             install)
                 while true; do
                     local -a inst_items=() inst_actions=()
-                    if ! is_panel_installed && ! is_node_installed; then
-                        inst_items+=("📦  Панель + Нода (один сервер)"); inst_actions+=("full")
-                        inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
-                    fi
                     if ! is_panel_installed; then
-                        inst_items+=("🖥️   Только панель"); inst_actions+=("panel")
+                        inst_items+=("📦  Панель + Страница подписки"); inst_actions+=("panel_sub")
+                        inst_items+=("🖥️   Только панель");              inst_actions+=("panel_only")
                     fi
+                    inst_items+=("📄  Только страница подписки");         inst_actions+=("subpage")
+                    if ! is_panel_installed && ! is_node_installed; then
+                        inst_items+=("📦  Панель + Страница подписки + Нода (один сервер)"); inst_actions+=("full")
+                    fi
+                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                     inst_items+=("🌐  Только нода");    inst_actions+=("node")
                     if is_panel_installed; then
                         inst_items+=("➕  Подключить ноду в панель"); inst_actions+=("add_node")
@@ -103,10 +111,12 @@ main_menu() {
                     [[ $install_choice -eq 255 ]] && break
                     local inst_action="${inst_actions[$install_choice]:-back}"
                     case "$inst_action" in
-                        full)  installation_full  || break ;;
-                        panel) installation_panel || break ;;
-                        node)  installation_node  || break ;;
-                        add_node) add_node_to_panel || break ;;
+                        full)       installation_full  || break ;;
+                        panel_sub)  installation_panel || break ;;
+                        panel_only) installation_panel false || break ;;
+                        subpage)    installation_subpage || break ;;
+                        node)       installation_node  || break ;;
+                        add_node)   add_node_to_panel || break ;;
                         *) break ;;
                     esac
                 done ;;

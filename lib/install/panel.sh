@@ -3,6 +3,8 @@
 # ═══════════════════════════════════════════════
 
 installation_panel() {
+    local with_subpage="${1:-true}"
+
     # Гарантируем валидную рабочую директорию перед началом
     cd /opt 2>/dev/null || cd / 2>/dev/null
 
@@ -29,7 +31,11 @@ installation_panel() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 УСТАНОВКА ТОЛЬКО ПАНЕЛИ${NC}"
+    if [ "$with_subpage" = true ]; then
+        echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
+    else
+        echo -e "${GREEN}   📦 УСТАНОВКА ТОЛЬКО ПАНЕЛИ${NC}"
+    fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
 
@@ -39,7 +45,11 @@ installation_panel() {
     fi
 
     prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+
+    local SUB_DOMAIN=""
+    if [ "$with_subpage" = true ]; then
+        prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    fi
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
@@ -49,7 +59,9 @@ installation_panel() {
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
-    domains_to_check["$SUB_DOMAIN"]=1
+    if [ "$with_subpage" = true ]; then
+        domains_to_check["$SUB_DOMAIN"]=1
+    fi
 
     local needs_certs=false
     if check_if_certificates_needed domains_to_check; then
@@ -104,10 +116,10 @@ installation_panel() {
     local PANEL_CERT_DOMAIN SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" -eq 1 ]; then
         PANEL_CERT_DOMAIN=$(extract_domain "$PANEL_DOMAIN")
-        SUB_CERT_DOMAIN=$(extract_domain "$SUB_DOMAIN")
+        [ "$with_subpage" = true ] && SUB_CERT_DOMAIN=$(extract_domain "$SUB_DOMAIN")
     else
         PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
-        SUB_CERT_DOMAIN="$SUB_DOMAIN"
+        [ "$with_subpage" = true ] && SUB_CERT_DOMAIN="$SUB_DOMAIN"
     fi
 
     # Генерируем cookie для защиты панели
@@ -117,9 +129,15 @@ installation_panel() {
 
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
-        generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN"
-        generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
-            "$COOKIE_NAME" "$COOKIE_VALUE"
+        if [ "$with_subpage" = true ]; then
+            generate_docker_compose_panel "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN"
+            generate_nginx_conf_panel "$PANEL_DOMAIN" "$SUB_DOMAIN" "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
+                "$COOKIE_NAME" "$COOKIE_VALUE"
+        else
+            generate_docker_compose_panel_only "$PANEL_CERT_DOMAIN"
+            generate_nginx_conf_panel_only "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" \
+                "$COOKIE_NAME" "$COOKIE_VALUE"
+        fi
         cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Создание файлов" || true
@@ -173,7 +191,9 @@ installation_panel() {
         echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
         echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
-        echo -e "${RED}⚠️  API токен не создан автоматически. Создайте вручную.${NC}"
+        if [ "$with_subpage" = true ]; then
+            echo -e "${RED}⚠️  API токен не создан автоматически. Создайте вручную.${NC}"
+        fi
         echo
         echo -e "${RED}⚠️  ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!${NC}"
         echo
@@ -181,21 +201,23 @@ installation_panel() {
         return
     fi
 
-    # 2. Создание API токена для subscription-page
-    print_action "Создание API токена для страницы подписки..."
-    create_api_token "$domain_url" "$token" "$target_dir"
+    if [ "$with_subpage" = true ]; then
+        # 2. Создание API токена для subscription-page
+        print_action "Создание API токена для страницы подписки..."
+        create_api_token "$domain_url" "$token" "$target_dir"
 
-    # 3. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
-    print_action "Перезапуск сервисов с обновлённой конфигурацией..."
-    (
-        cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Запуск контейнеров" || true
+        # 3. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
+        print_action "Перезапуск сервисов с обновлённой конфигурацией..."
+        (
+            cd /opt/remnawave
+            docker compose down >/dev/null 2>&1
+            docker compose up -d >/dev/null 2>&1
+        ) &
+        show_spinner "Запуск контейнеров" || true
 
-    # Ожидаем готовность после перезапуска
-    show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+        # Ожидаем готовность после перезапуска
+        show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    fi
 
     # 4. Сброс суперадмина — при первом входе пользователь задаст свои данные
     print_action "Сброс суперадмина для первого входа..."

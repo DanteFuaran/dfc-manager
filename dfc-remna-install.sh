@@ -66,6 +66,7 @@ source "${SCRIPT_DIR}/lib/install/config.sh"
 source "${SCRIPT_DIR}/lib/install/full.sh"
 source "${SCRIPT_DIR}/lib/install/panel.sh"
 source "${SCRIPT_DIR}/lib/install/node.sh"
+source "${SCRIPT_DIR}/lib/install/subpage.sh"
 
 # Manage: управление установкой
 source "${SCRIPT_DIR}/lib/manage/detect.sh"
