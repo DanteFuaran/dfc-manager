@@ -14,11 +14,22 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         exec "$_INSTALL_SCRIPT" "$@"
     fi
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
+    # Ветка: читаем из version-файла рядом со скриптом или из уже установленной копии.
+    # Если запуск через curl/pipe — файловая система недоступна, используем значение из version-файла в репозитории.
+    _BRANCH="dev"   # <- этот фолбэк меняется только при смене ветки
+    for _vf2 in "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)")/version" \
+                "${_INSTALL_DIR}/version"; do
+        if [ -f "$_vf2" ]; then
+            _b2=$(grep '^branch:' "$_vf2" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+            [ -n "$_b2" ] && { _BRANCH="$_b2"; break; }
+        fi
+    done
+    unset _vf2 _b2
     trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 130' INT TERM
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
-    if ! timeout 60 git clone --depth 1 -b dev \
+    if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
             "https://github.com/DanteFuaran/dfc-remna-install.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
         echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${_NC}"

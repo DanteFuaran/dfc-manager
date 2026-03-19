@@ -25,7 +25,8 @@ for _vf in "${DIR_PANEL}version" "${DIR_REMNAWAVE}version"; do
 done
 unset _vf
 
-SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/remnawave.sh"
+# SCRIPT_URL строится динамически из $SCRIPT_BRANCH — менять только version-файл
+SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/${SCRIPT_BRANCH}/remnawave.sh"
 # Файлы кэша проверки обновлений (в стабильной директории, а не в /tmp)
 UPDATE_AVAILABLE_FILE="${DIR_REMNAWAVE}update_available"
 UPDATE_CHECK_TIME_FILE="${DIR_REMNAWAVE}last_update_check"
