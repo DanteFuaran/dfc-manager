@@ -198,12 +198,14 @@ remove_script_all() {
 
     # Remnawave
     (
-        cd "${DIR_PANEL}" 2>/dev/null
-        docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "${DIR_PANEL}" ] && cd "${DIR_PANEL}" && docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "/opt/remnasubpage" ] && cd "/opt/remnasubpage" && docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "${DIR_NODE}" ] && cd "${DIR_NODE}" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         docker system prune -af >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление контейнеров Remnawave"
     rm -rf "${DIR_PANEL}"
+    rm -rf "/opt/remnasubpage"
     rm -rf "${DIR_NODE}"
     rm -f /usr/local/bin/remnawave
     rm -f /usr/local/bin/rw
