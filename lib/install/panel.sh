@@ -49,6 +49,18 @@ installation_panel() {
     local SUB_DOMAIN=""
     if [ "$with_subpage" = true ]; then
         prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    else
+        echo
+        echo -e "${DARKGRAY}Укажите домен страницы подписки, которая будет${NC}"
+        echo -e "${DARKGRAY}установлена на удалённом сервере (для генерации ссылок подписки).${NC}"
+        while true; do
+            reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN
+            if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
+                break
+            else
+                print_error "Введите корректный домен"
+            fi
+        done
     fi
 
     # Автогенерация учётных данных администратора
@@ -191,9 +203,7 @@ installation_panel() {
         echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
         echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
-        if [ "$with_subpage" = true ]; then
-            echo -e "${RED}⚠️  API токен не создан автоматически. Создайте вручную.${NC}"
-        fi
+        echo -e "${RED}⚠️  API токен не создан автоматически. Создайте вручную.${NC}"
         echo
         echo -e "${RED}⚠️  ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!${NC}"
         echo
@@ -201,11 +211,11 @@ installation_panel() {
         return
     fi
 
-    if [ "$with_subpage" = true ]; then
-        # 2. Создание API токена для subscription-page
-        print_action "Создание API токена для страницы подписки..."
-        create_api_token "$domain_url" "$token" "$target_dir"
+    # 2. Создание API токена для subscription-page
+    print_action "Создание API токена для страницы подписки..."
+    create_api_token "$domain_url" "$token" "$target_dir"
 
+    if [ "$with_subpage" = true ]; then
         # 3. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
         print_action "Перезапуск сервисов с обновлённой конфигурацией..."
         (
@@ -242,6 +252,18 @@ installation_panel() {
     echo -e "${YELLOW}🔗 Ссылка для первого входа в панель:${NC}"
     echo -e "${WHITE}https://${PANEL_DOMAIN}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     echo
+    if [ "$with_subpage" = false ]; then
+        local api_token_display
+        api_token_display=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+        echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
+        echo
+        echo -e "${YELLOW}📄 Для установки страницы подписки на удалённом сервере:${NC}"
+        echo -e "${WHITE}URL панели:${NC}   https://$PANEL_DOMAIN"
+        if [ -n "$api_token_display" ]; then
+            echo -e "${WHITE}API токен:${NC}    $api_token_display"
+        fi
+        echo
+    fi
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
     echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
     echo

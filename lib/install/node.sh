@@ -128,13 +128,25 @@ installation_node_local() {
     echo
     print_action "Определение конфигурации панели..."
 
+    # Определяем, есть ли локальная страница подписки
+    local has_local_sub=false
+    if grep -q "remnawave-subscription-page" /opt/remnawave/docker-compose.yml 2>/dev/null; then
+        has_local_sub=true
+    fi
+
     # Извлекаем домены из nginx.conf
     local panel_domain sub_domain
     panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '1p')
-    sub_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '2p')
 
-    if [ -z "$panel_domain" ] || [ -z "$sub_domain" ]; then
-        print_error "Не удалось определить домены из nginx.conf"
+    if [ "$has_local_sub" = true ]; then
+        sub_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '2p')
+    else
+        # Страница подписки на удалённом сервере — берём домен из .env
+        sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$panel_domain" ]; then
+        print_error "Не удалось определить домен панели из nginx.conf"
         echo
         show_continue_prompt || return 1
         return
@@ -156,22 +168,27 @@ installation_node_local() {
     # Определяем домены сертификатов
     local panel_cert_domain sub_cert_domain
     panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
-    sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
     if [ -z "$panel_cert_domain" ]; then
         panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
     fi
-    if [ -z "$sub_cert_domain" ]; then
-        sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
-    fi
     [ -z "$panel_cert_domain" ] && panel_cert_domain="$panel_domain"
-    [ -z "$sub_cert_domain" ] && sub_cert_domain="$sub_domain"
+
+    if [ "$has_local_sub" = true ]; then
+        sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+        if [ -z "$sub_cert_domain" ]; then
+            sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
+        fi
+        [ -z "$sub_cert_domain" ] && sub_cert_domain="$sub_domain"
+    fi
 
     # Автоопределяем метод сертификации
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
     print_success "Панель: $panel_domain"
-    print_success "Подписка: $sub_domain"
+    if [ -n "$sub_domain" ]; then
+        print_success "Подписка: $sub_domain$([ \"$has_local_sub\" = false ] && echo ' (удалённая)')"
+    fi
     print_success "Метод сертификатов: $([ "$AUTO_CERT_METHOD" = "1" ] && echo "Cloudflare DNS-01" || echo "ACME HTTP-01")"
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     # ─── Запрашиваем selfsteal домен ───
@@ -295,9 +312,13 @@ installation_node_local() {
 
     mkdir -p /var/www/html
 
-    # ─── Перегенерация docker-compose.yml (full: с нодой) ───
+    # ─── Перегенерация docker-compose.yml (с нодой) ───
     (
-        generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN"
+        if [ "$has_local_sub" = true ]; then
+            generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN"
+        else
+            generate_docker_compose_panel_with_node "$panel_cert_domain" "$NODE_CERT_DOMAIN"
+        fi
     ) &
     show_spinner "Обновление docker-compose.yml" || true
 
@@ -312,10 +333,18 @@ installation_node_local() {
         sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$existing_api_token|" /opt/remnawave/.env
     fi
 
-    # ─── Перегенерация nginx.conf (full: с selfsteal) ───
-    (generate_nginx_conf_full "$panel_domain" "$sub_domain" "$SELFSTEAL_DOMAIN" \
-        "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN" \
-        "$COOKIE_NAME" "$COOKIE_VALUE") &
+    # ─── Перегенерация nginx.conf (с selfsteal) ───
+    (
+        if [ "$has_local_sub" = true ]; then
+            generate_nginx_conf_full "$panel_domain" "$sub_domain" "$SELFSTEAL_DOMAIN" \
+                "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN" \
+                "$COOKIE_NAME" "$COOKIE_VALUE"
+        else
+            generate_nginx_conf_panel_with_node "$panel_domain" "$SELFSTEAL_DOMAIN" \
+                "$panel_cert_domain" "$NODE_CERT_DOMAIN" \
+                "$COOKIE_NAME" "$COOKIE_VALUE"
+        fi
+    ) &
     show_spinner "Обновление nginx.conf" || true
 
     # ─── Открываем порты для ноды ───
@@ -444,9 +473,11 @@ installation_node_local() {
         print_action "Создание API токена для подписок..."
         if create_api_token "$domain_url" "$token" "/opt/remnawave"; then
             print_success "API токен создан"
-            # Перезапускаем subscription-page с новым токеном
-            (cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1) &
-            show_spinner "Перезапуск subscription-page"
+            if [ "$has_local_sub" = true ]; then
+                # Перезапускаем subscription-page с новым токеном
+                (cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1) &
+                show_spinner "Перезапуск subscription-page"
+            fi
         else
             print_error "Не удалось создать API токен"
             echo -e "${YELLOW}⚠️  Subscription-page может не работать. Создайте токен вручную:${NC}"
@@ -462,7 +493,11 @@ installation_node_local() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
-    echo -e "${WHITE}Подписка:${NC}     https://$sub_domain"
+    if [ "$has_local_sub" = true ]; then
+        echo -e "${WHITE}Подписка:${NC}     https://$sub_domain"
+    elif [ -n "$sub_domain" ]; then
+        echo -e "${WHITE}Подписка:${NC}     https://$sub_domain ${DARKGRAY}(удалённая)${NC}"
+    fi
     echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"

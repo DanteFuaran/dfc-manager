@@ -1452,6 +1452,397 @@ server {
 EOL
 }
 
+# ─── Docker-Compose: Панель + Нода (без страницы подписки) ───
+generate_docker_compose_panel_with_node() {
+    local panel_cert_domain=$1
+    local node_cert_domain=$2
+
+    local network_exists=false
+    if docker network ls --format '{{.Name}}' | grep -qx "remnawave-network"; then
+        network_exists=true
+    fi
+
+    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
+services:
+  remnawave-db:
+    image: postgres:18.1
+    container_name: 'remnawave-db'
+    hostname: remnawave-db
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - TZ=UTC
+    ports:
+      - '127.0.0.1:6767:5432'
+    volumes:
+      - remnawave-db-data:/var/lib/postgresql
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnawave:
+    image: remnawave/backend:2
+    container_name: remnawave
+    hostname: remnawave
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    env_file:
+      - .env
+    ports:
+      - '127.0.0.1:3000:${APP_PORT:-3000}'
+      - '127.0.0.1:3001:${METRICS_PORT:-3001}'
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:${METRICS_PORT:-3001}/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      remnawave-db:
+        condition: service_healthy
+      remnawave-redis:
+        condition: service_healthy
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnawave-redis:
+    image: valkey/valkey:9.0.0-alpine
+    container_name: remnawave-redis
+    hostname: remnawave-redis
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    networks:
+      - remnawave-network
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
+      --loglevel warning
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 3s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnawave-nginx:
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    hostname: remnawave-nginx
+    network_mode: host
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+COMPOSE_HEAD
+
+    for cert in "$panel_cert_domain" "$node_cert_domain"; do
+        cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_CERT
+      - /etc/letsencrypt/live/$cert/fullchain.pem:/etc/nginx/ssl/$cert/fullchain.pem:ro
+      - /etc/letsencrypt/live/$cert/privkey.pem:/etc/nginx/ssl/$cert/privkey.pem:ro
+COMPOSE_CERT
+    done
+
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
+      - /dev/shm:/dev/shm:rw
+      - /var/www/html:/var/www/html:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - remnawave
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    network_mode: host
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+    volumes:
+      - /dev/shm:/dev/shm:rw
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+COMPOSE_TAIL
+
+    if [ "$network_exists" = true ]; then
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXTERNAL'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    external: true
+
+COMPOSE_NETWORK_EXTERNAL
+    else
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+    external: false
+
+COMPOSE_NETWORK_NEW
+    fi
+
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
+volumes:
+  remnawave-db-data:
+    driver: local
+    external: false
+    name: remnawave-db-data
+COMPOSE_VOLUMES
+}
+
+# ─── Nginx: Панель + Нода (без страницы подписки) ───
+generate_nginx_conf_panel_with_node() {
+    local panel_domain=$1
+    local selfsteal_domain=$2
+    local panel_cert=$3
+    local node_cert=$4
+    local cookie_name=$5
+    local cookie_value=$6
+
+    _nginx_http_header > /opt/remnawave/nginx.conf
+
+    cat >> /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
+# Не логируем частые Telegram webhook-запросы
+map \$request_uri \$loggable {
+    ~*/api/v1/telegram 0;
+    default 1;
+}
+
+upstream remnawave {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ""      "";
+}
+
+map \$http_cookie \$auth_cookie {
+    default 0;
+    "~*${cookie_name}=${cookie_value}" 1;
+}
+
+map \$arg_${cookie_name} \$auth_query {
+    default 0;
+    "${cookie_value}" 1;
+}
+
+map "\$auth_cookie\$auth_query" \$authorized {
+    "~1" 1;
+    default 0;
+}
+
+map \$arg_${cookie_name} \$set_cookie_header {
+    "${cookie_value}" "${cookie_name}=${cookie_value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+    default "";
+}
+
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ecdh_curve X25519:prime256v1:secp384r1;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
+ssl_prefer_server_ciphers on;
+ssl_session_timeout 1d;
+ssl_session_cache shared:MozSSL:50m;
+ssl_session_tickets off;
+
+real_ip_header   proxy_protocol;
+set_real_ip_from unix:;
+
+server {
+    server_name $panel_domain;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+
+    access_log /dev/stdout combined if=\$loggable;
+
+    add_header Set-Cookie \$set_cookie_header;
+
+    location / {
+        error_page 418 = @unauthorized;
+        recursive_error_pages on;
+        if (\$authorized = 0) {
+            return 418;
+        }
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location @unauthorized {
+        root /var/www/html;
+        index index.html;
+    }
+}
+
+server {
+    server_name $selfsteal_domain;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+
+    root /var/www/html;
+    index index.html;
+
+    error_page 400 = @drop;
+
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    if (\$request_method !~ ^(GET|HEAD)\$) {
+        return 444;
+    }
+
+    location @drop {
+        return 444;
+    }
+
+    location ~ /\\. {
+        return 444;
+    }
+
+    location ~* \\.(php|asp|aspx|jsp|cgi)\$ {
+        return 444;
+    }
+    location ~* ^/(wp-|wordpress|wp-admin|wp-content|wp-includes|wp-json|xmlrpc) {
+        return 444;
+    }
+    location ~* ^/(cgi-bin|_debugbar|debug|telescope|actuator|console|admin|phpmyadmin|pma|myadmin) {
+        return 444;
+    }
+    location ~* ^/(vendor|node_modules|storage|backup|config|credentials|docker) {
+        return 444;
+    }
+
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\\nDisallow: /\\n";
+    }
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+    location = /favicon.png {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+
+    location = / {
+        try_files /index.html =444;
+    }
+
+    location ~* ^/(css|js|img|images|fonts|static)/ {
+        try_files \$uri =444;
+        expires 1h;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    location / {
+        return 444;
+    }
+}
+
+server {
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    ssl_reject_handshake on;
+    return 444;
+}
+} # ─── end http ───
+EOL
+}
+
 # ─── Docker-Compose: Только Страница подписки (standalone) ───
 generate_docker_compose_subpage() {
     local sub_cert_domain=$1

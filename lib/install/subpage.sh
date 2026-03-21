@@ -202,7 +202,8 @@ _installation_subpage_on_panel() {
     if [ "$has_local_node" = true ]; then
         # Panel + Node — нужно определить selfsteal домен и сертификат
         local selfsteal_domain node_cert_domain
-        selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '3p')
+        # Ищем selfsteal домен по server-блоку с root /var/www/html (не зависит от позиции)
+        selfsteal_domain=$(grep -B5 'root /var/www/html' /opt/remnawave/nginx.conf | grep -oP 'server_name\s+\K[^;]+' | head -1)
         node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
 
