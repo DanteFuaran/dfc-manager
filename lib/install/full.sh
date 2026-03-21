@@ -145,6 +145,13 @@ installation_full() {
     network_gateway=$(echo "$network_info" | awk '{print $1}')
     network_subnet=$(echo "$network_info" | awk '{print $2}')
 
+    # Публичный IP сервера — нужен для UFW: Docker MASQUERADE'ит трафик контейнеров
+    # на внешний IP, поэтому allow from docker-subnet не срабатывает для порта 2222
+    local server_public_ip
+    server_public_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
+                       curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
+                       hostname -I | awk '{print $1}')
+
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
         generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
@@ -157,7 +164,11 @@ installation_full() {
 
     (
         setup_firewall
+        # Docker MASQUERADE: трафик контейнера к внешнему IP сервера приходит от
+        # публичного IP (не от docker-subnet), поэтому добавляем все три источника
         ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
+        ufw allow from "${network_gateway}" to any port 2222 >/dev/null 2>&1 || true
+        [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port 2222 >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true

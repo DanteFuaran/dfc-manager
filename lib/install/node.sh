@@ -350,6 +350,15 @@ installation_node_local() {
     show_spinner "Обновление nginx.conf" || true
 
     # ─── Открываем порты для ноды ───
+    # Docker MASQUERADE: panel container → external IP → port 2222
+    # Добавляем публичный IP сервера, docker gateway и subnet
+    local _node_server_ip
+    _node_server_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
+                      curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
+                      hostname -I | awk '{print $1}')
+    ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
+    ufw allow from "${network_gateway}" to any port 2222 >/dev/null 2>&1 || true
+    [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port 2222 >/dev/null 2>&1 || true
     ufw allow 443/tcp >/dev/null 2>&1 || true
 
     # ─── Запуск сервисов ───
