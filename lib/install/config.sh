@@ -1393,7 +1393,12 @@ map \$arg_${cookie_name} \$auth_query {
     "${cookie_value}" 1;
 }
 
-map "\$auth_cookie\$auth_query" \$authorized {
+map \$http_authorization \$is_bearer_auth {
+    default 0;
+    "~*^Bearer \S+" 1;
+}
+
+map "\$auth_cookie\$auth_query\$is_bearer_auth" \$authorized {
     "~1" 1;
     default 0;
 }
@@ -1697,7 +1702,12 @@ map \$arg_${cookie_name} \$auth_query {
     "${cookie_value}" 1;
 }
 
-map "\$auth_cookie\$auth_query" \$authorized {
+map \$http_authorization \$is_bearer_auth {
+    default 0;
+    "~*^Bearer \S+" 1;
+}
+
+map "\$auth_cookie\$auth_query\$is_bearer_auth" \$authorized {
     "~1" 1;
     default 0;
 }

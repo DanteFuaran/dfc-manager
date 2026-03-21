@@ -313,13 +313,17 @@ _installation_subpage_on_node() {
     # Запрашиваем URL панели
     local PANEL_URL=""
     while true; do
-        reading "URL панели (например https://panel.example.com):" PANEL_URL
-        if [[ "$PANEL_URL" =~ ^https?:// ]]; then
-            # Убираем trailing slash
-            PANEL_URL="${PANEL_URL%/}"
+        reading "Домен панели (например panel.example.com):" PANEL_URL
+        # Убираем протокол если введён
+        PANEL_URL="${PANEL_URL#https://}"
+        PANEL_URL="${PANEL_URL#http://}"
+        # Убираем trailing slash
+        PANEL_URL="${PANEL_URL%/}"
+        if [[ "$PANEL_URL" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$ ]]; then
+            PANEL_URL="https://$PANEL_URL"
             break
         else
-            print_error "URL должен начинаться с http:// или https://"
+            print_error "Введите корректный домен, например: panel.example.com"
         fi
     done
 
@@ -533,12 +537,17 @@ _installation_subpage_standalone() {
     # Запрашиваем URL панели
     local PANEL_URL=""
     while true; do
-        reading "URL панели (например https://panel.example.com):" PANEL_URL
-        if [[ "$PANEL_URL" =~ ^https?:// ]]; then
-            PANEL_URL="${PANEL_URL%/}"
+        reading "Домен панели (например panel.example.com):" PANEL_URL
+        # Убираем протокол если введён
+        PANEL_URL="${PANEL_URL#https://}"
+        PANEL_URL="${PANEL_URL#http://}"
+        # Убираем trailing slash
+        PANEL_URL="${PANEL_URL%/}"
+        if [[ "$PANEL_URL" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$ ]]; then
+            PANEL_URL="https://$PANEL_URL"
             break
         else
-            print_error "URL должен начинаться с http:// или https://"
+            print_error "Введите корректный домен, например: panel.example.com"
         fi
     done
 
