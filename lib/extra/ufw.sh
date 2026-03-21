@@ -19,13 +19,12 @@ manage_ufw() {
             if [ "$choice" -eq 0 ]; then
                 local _ufw_log
                 _ufw_log=$(mktemp /tmp/ufw_install.XXXXXX)
-                (apt-get install -y ufw 2>&1) > "$_ufw_log" &
+                (DEBIAN_FRONTEND=noninteractive apt-get install -y ufw 2>&1) > "$_ufw_log" &
                 show_spinner "Установка UFW"
                 if command -v ufw >/dev/null 2>&1; then
                     rm -f "$_ufw_log"
                     print_success "UFW успешно установлен"
                     echo
-                    show_continue_prompt || return 1
                 else
                     show_install_error "Не удалось установить UFW" "$_ufw_log"
                     rm -f "$_ufw_log"
