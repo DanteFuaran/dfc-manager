@@ -2180,5 +2180,100 @@ server {
 EOL
 }
 
+# ─── Docker-Compose: Нода + Страница подписки (один сервер, новая установка) ───
+generate_docker_compose_node_with_subpage() {
+    local node_cert_domain=$1
+    local sub_cert_domain=$2
+    local panel_url=$3
+    local api_token=$4
+    local certificate=$5
+    local target_dir="${6:-/opt/remnanode}"
+
+    cat > "${target_dir}/docker-compose.yml" <<EOL
+services:
+  remnawave-nginx:
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    hostname: remnawave-nginx
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt/live/${node_cert_domain}/fullchain.pem:/etc/nginx/ssl/${node_cert_domain}/fullchain.pem:ro
+      - /etc/letsencrypt/live/${node_cert_domain}/privkey.pem:/etc/nginx/ssl/${node_cert_domain}/privkey.pem:ro
+      - /etc/letsencrypt/live/${sub_cert_domain}/fullchain.pem:/etc/nginx/ssl/${sub_cert_domain}/fullchain.pem:ro
+      - /etc/letsencrypt/live/${sub_cert_domain}/privkey.pem:/etc/nginx/ssl/${sub_cert_domain}/privkey.pem:ro
+      - /dev/shm:/dev/shm:rw
+      - /var/www/html:/var/www/html:ro
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
+    network_mode: host
+    depends_on:
+      - remnanode
+      - remnawave-subscription-page
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    network_mode: host
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY=$(echo -e "$certificate")
+    volumes:
+      - /dev/shm:/dev/shm:rw
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  remnawave-subscription-page:
+    image: remnawave/subscription-page:latest
+    container_name: remnawave-subscription-page
+    hostname: remnawave-subscription-page
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    environment:
+      - REMNAWAVE_PANEL_URL=${panel_url}
+      - APP_PORT=3010
+      - REMNAWAVE_API_TOKEN=${api_token}
+    ports:
+      - '127.0.0.1:3010:3010'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+EOL
+}
+
 # ═══════════════════════════════════════════════
 

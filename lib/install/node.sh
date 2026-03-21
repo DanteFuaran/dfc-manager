@@ -81,6 +81,8 @@ installation_node() {
 
     if [ "$is_local_panel" = true ]; then
         installation_node_local
+    elif [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
+        installation_node_with_existing_subpage
     else
         installation_node_remote
     fi
@@ -734,6 +736,183 @@ EOL
         echo -e "${WHITE}  ls -la /dev/shm/nginx.sock${NC}"
         echo -e "${WHITE}  cd ${NODE_INSTALL_DIR} && docker compose restart${NC}"
     fi
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
+# ─── Установка ноды на сервер с уже установленной страницей подписки ───
+installation_node_with_existing_subpage() {
+    local SUBPAGE_DIR="/opt/remnasubpage"
+    local NODE_INSTALL_DIR="/opt/remnanode"
+
+    cd /opt 2>/dev/null || true
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   📦 УСТАНОВКА НОДЫ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${DARKGRAY}Обнаружена страница подписки на этом сервере.${NC}"
+    echo -e "${DARKGRAY}Нода будет установлена совместно со страницей подписки.${NC}"
+    echo -e "${DARKGRAY}Директория ${SUBPAGE_DIR} будет перенесена в ${NODE_INSTALL_DIR}.${NC}"
+    echo
+
+    # Извлекаем данные из существующей установки subpage
+    local PANEL_URL API_TOKEN SUB_DOMAIN SUB_CERT_DOMAIN
+
+    PANEL_URL=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${SUBPAGE_DIR}/docker-compose.yml" 2>/dev/null | head -1)
+    API_TOKEN=$(grep -oP 'REMNAWAVE_API_TOKEN=\K\S+' "${SUBPAGE_DIR}/docker-compose.yml" 2>/dev/null | head -1)
+    SUB_DOMAIN=$(grep -oP 'server_name\s+\K[^;]+' "${SUBPAGE_DIR}/nginx.conf" 2>/dev/null | head -1)
+    SUB_CERT_DOMAIN=$(grep -oP '/ssl/\K[^/]+' "${SUBPAGE_DIR}/nginx.conf" 2>/dev/null | head -1)
+    [ -z "$SUB_CERT_DOMAIN" ] && SUB_CERT_DOMAIN="$SUB_DOMAIN"
+
+    if [ -z "$PANEL_URL" ] || [ -z "$API_TOKEN" ] || [ -z "$SUB_DOMAIN" ]; then
+        print_error "Не удалось извлечь данные из существующей установки страницы подписки."
+        print_error "Проверьте ${SUBPAGE_DIR}/docker-compose.yml и ${SUBPAGE_DIR}/nginx.conf"
+        show_continue_prompt || return 1
+        return
+    fi
+
+    echo -e "${GREEN}✅${NC} Страница подписки: $SUB_DOMAIN"
+    echo -e "${GREEN}✅${NC} URL панели:         $PANEL_URL"
+    echo -e "${GREEN}✅${NC} API токен:           ${API_TOKEN:0:8}..."
+    echo
+
+    # Запрашиваем параметры ноды
+    local SELFSTEAL_DOMAIN
+    prompt_domain_with_retry "Домен selfsteal/ноды (например node.example.com):" SELFSTEAL_DOMAIN || return
+
+    local PANEL_IP
+    prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || return
+
+    echo
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (SECRET_KEY) из панели и нажмите Enter дважды:${NC}"
+    local CERTIFICATE=""
+    while IFS= read -r line; do
+        if [ -z "$line" ] && [ -n "$CERTIFICATE" ]; then
+            break
+        fi
+        CERTIFICATE="$CERTIFICATE$line\n"
+    done
+
+    # Сертификат для selfsteal домена
+    declare -A domains_to_check
+    domains_to_check["$SELFSTEAL_DOMAIN"]=1
+
+    local needs_certs=false
+    local CERT_METHOD LETSENCRYPT_EMAIL=""
+
+    if check_if_certificates_needed domains_to_check; then
+        needs_certs=true
+        echo
+        show_arrow_menu "🔐  Метод получения сертификатов" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "──────────────────────────────────────" \
+            "❌  Назад"
+        local cert_choice=$?
+        [[ $cert_choice -eq 255 ]] && return
+        case $cert_choice in
+            0) CERT_METHOD=1 ;;
+            1) CERT_METHOD=2 ;;
+            2) : ;;
+            3) return ;;
+        esac
+        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        if [ "$CERT_METHOD" -eq 1 ]; then
+            setup_cloudflare_credentials || return
+        fi
+        echo
+    else
+        CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
+        echo
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+    fi
+
+    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+        install_packages
+    fi
+
+    if [ "$needs_certs" = true ]; then
+        if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
+            echo
+            show_continue_prompt || true
+            return
+        fi
+    fi
+
+    local NODE_CERT_DOMAIN
+    if [ "$CERT_METHOD" -eq 1 ]; then
+        NODE_CERT_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
+    else
+        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
+    fi
+
+    # Проверяем сертификаты
+    local cert_path="/etc/letsencrypt/live/$NODE_CERT_DOMAIN"
+    if [ ! -f "$cert_path/fullchain.pem" ] || [ ! -f "$cert_path/privkey.pem" ]; then
+        print_error "Сертификаты не найдены в $cert_path"
+        show_continue_prompt || true
+        return
+    fi
+
+    mkdir -p /var/www/html
+    mkdir -p "${NODE_INSTALL_DIR}"
+
+    # Останавливаем существующую страницу подписки
+    (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
+    show_spinner "Остановка страницы подписки" || true
+
+    # Генерируем конфиги для ноды + страницы подписки
+    (
+        generate_docker_compose_node_with_subpage \
+            "$NODE_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
+            "$PANEL_URL" "$API_TOKEN" "$CERTIFICATE" \
+            "$NODE_INSTALL_DIR"
+        generate_nginx_conf_node_with_subpage \
+            "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" \
+            "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" \
+            "$NODE_INSTALL_DIR"
+    ) &
+    show_spinner "Подготовка конфигурации" || true
+
+    # Удаляем старую директорию subpage
+    rm -rf "${SUBPAGE_DIR}"
+
+    # Настройка файрвола
+    (
+        ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
+        ufw allow 443/tcp >/dev/null 2>&1
+        ufw reload >/dev/null 2>&1
+    ) &
+    show_spinner "Настройка файрвола" || true
+
+    randomhtml
+
+    # Запуск контейнеров
+    (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
+    if ! show_spinner "Запуск контейнеров"; then
+        print_error "Не удалось запустить контейнеры"
+        show_continue_prompt || true
+        return
+    fi
+
+    show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+
+    clear
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "   ${GREEN}🎉 НОДА И СТРАНИЦА ПОДПИСКИ УСТАНОВЛЕНЫ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${WHITE}Нода (selfsteal):${NC}  $SELFSTEAL_DOMAIN"
+    echo -e "${WHITE}Подписка:${NC}          https://$SUB_DOMAIN"
+    echo -e "${WHITE}Панель:${NC}            $PANEL_URL"
+    echo
+    echo -e "${YELLOW}⚠️  Добавьте ноду в панели через API:${NC}"
+    echo -e "${WHITE}   IP сервера:  $(hostname -I | awk '{print $1}')${NC}"
+    echo -e "${WHITE}   Порт ноды:   2222${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
