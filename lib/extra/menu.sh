@@ -12,7 +12,7 @@ manage_extra_settings() {
         show_arrow_menu "🧩  Дополнительные программы" \
             "🔥  Firewall (UFW)" \
             "🌐  WARP" \
-            "�️   Fail2ban" \
+            "🛡️   Fail2ban" \
             "📝  Logrotate" \
             "📊  Beszel (мониторинг)" \
             "📡  MTProto (Телеграм прокси)" \
@@ -27,7 +27,7 @@ manage_extra_settings() {
             2) manage_fail2ban || break ;;
             3) manage_logrotate || break ;;
             4) manage_beszel || break ;;
-            5) install_mtproto || break ;;
+            5) manage_mtproto || break ;;
             6) continue ;;
             7) return ;;
         esac
@@ -35,15 +35,328 @@ manage_extra_settings() {
 }
 
 # ═══════════════════════════════════════════════════
-# УСТАНОВКА MTPROTO
+# MTPROTO — УПРАВЛЕНИЕ
 # ═══════════════════════════════════════════════════
-install_mtproto() {
+_MT_CONTAINER="mtproto-proxy"
+_MT_IMAGE="telegrammessenger/proxy:latest"
+_MT_DIR="/opt/mtproto"
+_MT_ENV="${_MT_DIR}/.env"
+
+_mt_installed() { docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${_MT_CONTAINER}$"; }
+_mt_running()   { docker ps    --format '{{.Names}}' 2>/dev/null | grep -q "^${_MT_CONTAINER}$"; }
+_mt_load_env()  { [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true; }
+
+_mt_press_enter() {
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
+    read -r
+    tput cnorm 2>/dev/null || true
+}
+
+# Установка / переустановка — делегируем внешнему скрипту
+_mt_do_install() {
+    if command -v mtproto >/dev/null 2>&1; then
+        mtproto
+    else
+        cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-mtproto/refs/heads/main/mtproto-install.sh)
+    fi
+}
+
+# Показать конфигурацию и ссылку
+_mt_do_config() {
+    _mt_load_env
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📡 MTProto (Телеграм прокси)${NC}"
+    echo -e "${GREEN}      📄 Конфигурация и ссылка${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-mtproto/refs/heads/main/mtproto-install.sh)
+
+    if [ -z "${PROXY_SECRET:-}" ]; then
+        echo -e "${YELLOW}⚠️  Конфигурация не найдена. Сначала установите прокси.${NC}"
+        _mt_press_enter; return
+    fi
+
+    local _rs="${RED}● Не запущен${NC}"
+    _mt_running && _rs="${GREEN}● Запущен${NC}"
+
+    local _cw=12
+    echo -e " ${DARKGRAY}$(_mpad "Статус:" $_cw)${NC} ${_rs}"
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP:-}${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT:-}${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN:-}${NC}"
+    if [ -n "${PROXY_TAG:-}" ]; then
+        echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+    else
+        echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${YELLOW}не задан${NC} ${DARKGRAY}(получить: @MTProxybot)${NC}"
+    fi
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    _mt_press_enter
+}
+
+# Статистика подключений
+_mt_do_stats() {
+    _mt_load_env
+
+    if ! _mt_running; then
+        echo -e "${RED}✖ Прокси не запущен${NC}"
+        _mt_press_enter; return
+    fi
+
+    local _max_file="${_MT_DIR}/stats_max_connections"
+    local _uptime_file="${_MT_DIR}/stats_uptime_ts"
+    local _max_sim=0
+    [ -f "$_max_file" ] && _max_sim=$(cat "$_max_file" 2>/dev/null || echo "0")
+
+    local _container_started
+    _container_started=$(docker inspect --format '{{.State.StartedAt}}' \
+        "$_MT_CONTAINER" 2>/dev/null | sed 's/[^0-9]//g' | cut -c1-14)
+    local _saved_ts=""
+    [ -f "$_uptime_file" ] && _saved_ts=$(cat "$_uptime_file" 2>/dev/null || true)
+    if [ "$_container_started" != "$_saved_ts" ]; then
+        _max_sim=0
+        echo "$_container_started" > "$_uptime_file" 2>/dev/null || true
+    fi
+
+    tput civis 2>/dev/null || true
+    trap 'tput cnorm 2>/dev/null; return 0' INT
+
+    while true; do
+        local _raw _active _uptime _dc_conns
+        local _pid
+        _pid=$(docker inspect --format '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null) || _pid=""
+        _raw=""
+        [ -n "$_pid" ] && _raw=$(nsenter -t "$_pid" -n curl -s --max-time 2 http://127.0.0.1:2398/stats 2>/dev/null || true)
+        _uptime=$(echo "$_raw" | awk '$1=="uptime"{print $2; exit}')
+        _uptime="${_uptime:-0}"
+        _dc_conns=$(echo "$_raw" | awk '$1=="total_encrypted_connections"{print $2; exit}')
+        _dc_conns="${_dc_conns:-0}"
+
+        # Активные клиенты из /proc/net/tcp
+        _active=$(docker exec "$_MT_CONTAINER" sh -c \
+            'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' 2>/dev/null \
+            | awk 'FNR>1 && $4=="01" && $2~/:01BB$/{split($3,a,":"); ip=a[1]; if(!(ip in ips)){ips[ip]=1}} END{n=0; for(k in ips)n++; print n}' \
+            2>/dev/null || echo "0")
+
+        if [ -n "${PROXY_TAG:-}" ] && [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
+            _max_sim="$_active"
+            echo "$_max_sim" > "$_max_file" 2>/dev/null || true
+        fi
+
+        local _up_h _up_m _up_s _up_str
+        _up_h=$(( _uptime / 3600 )); _up_m=$(( (_uptime % 3600) / 60 )); _up_s=$(( _uptime % 60 ))
+        printf -v _up_str "%02d:%02d:%02d" "$_up_h" "$_up_m" "$_up_s"
+
+        local _net_io="—"
+        local _stats_out
+        _stats_out=$(docker stats --no-stream --format "{{.NetIO}}" "$_MT_CONTAINER" 2>/dev/null || true)
+        [ -n "$_stats_out" ] && _net_io="$_stats_out"
+
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${GREEN}       📊 Статистика MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        local _cv="${GREEN}"
+        local _cval="$_active"
+        if [ -z "${PROXY_TAG:-}" ]; then _cval="— (нужен Tag)"; _cv="${DARKGRAY}"; fi
+
+        local _cw=22
+        echo -e " ${WHITE}$(_mpad "Активных клиентов:" $_cw)${NC} ${_cv}${_cval}${NC}"
+        echo -e " ${WHITE}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
+        echo -e " ${WHITE}$(_mpad "К серверам Telegram:" $_cw)${NC} ${WHITE}${_dc_conns}${NC}"
+        echo -e " ${WHITE}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
+        echo -e " ${WHITE}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
+        echo
+        echo -e "${DARKGRAY}Обновление каждые 5 сек • Ctrl+C для выхода${NC}"
+        sleep 5
+    done
+}
+
+# Сменить конфигурацию — делегируем mtproto (нужен read_input, generate_fake_tls_secret)
+_mt_do_change_config() {
+    if command -v mtproto >/dev/null 2>&1; then
+        mtproto
+    else
+        echo -e "${RED}✖ MTProto не установлен. Сначала установите прокси.${NC}"
+        _mt_press_enter
+    fi
+}
+
+_mt_do_stop() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${YELLOW}        ⏹️  Остановка MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    if ! _mt_running; then
+        echo -e "${YELLOW}⚠️  Прокси не запущен${NC}"
+        _mt_press_enter; return
+    fi
+    (cd "$_MT_DIR" && docker compose stop >/dev/null 2>&1) &
+    show_spinner "Остановка прокси..." "Прокси остановлен"
+    _mt_press_enter
+}
+
+_mt_do_start() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}         ▶️  Запуск MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    if _mt_running; then
+        echo -e "${YELLOW}⚠️  Прокси уже запущен${NC}"
+        _mt_press_enter; return
+    fi
+    (cd "$_MT_DIR" && docker compose start >/dev/null 2>&1) &
+    show_spinner "Запуск прокси..." "Прокси запущен"
+    _mt_press_enter
+}
+
+_mt_do_restart() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}       🔄 Перезапуск MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    (cd "$_MT_DIR" && docker compose restart >/dev/null 2>&1) &
+    show_spinner "Перезапуск прокси..." "Прокси перезапущен"
+    _mt_press_enter
+}
+
+_mt_do_uninstall() {
+    _mt_load_env
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    if ! _mt_installed; then
+        echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
+        _mt_press_enter; return
+    fi
+
+    echo -e "${YELLOW}Внимание: MTProto будет полностью удалён с сервера.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${DARKGRAY}  Enter: Подтвердить   Esc: Отмена${NC}"
+    tput civis 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; echo -e "${BLUE}ℹ  Удаление отменено${NC}"; _mt_press_enter; return ;;
+            "")      break ;;
+        esac
+    done
+    tput cnorm 2>/dev/null || true
+    echo
+
+    (if [ -d "$_MT_DIR" ]; then
+        cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
+    fi
+    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
+    show_spinner "Остановка и удаление контейнера..." "Контейнер удалён"
+
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "         ${YELLOW}Удалить образ Docker?${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${DARKGRAY}  Enter: Удалить   Esc: Оставить${NC}"
+    tput civis 2>/dev/null || true
+    local _del_image=false
+    while true; do
+        local _k2=""
+        IFS= read -rsn1 _k2
+        case "$_k2" in
+            $'\x1b') break ;;
+            "")      _del_image=true; break ;;
+        esac
+    done
+    tput cnorm 2>/dev/null || true
+    if $_del_image; then
+        (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
+        show_spinner "Удаление образа..." "Образ удалён"
+    fi
+
+    rm -rf "$_MT_DIR" 2>/dev/null || true
+    if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
+        ufw delete allow "${PROXY_PORT}/tcp" >/dev/null 2>&1 || true
+    fi
+    # Удаляем симлинки и скрипт mtproto
+    rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
+    rm -rf /usr/local/lib/mtproto 2>/dev/null || true
+    echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
+    _mt_press_enter
+}
+
+manage_mtproto() {
+    while true; do
+        _mt_load_env
+        local _installed=false _running=false
+        _mt_installed && _installed=true
+        _mt_running   && _running=true
+
+        local _status_line=""
+        if   [ "$_running"   = true ]; then
+            _status_line="\n${DARKGRAY}    Статус: ${GREEN}● Запущен${NC}"
+        elif [ "$_installed" = true ]; then
+            _status_line="\n${DARKGRAY}    Статус: ${YELLOW}● Остановлен${NC}"
+        else
+            _status_line="\n${DARKGRAY}    Статус: ${DARKGRAY}● Не установлен${NC}"
+        fi
+
+        local _title="  📡 MTProto Proxy${_status_line}"
+
+        local -a _items=() _actions=()
+
+        if [ "$_installed" = false ]; then
+            _items+=("📦  Установить MTProto");     _actions+=("install")
+        else
+            _items+=("📦  Переустановить MTProto"); _actions+=("install")
+            _items+=("──────────────────────────────────────"); _actions+=("sep")
+            _items+=("📊  Статистика подключений");            _actions+=("stats")
+            _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
+            _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
+            _items+=("──────────────────────────────────────"); _actions+=("sep")
+            if [ "$_running" = true ]; then
+                _items+=("⏹️   Остановить прокси");    _actions+=("stop")
+                _items+=("🔄  Перезапустить прокси"); _actions+=("restart")
+            else
+                _items+=("▶️   Запустить прокси");     _actions+=("start")
+            fi
+            _items+=("──────────────────────────────────────"); _actions+=("sep")
+            _items+=("🗑️   Удалить MTProto");                  _actions+=("uninstall")
+        fi
+
+        _items+=("──────────────────────────────────────"); _actions+=("sep")
+        _items+=("⬅️   Назад");                             _actions+=("back")
+
+        show_arrow_menu "$_title" "${_items[@]}"
+        local _choice=$?
+        [[ $_choice -eq 255 ]] && return
+
+        local _action="${_actions[$_choice]:-sep}"
+        case "$_action" in
+            install)       _mt_do_install ;;
+            stats)         _mt_do_stats ;;
+            config)        _mt_do_config ;;
+            change_config) _mt_do_change_config ;;
+            start)         _mt_do_start ;;
+            stop)          _mt_do_stop ;;
+            restart)       _mt_do_restart ;;
+            uninstall)     _mt_do_uninstall ;;
+            back)          return ;;
+            *)             continue ;;
+        esac
+    done
 }
 
 # ═══════════════════════════════════════════════════
