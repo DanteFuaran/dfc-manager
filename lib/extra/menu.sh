@@ -536,7 +536,7 @@ _mt_do_uninstall() {
         local _k=""
         IFS= read -rsn1 _k
         case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; echo -e "${BLUE}ℹ  Удаление отменено${NC}"; _mt_press_enter; return ;;
+            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
             "")      break ;;
         esac
     done
@@ -560,7 +560,18 @@ _mt_do_uninstall() {
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
-    _mt_press_enter
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    tput civis 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 manage_mtproto() {
@@ -625,7 +636,7 @@ manage_mtproto() {
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
             restart)       _mt_do_restart ;;
-            uninstall)     _mt_do_uninstall ;;
+            uninstall)     _mt_do_uninstall || return ;;
             back)          return ;;
             *)             continue ;;
         esac
@@ -654,10 +665,10 @@ manage_server_testing() {
         [[ $choice -eq 255 ]] && return
 
         case $choice in
-            0) run_speed_test ;;
-            1) run_services_check ;;
-            2) run_regional_check ;;
-            3) run_geolocation ;;
+            0) run_speed_test     || return ;;
+            1) run_services_check || return ;;
+            2) run_regional_check || return ;;
+            3) run_geolocation    || return ;;
             4) continue ;;
             5) return ;;
         esac
@@ -718,10 +729,16 @@ run_speed_test() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
-    read -r
-    tput cnorm 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 run_services_check() {
@@ -747,10 +764,16 @@ run_services_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
-    read -r
-    tput cnorm 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 # ═══════════════════════════════════════════════════
@@ -925,10 +948,16 @@ run_regional_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
-    read -r
-    tput cnorm 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 run_geolocation() {
@@ -967,11 +996,16 @@ run_geolocation() {
         echo -e "${RED}Не удалось получить данные геолокации${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
+        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
         tput civis 2>/dev/null || true
-        read -r
-        tput cnorm 2>/dev/null || true
-        return
+        while true; do
+            local _k=""
+            IFS= read -rsn1 _k
+            case "$_k" in
+                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+                "")      tput cnorm 2>/dev/null || true; return 0 ;;
+            esac
+        done
     fi
 
     # Проход 1: найти максимальную длину имени сервиса по всем таблицам
@@ -1034,10 +1068,16 @@ run_geolocation() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
-    read -r
-    tput cnorm 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 # ═══════════════════════════════════════════════════
