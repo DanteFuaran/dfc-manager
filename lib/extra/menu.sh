@@ -113,19 +113,18 @@ run_speed_test() {
     loss=$(echo "$output" | grep -oP 'Packet Loss:\s*\K.*' | sed 's/\s*$//')
 
     if [ -n "$server" ]; then
-        # Вычисляем ширину колонки под самое длинное имя поля
-        local col_w=22
+        local _cw=21
         echo -e "${DARKGRAY}──────────────── [ Сервер ] ─────────────────${NC}"
         echo
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Сервер подключения:")${NC} ${WHITE}${server}${NC}"
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Провайдер:")${NC} ${WHITE}${isp}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Сервер подключения:" $_cw)${NC} ${WHITE}${server}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Провайдер:" $_cw)${NC} ${WHITE}${isp}${NC}"
         echo
         echo -e "${DARKGRAY}──────────────── [ Результат ] ─────────────────${NC}"
         echo
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Задержка:")${NC} ${YELLOW}${latency}${NC}"
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Скорость загрузки:")${NC} ${GREEN}${download}${NC}  ${DARKGRAY}пинг: ${dl_ping}${NC}"
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Скорость отправки:")${NC} ${GREEN}${upload}${NC}  ${DARKGRAY}пинг: ${ul_ping}${NC}"
-        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Потеряно пакетов:")${NC} ${WHITE}${loss}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Задержка:" $_cw)${NC} ${YELLOW}${latency}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Скорость загрузки:" $_cw)${NC} ${GREEN}${download}${NC}  ${DARKGRAY}пинг: ${dl_ping}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Скорость отправки:" $_cw)${NC} ${GREEN}${upload}${NC}  ${DARKGRAY}пинг: ${ul_ping}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Потеряно пакетов:" $_cw)${NC} ${WHITE}${loss}${NC}"
     else
         echo -e "${RED}Не удалось выполнить тест скорости${NC}"
         [ -n "$output" ] && echo -e "\n$output"
@@ -191,6 +190,16 @@ _svc_yn() {
     echo "$1" | sed 's/\bYes\b/Да/g; s/\bNo\b/Нет/g; s/\bRegion:/Регион:/g'
 }
 
+# Корректное выравнивание с учётом многобайтовой кириллицы:
+# printf "%-Ns" считает байты, а не символы — _mpad компенсирует разницу
+_mpad() {
+    local s="$1" w="$2"
+    local chars bytes
+    chars=${#s}
+    bytes=$(printf '%s' "$s" | wc -c)
+    printf "%-$(( w + bytes - chars ))s" "$s"
+}
+
 # Выводит шапку IPv4 + провайдерскую инфо из вывода скрипта-чекера
 _print_ipv4_info() {
     local output="$1"
@@ -208,12 +217,13 @@ _print_ipv4_info() {
     ipv4_city=$(echo "$output" | grep -oP '(?i)Город:\s*\K.*' | head -1 | sed 's/\s*$//')
     ipv4_asn=$(echo "$output"  | grep -oP '(?i)ASN:\s*\K.*'   | head -1 | sed 's/\s*$//')
 
+    local _cw=20
     echo -e "${DARKGRAY}──────────────── [ IPv4 ] ─────────────────${NC}"
     echo
-    [ -n "$ipv4_provider" ] && echo -e " ${DARKGRAY}Хостинг провайдер:${NC} ${WHITE}${ipv4_provider}${NC}"
-    [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}${ipv4_country}${NC}"
-    [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv4_city}${NC}"
-    [ -n "$ipv4_asn"      ] && echo -e " ${DARKGRAY}ASN:${NC} ${WHITE}${ipv4_asn}${NC}"
+    [ -n "$ipv4_provider" ] && echo -e " ${DARKGRAY}$(_mpad "Хостинг провайдер:" $_cw)${NC} ${WHITE}${ipv4_provider}${NC}"
+    [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}$(_mpad "Страна:" $_cw)${NC} ${WHITE}${ipv4_country}${NC}"
+    [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}$(_mpad "Город:" $_cw)${NC} ${WHITE}${ipv4_city}${NC}"
+    [ -n "$ipv4_asn"      ] && echo -e " ${DARKGRAY}$(_mpad "ASN:" $_cw)${NC} ${WHITE}${ipv4_asn}${NC}"
     echo
 }
 
@@ -345,43 +355,45 @@ run_geolocation() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    (echo y | bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null > "$tmpfile" 2>&1) &
+    # Используем ip-api.com — бесплатный JSON API без зависимостей и интерактивных запросов
+    (curl -sf --max-time 10 \
+        "http://ip-api.com/json/?fields=status,country,countryCode,regionName,city,isp,org,as,timezone,lat,lon,query" \
+        > "$tmpfile" 2>&1) &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo
 
-    local output
-    output=$(cat "$tmpfile" 2>/dev/null) || true
+    local raw
+    raw=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
 
-    # Парсим поля геолокации
-    local geo_ip geo_country geo_region geo_city geo_isp geo_asn geo_org geo_tz geo_coord
-    geo_ip=$(echo      "$output" | grep -oP '(?i)(ip\s*(address|addr)?:|your\s*ip:|IP:)\s*\K[\d.]+' | head -1)
-    [ -z "$geo_ip" ] && geo_ip=$(echo "$output" | grep -oP '\b(\d{1,3}\.){3}\d{1,3}\b' | head -1)
-    geo_country=$(echo "$output" | grep -oP '(?i)Страна[:\s]+\K[^\n]+|Country[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_region=$(echo  "$output" | grep -oP '(?i)Регион[:\s]+\K[^\n]+|Region[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_city=$(echo    "$output" | grep -oP '(?i)Город[:\s]+\K[^\n]+|City[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_isp=$(echo     "$output" | grep -oP '(?i)Провайдер[:\s]+\K[^\n]+|ISP[:\s]+\K[^\n]+|Provider[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_asn=$(echo     "$output" | grep -oP '(?i)ASN[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_org=$(echo     "$output" | grep -oP '(?i)Организация[:\s]+\K[^\n]+|Org(anization)?[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_tz=$(echo      "$output" | grep -oP '(?i)Часовой.*пояс[:\s]+\K[^\n]+|Timezone[:\s]+\K[^\n]+|TimeZone[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
-    geo_coord=$(echo   "$output" | grep -oP '(?i)Коорд[^:]*:[\s]+\K[^\n]+|Coord[^:]*:[\s]+\K[^\n]+|Lat.*Lon[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    local geo_status geo_ip geo_country geo_region geo_city geo_isp geo_asn geo_tz geo_lat geo_lon
+    geo_status=$(echo "$raw" | grep -oP '"status"\s*:\s*"\K[^"]+' | head -1)
+    geo_ip=$(echo      "$raw" | grep -oP '"query"\s*:\s*"\K[^"]+' | head -1)
+    geo_country=$(echo "$raw" | grep -oP '"country"\s*:\s*"\K[^"]+' | head -1)
+    geo_region=$(echo  "$raw" | grep -oP '"regionName"\s*:\s*"\K[^"]+' | head -1)
+    geo_city=$(echo    "$raw" | grep -oP '"city"\s*:\s*"\K[^"]+' | head -1)
+    geo_isp=$(echo     "$raw" | grep -oP '"isp"\s*:\s*"\K[^"]+' | head -1)
+    geo_asn=$(echo     "$raw" | grep -oP '"as"\s*:\s*"\K[^"]+' | head -1)
+    geo_tz=$(echo      "$raw" | grep -oP '"timezone"\s*:\s*"\K[^"]+' | head -1)
+    geo_lat=$(echo     "$raw" | grep -oP '"lat"\s*:\s*\K[\d.-]+' | head -1)
+    geo_lon=$(echo     "$raw" | grep -oP '"lon"\s*:\s*\K[\d.-]+' | head -1)
 
-    if [ -n "$geo_ip$geo_country$geo_city$geo_isp" ]; then
-        local col_w=16
+    if [ "$geo_status" = "success" ] && [ -n "$geo_ip" ]; then
+        local _cw=16
+        local geo_coord=""
+        [ -n "$geo_lat" ] && [ -n "$geo_lon" ] && geo_coord="${geo_lat}, ${geo_lon}"
         echo -e "${DARKGRAY}───────────────── [ Сервер ] ─────────────────${NC}"
         echo
-        [ -n "$geo_ip"      ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "IP адрес:")${NC} ${WHITE}${geo_ip}${NC}"
-        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Страна:")${NC} ${WHITE}${geo_country}${NC}"
-        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Регион:")${NC} ${WHITE}${geo_region}${NC}"
-        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Город:")${NC} ${WHITE}${geo_city}${NC}"
-        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Провайдер:")${NC} ${WHITE}${geo_isp}${NC}"
-        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "ASN:")${NC} ${WHITE}${geo_asn}${NC}"
-        [ -n "$geo_org"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Организация:")${NC} ${WHITE}${geo_org}${NC}"
-        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Часовой пояс:")${NC} ${WHITE}${geo_tz}${NC}"
-        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Координаты:")${NC} ${WHITE}${geo_coord}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "IP адрес:" $_cw)${NC} ${WHITE}${geo_ip}${NC}"
+        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}$(_mpad "Страна:" $_cw)${NC} ${WHITE}${geo_country}${NC}"
+        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}$(_mpad "Регион:" $_cw)${NC} ${WHITE}${geo_region}${NC}"
+        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}$(_mpad "Город:" $_cw)${NC} ${WHITE}${geo_city}${NC}"
+        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}$(_mpad "Провайдер:" $_cw)${NC} ${WHITE}${geo_isp}${NC}"
+        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}$(_mpad "ASN:" $_cw)${NC} ${WHITE}${geo_asn}${NC}"
+        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}$(_mpad "Часовой пояс:" $_cw)${NC} ${WHITE}${geo_tz}${NC}"
+        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}$(_mpad "Координаты:" $_cw)${NC} ${WHITE}${geo_coord}${NC}"
     else
-        # Фоллбек — показываем сырой вывод без escape-последовательностей
-        echo "$output" | sed 's/\x1B\[[0-9;]*[mK]//g'
+        echo -e "${RED}Не удалось определить геолокацию${NC}"
     fi
 
     echo
