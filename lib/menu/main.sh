@@ -43,7 +43,7 @@ main_menu() {
                         ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
                     fi
 
-                    local update_notice="" install_status=""
+                    local install_status=""
                     if [ "$has_panel" = true ] && [ "$has_node" = true ]; then
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель и Нода${NC}"
                     elif [ "$has_panel" = true ]; then
@@ -54,11 +54,6 @@ main_menu() {
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода${NC}"
                     elif [ "$has_subpage" = true ]; then
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Страница подписки${NC}"
-                    fi
-                    if [ -f "${UPDATE_AVAILABLE_FILE}" ]; then
-                        local new_version
-                        new_version=$(cat "${UPDATE_AVAILABLE_FILE}")
-                        update_notice=" ${YELLOW}(Доступно обновление до v$new_version)${NC}"
                     fi
 
                     local rw_title="    📦 Remnawave (Сервис)${install_status}"
@@ -78,7 +73,7 @@ main_menu() {
                         rw_items+=("🎨  Сменить сайт-заглушку");    rw_actions+=("template")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("🔄  Обновить панель/ноду");     rw_actions+=("update_components")
-                        rw_items+=("🔄  Обновить скрипт$update_notice"); rw_actions+=("update_script")
+                        rw_items+=("🔄  Обновить скрипт"); rw_actions+=("update_script")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("🗑️   Удаление компонентов");    rw_actions+=("remove")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")

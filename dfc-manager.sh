@@ -120,24 +120,31 @@ if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
     exec /usr/local/bin/dfc-manager
 fi
 
-# Проверка обновлений (всегда)
-current_time=$(date +%s)
-last_check=0
-
-if [ -f "${UPDATE_CHECK_TIME_FILE}" ]; then
-    last_check=$(cat "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || echo 0)
-fi
-
-# Проверяем раз в час (3600 секунд)
-time_diff=$((current_time - last_check))
-if [ $time_diff -gt 3600 ] || [ ! -f "${UPDATE_AVAILABLE_FILE}" ]; then
-    new_version=$(check_for_updates) || true
-    if [ -n "$new_version" ]; then
-        echo "$new_version" > "${UPDATE_AVAILABLE_FILE}"
-    else
-        rm -f "${UPDATE_AVAILABLE_FILE}" 2>/dev/null || true
+# Авто-обновление при каждом запуске (однократно на сессию)
+if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
+    export DFC_AUTO_UPDATED=1
+    _remote_ver=$(get_remote_version 2>/dev/null) || true
+    if [ -n "$_remote_ver" ]; then
+        _local_num=$(echo "$SCRIPT_VERSION" | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
+        _remote_num=$(echo "$_remote_ver"   | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
+        if [ "$_remote_num" -gt "$_local_num" ] 2>/dev/null; then
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${DARKGRAY}   Обновление: v${SCRIPT_VERSION} → v${_remote_ver}${NC}"
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            (
+                rm -rf "${DIR_SCRIPT}"
+                git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
+                    "${DIR_SCRIPT%/}" >/dev/null 2>&1
+                chmod +x "${DIR_SCRIPT}dfc-manager.sh"
+                ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
+                ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+            ) &
+            show_spinner "Загрузка обновлений"
+            [ -f "${DIR_SCRIPT}dfc-manager.sh" ] && exec /usr/local/bin/dfc-manager
+        fi
     fi
-    echo "$current_time" > "${UPDATE_CHECK_TIME_FILE}"
+    unset _remote_ver _local_num _remote_num
+    rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || true
 fi
 
 main_menu
