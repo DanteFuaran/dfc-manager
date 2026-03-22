@@ -41,9 +41,6 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
 fi
 
 # ─── Основной скрипт ─────────────────────────────────────────
-if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
-    echo -e '\033[1;34mПодготовка скрипта к запуску...\033[0m'
-fi
 cd /opt >/dev/null 2>&1 || true
 
 set -euo pipefail
@@ -128,9 +125,6 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
         _local_num=$(echo "$SCRIPT_VERSION" | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
         _remote_num=$(echo "$_remote_ver"   | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
         if [ "$_remote_num" -gt "$_local_num" ] 2>/dev/null; then
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${DARKGRAY}   Обновление: v${SCRIPT_VERSION} → v${_remote_ver}${NC}"
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
             (
                 rm -rf "${DIR_SCRIPT}"
                 git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
@@ -139,8 +133,11 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
                 ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
                 ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
             ) &
-            show_spinner "Загрузка обновлений"
-            [ -f "${DIR_SCRIPT}dfc-manager.sh" ] && exec /usr/local/bin/dfc-manager
+            show_spinner "Обновление скрипта"
+            if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
+                printf "\r\033[K"
+                exec /usr/local/bin/dfc-manager
+            fi
         fi
     fi
     unset _remote_ver _local_num _remote_num
