@@ -203,6 +203,7 @@ _print_ipv4_info() {
     ipv4_asn=$(echo "$output"  | grep -oP '(?i)ASN:\s*\K.*'   | head -1 | sed 's/\s*$//')
 
     echo -e "${DARKGRAY}──────────────── [ IPv4 ] ─────────────────${NC}"
+    echo
     [ -n "$ipv4_provider" ] && echo -e " ${DARKGRAY}Хостинг провайдер:${NC} ${WHITE}${ipv4_provider}${NC}"
     [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}${ipv4_country}${NC}"
     [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv4_city}${NC}"
@@ -224,6 +225,7 @@ _print_checker_sections() {
             title=$(echo "$line" | grep -oP '\[.*?\]' | head -1)
             echo
             echo -e "${DARKGRAY}──────────── ${title} ────────────${NC}"
+            echo
             in_section=true; continue
         fi
         if $in_section; then
@@ -232,10 +234,10 @@ _print_checker_sections() {
                 in_section=false; continue
             fi
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
-            # Убираем 12 пробелов из выравнивания между именем сервиса и значением
+            # Убираем лишние пробелы между названием сервиса и значением
             local svc_line
-            svc_line=$(echo "$line" | sed 's/:\( \{12\}\)/:/g')
-            echo -e " ${DARKGRAY}$(_svc_yn "$svc_line")${NC}"
+            svc_line=$(echo "$line" | sed 's/:[ \t]\{12,\}/: /g')
+            echo -e " ${WHITE}$(_svc_yn "$svc_line")${NC}"
         fi
     done <<< "$clean"
 }
@@ -273,7 +275,7 @@ run_regional_check() {
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
     (bash <(curl -s "storage.umager.ru/checker_inst_ru.sh") > "$tmpfile" 2>&1) &
-    show_spinner "Проверка региональных ограничений" "Проверка завершена"
+    show_spinner "Проверка региональных ограничений" "Диагностика региональных ограничений завершена"
     echo
 
     local output
