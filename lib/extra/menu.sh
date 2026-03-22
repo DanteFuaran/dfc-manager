@@ -392,9 +392,13 @@ run_geolocation() {
     # Проход 1: найти максимальную длину имени сервиса по всем таблицам
     local _max_svc=0 _in_tbl=false
     while IFS= read -r _l; do
-        echo "$_l" | grep -qP '^\s*Service\s' && { _in_tbl=true; continue; }
+        local _lt
+        _lt=$(echo "$_l" | sed 's/^[[:space:]]*//')
+        if [[ -z "$_lt" ]]; then
+            $_in_tbl && _in_tbl=false; continue
+        fi
+        echo "$_lt" | grep -qP '^Service\s' && { _in_tbl=true; continue; }
         if $_in_tbl; then
-            [[ -z "$(echo "$_l" | tr -d '[:space:]')" ]] && { _in_tbl=false; continue; }
             local _sn
             _sn=$(echo "$_l" | sed 's/[[:space:]]\{2,\}.*//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             [ ${#_sn} -gt $_max_svc ] && _max_svc=${#_sn}
@@ -414,7 +418,10 @@ run_geolocation() {
     while IFS= read -r line; do
         local _t
         _t=$(echo "$line" | sed 's/^[[:space:]]*//')
-        [[ -z "$_t" ]] && continue
+        # Пустая строка: сбрасываем режим таблицы и пропускаем
+        if [[ -z "$_t" ]]; then
+            $_in_tbl && _in_tbl=false; continue
+        fi
         # Пропускаем строки IPv4/ASN (уже показаны)
         echo "$_t" | grep -qP '^(IPv4|ASN):' && continue
         # Заголовок таблицы "Service  IPv4"
@@ -422,7 +429,6 @@ run_geolocation() {
             _in_tbl=true; continue
         fi
         if $_in_tbl; then
-            [[ -z "$(echo "$_t" | tr -d '[:space:]')" ]] && { _in_tbl=false; continue; }
             local svc_name svc_val
             svc_name=$(echo "$line" | sed 's/[[:space:]]\{2,\}.*//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             svc_val=$(echo "$line" | grep -oP '[[:space:]]{2,}\K\S.*' | head -1 | sed 's/[[:space:]]*$//')
@@ -432,7 +438,7 @@ run_geolocation() {
             echo -e " ${DARKGRAY}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
             continue
         fi
-        # Заголовок секции: строка из букв/цифр/пробелов (Popular services, CDN services…)
+        # Заголовок секции: Popular services / CDN services / GeoIP services
         if echo "$_t" | grep -qP '^[A-Za-z][A-Za-z0-9 ]+$'; then
             $_first || echo
             echo -e "${DARKGRAY}──────────── [ ${_t} ] ────────────${NC}"
