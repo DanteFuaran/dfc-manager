@@ -314,7 +314,7 @@ _mt_do_install() {
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
         tput civis 2>/dev/null || true
         while true; do
             local _k=""
@@ -364,7 +364,7 @@ _mt_do_config() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -385,6 +385,9 @@ _mt_do_stats() {
         _mt_press_enter; return
     fi
 
+    tput civis 2>/dev/null || true
+    clear
+
     local _max_file="${_MT_DIR}/stats_max_connections"
     local _uptime_file="${_MT_DIR}/stats_uptime_ts"
     local _max_sim=0
@@ -403,7 +406,6 @@ _mt_do_stats() {
     local _st_orig_stty
     _st_orig_stty=$(stty -g 2>/dev/null || echo "")
     stty -icanon -echo isig min 0 time 0 2>/dev/null || true
-    tput civis 2>/dev/null || true
 
     _mt_stats_restore() {
         if [ -n "${_st_orig_stty}" ]; then stty "$_st_orig_stty" 2>/dev/null || stty sane 2>/dev/null || true
@@ -455,7 +457,7 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
 
         # Ждём 5 сек с проверкой Enter/Esc каждые 0.1 сек
         local _si=0 _sk _rr
@@ -539,7 +541,7 @@ _mt_do_uninstall() {
         _mt_press_enter; return
     fi
 
-    echo -e "${YELLOW}MTProto будет полностью удалён с сервера.${NC}"
+    echo -e "    ${YELLOW}MTProto будет удалён с сервера${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
@@ -575,7 +577,7 @@ _mt_do_uninstall() {
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -742,7 +744,7 @@ run_speed_test() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -777,7 +779,7 @@ run_services_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -961,7 +963,7 @@ run_regional_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -1009,7 +1011,7 @@ run_geolocation() {
         echo -e "${RED}Не удалось получить данные геолокации${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
         tput civis 2>/dev/null || true
         while true; do
             local _k=""
@@ -1081,7 +1083,7 @@ run_geolocation() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
