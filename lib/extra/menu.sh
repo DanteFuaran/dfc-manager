@@ -214,9 +214,25 @@ _print_ipv4_info() {
 # Выводит блоки секций из вывода чекера (строки типа ====[ Title ]====)
 _print_checker_sections() {
     local output="$1"
-    # Снимаем все ANSI-коды и \r перед парсингом
+    # Снимаем ANSI-коды; \r-overwrite: оставляем только последний кадр в строке
     local clean
-    clean=$(echo "$output" | sed 's/\x1B\[[0-9;]*[a-zA-Z]//g; s/\r//g')
+    clean=$(echo "$output" | sed 's/\x1B\[[0-9;]*[a-zA-Z]//g' | sed 's/.*\r//')
+
+    # Проход 1: ищем максимальную длину имени сервиса для выравнивания колонки
+    local max_name_len=0
+    local _t _ts _tn
+    while IFS= read -r _t; do
+        echo "$_t" | grep -qP '=+\[.*\]=+' && continue
+        echo "$_t" | grep -qP '^\s*=+\s*$'  && continue
+        [[ -z "$(echo "$_t" | tr -d '[:space:]')" ]] && continue
+        echo "$_t" | grep -q ':' || continue
+        _ts=$(echo "$_t" | sed 's/->[[:space:]]*/  /g')
+        _tn=$(echo "$_ts" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/ (.*$//')
+        [ ${#_tn} -gt $max_name_len ] && max_name_len=${#_tn}
+    done <<< "$clean"
+    local col_w=$((max_name_len + 3))
+
+    # Проход 2: вывод с выравниванием по колонке
     local in_section=false
     local first_section=true
     while IFS= read -r line; do
@@ -237,21 +253,27 @@ _print_checker_sections() {
                 in_section=false; continue
             fi
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
-            # Нормализуем: убираем стрелку -> и лишние пробелы (4+)
-            local svc_line
+            local svc_line svc_name svc_value
             svc_line=$(echo "$line" | sed 's/->[[:space:]]*/  /g; s/:[[:space:]]\{4,\}/: /g')
-            # Разбиваем на имя (серый) и значение (цветное)
-            local svc_name svc_value
-            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            # Убираем хэш/ID в скобках в конце имени: "Name (HASH)" → "Name"
+            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/ (.*$//')
             svc_value=$(echo "$svc_line" | cut -d: -f2- | sed 's/^[[:space:]:]*//' | sed 's/[[:space:]]*$//')
             svc_value=$(_svc_yn "$svc_value")
-            # Цвет значения (case — надёжно с кириллицей без зависимости от locale)
-            local val_color="${WHITE}"
-            case "$svc_value" in
-                Нет*|No*|*Failed*) val_color="${RED}" ;;
-                Да*|Yes*)          val_color="${GREEN}" ;;
-            esac
-            echo -e " ${DARKGRAY}${svc_name}:${NC} ${val_color}${svc_value}${NC}"
+            # Цвет и форматирование значения
+            local dv
+            if [[ "$svc_value" =~ ^(Да|Yes)[[:space:]]*\(Регион:[[:space:]]*([A-Z]+)\) ]]; then
+                dv="${GREEN}${BASH_REMATCH[1]}${NC} ${DARKGRAY}(Регион: ${GREEN}${BASH_REMATCH[2]}${NC}${DARKGRAY})${NC}"
+            elif [[ "$svc_value" =~ ^(Да|Yes)$ ]]; then
+                dv="${GREEN}${svc_value}${NC}"
+            elif [[ "$svc_value" =~ ^(Нет|No)$ ]] || [[ "$svc_value" == *Failed* ]]; then
+                dv="${RED}${svc_value}${NC}"
+            elif [[ "$svc_value" =~ ^[A-Z]{2,4}$ ]]; then
+                dv="${GREEN}${svc_value}${NC}"
+            else
+                dv="${WHITE}${svc_value}${NC}"
+            fi
+            echo -ne " ${DARKGRAY}$(printf "%-${col_w}s" "${svc_name}:")${NC}"
+            echo -e "${dv}"
         fi
     done <<< "$clean"
 }
