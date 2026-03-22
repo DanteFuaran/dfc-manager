@@ -486,7 +486,7 @@ _mt_do_stats() {
             | awk 'FNR>1 && $4=="01" && $2~/:01BB$/{split($3,a,":"); ip=a[1]; if(!(ip in ips)){ips[ip]=1}} END{n=0; for(k in ips)n++; print n}' \
             2>/dev/null || echo "0")
 
-        if [ -n "${PROXY_TAG:-}" ] && [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
+        if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
             echo "$_max_sim" > "$_max_file" 2>/dev/null || true
         fi
@@ -505,12 +505,8 @@ _mt_do_stats() {
         echo -e "${GREEN}       📊 Статистика MTProto${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        local _cv="${GREEN}"
-        local _cval="$_active"
-        if [ -z "${PROXY_TAG:-}" ]; then _cval="— (нужен Tag)"; _cv="${DARKGRAY}"; fi
-
         local _cw=22
-        echo -e " ${WHITE}$(_mpad "Активных клиентов:" $_cw)${NC} ${_cv}${_cval}${NC}"
+        echo -e " ${WHITE}$(_mpad "Активных клиентов:" $_cw)${NC} ${GREEN}${_active}${NC}"
         echo -e " ${WHITE}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
         echo -e " ${WHITE}$(_mpad "К серверам Telegram:" $_cw)${NC} ${WHITE}${_dc_conns}${NC}"
         echo -e " ${WHITE}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
