@@ -90,7 +90,7 @@ _mt_read_input() {
             if [ "${#_typed}" -gt 0 ]; then _typed="${_typed%?}"; printf '\b \b'; fi
         elif [[ "$_ch" == $'\e' ]]; then
             _mt_consume_escape_seq
-            printf "\n"
+            printf "\r\033[K"   # стрерть текущую строку без перевода
             _rc=1; break
         elif [[ -n "$_ch" ]] && [[ "$_ch" =~ [[:print:]] ]]; then
             _typed="${_typed}${_ch}"
@@ -262,15 +262,17 @@ _mt_do_install() {
     echo
 
     _mt_check_docker || { _mt_press_enter; return; }
-    echo
 
     local _step=1 _secret_input="" _tag_input=""
     while true; do
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${GREEN}       📦 Установка MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        echo
+
         case $_step in
-            1) # Fake TLS домен
-                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN" \
-                    && (( _step++ )) || return
-                ;;
             2) # Порт
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default" \
@@ -287,7 +289,6 @@ _mt_do_install() {
                     && (( _step++ )) || (( _step-- ))
                 ;;
             5) # Proxy Tag
-                echo
                 echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
                 echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
                 _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}" \
