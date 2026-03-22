@@ -145,8 +145,79 @@ run_services_check() {
     (bash <(curl -s "storage.umager.ru/checker_all_ru.sh") > "$tmpfile" 2>&1) &
     show_spinner "Проверка доступности сервисов" "Проверка завершена"
     echo
-    cat "$tmpfile"
+
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
+
+    # Перевод ISO-кода страны в русское название
+    _country_name() {
+        case "$1" in
+            DE) echo "Германия" ;; RU) echo "Россия" ;;    US) echo "США" ;;
+            NL) echo "Нидерланды" ;; GB) echo "Великобритания" ;; FR) echo "Франция" ;;
+            FI) echo "Финляндия" ;; PL) echo "Польша" ;;   UA) echo "Украина" ;;
+            KZ) echo "Казахстан" ;; TR) echo "Турция" ;;   JP) echo "Япония" ;;
+            SG) echo "Сингапур" ;;  CN) echo "Китай" ;;    LV) echo "Латвия" ;;
+            LT) echo "Литва" ;;     EE) echo "Эстония" ;;  SE) echo "Швеция" ;;
+            NO) echo "Норвегия" ;;  DK) echo "Дания" ;;    CH) echo "Швейцария" ;;
+            AT) echo "Австрия" ;;   IT) echo "Италия" ;;   ES) echo "Испания" ;;
+            *) echo "$1" ;;
+        esac
+    }
+    # Перевод Yes/No в Да/Нет
+    _svc_translate() {
+        echo "$1" | sed 's/\bYes\b/Да/g; s/\bNo\b/Нет/g; s/Region:/Регион:/g'
+    }
+
+    # Парсим IPv4-блок
+    local raw_provider raw_cc ipv4_provider ipv4_country ipv4_city ipv4_asn
+    raw_provider=$(echo "$output" | grep -oP '(?i)хостинг-провайдер:\s*\K.*' | head -1 | sed 's/\s*$//')
+    raw_cc=$(echo "$raw_provider" | grep -oP '^[A-Z]{2}')
+    if [ -n "$raw_cc" ]; then
+        ipv4_provider=$(echo "$raw_provider" | sed "s/^$raw_cc/$(_country_name "$raw_cc")/")
+    else
+        ipv4_provider="$raw_provider"
+    fi
+    local raw_country
+    raw_country=$(echo "$output" | grep -oP '(?i)Страна:\s*\K[A-Z]+' | head -1)
+    ipv4_country=$(_country_name "$raw_country")
+    ipv4_city=$(echo "$output" | grep -oP '(?i)Город:\s*\K.*' | head -1 | sed 's/\s*$//')
+    ipv4_asn=$(echo "$output"  | grep -oP '(?i)ASN:\s*\K.*'   | head -1 | sed 's/\s*$//')
+
+    echo -e " ${DARKGRAY}Результаты для IPv4${NC}"
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    [ -n "$ipv4_provider" ] && echo -e " ${DARKGRAY}Хостинг провайдер:${NC} ${WHITE}${ipv4_provider}${NC}"
+    [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}${ipv4_country}${NC}"
+    [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv4_city}${NC}"
+    [ -n "$ipv4_asn"      ] && echo -e " ${DARKGRAY}ASN:${NC} ${WHITE}${ipv4_asn}${NC}"
+    echo
+
+    # Парсим блок «Глобальный тест»
+    echo -e "${DARKGRAY}────────────[ Глобальный тест ]─────────────${NC}"
+    local in_global=false
+    while IFS= read -r line; do
+        if echo "$line" | grep -qi 'глобальный.*тест\|global.*test'; then
+            in_global=true; continue
+        fi
+        if $in_global; then
+            # Конец секции — строка только из =
+            if echo "$line" | grep -qP '^\s*=+\s*$'; then
+                in_global=false; continue
+            fi
+            # Пропускаем пустые строки
+            [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
+            echo -e "${WHITE}$(_svc_translate "$line")${NC}"
+        fi
+    done <<< "$output"
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+
+    # IPv6 статус
+    if echo "$output" | grep -qi 'ipv6.*не обнаружен\|no.*ipv6\|ipv6.*not'; then
+        echo -e " ${DARKGRAY}Результаты для IPv6:${NC} ${WHITE}IPv6 - Отсутствует${NC}"
+    else
+        echo -e " ${DARKGRAY}Результаты для IPv6:${NC} ${WHITE}Доступен${NC}"
+    fi
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
