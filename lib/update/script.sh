@@ -106,7 +106,7 @@ manage_delete_components() {
             echo -e "${RED}        🗑️   Удаление компонентов${NC}"
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             echo
-            echo -e "🔍  Компоненты не установлены"
+            echo -e "    🔍  Компоненты не установлены"
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             show_continue_prompt || true
