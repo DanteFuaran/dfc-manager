@@ -232,14 +232,64 @@ NGINX
             cat "$beszel_tmp" >> "$NGINX_CONF"
         fi
         rm -f "$beszel_tmp"
-    fi
 
-    # ─── Добавляем cert volume в nginx docker-compose ───
-    local DOCKER_COMPOSE="/opt/remnawave/docker-compose.yml"
-    if [ -f "$DOCKER_COMPOSE" ] && [ -n "$CERT_DOMAIN" ]; then
-        if ! grep -q "/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem" "$DOCKER_COMPOSE" 2>/dev/null; then
-            sed -i "/\/dev\/shm:\/dev\/shm/i\\      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem:ro # beszel-cert\n      - ${CERT_HOST_KEY}:/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem:ro # beszel-cert" "$DOCKER_COMPOSE"
+        # ─── Добавляем cert volume в nginx docker-compose ───
+        local DOCKER_COMPOSE="/opt/remnawave/docker-compose.yml"
+        if [ -f "$DOCKER_COMPOSE" ] && [ -n "$CERT_DOMAIN" ]; then
+            if ! grep -q "/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem" "$DOCKER_COMPOSE" 2>/dev/null; then
+                sed -i "/\/dev\/shm:\/dev\/shm/i\\      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem:ro # beszel-cert\n      - ${CERT_HOST_KEY}:/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem:ro # beszel-cert" "$DOCKER_COMPOSE"
+            fi
         fi
+    else
+        # ─── Standalone nginx (Remnawave не установлен) ───
+        cat > "${DIR_BESZEL}nginx.conf" <<NGINXEOF
+events {}
+
+http {
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        server_name ${BESZEL_DOMAIN};
+        http2 on;
+
+        ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+        location / {
+            proxy_pass http://127.0.0.1:8090;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name ${BESZEL_DOMAIN};
+        return 301 https://\$host\$request_uri;
+    }
+}
+NGINXEOF
+
+        cat >> "${DIR_BESZEL}docker-compose.yml" <<YAML
+
+  beszel-nginx:
+    image: nginx:alpine
+    container_name: beszel-nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/fullchain.pem:ro
+      - ${CERT_HOST_KEY}:/etc/nginx/ssl/privkey.pem:ro
+    depends_on:
+      - beszel
+YAML
     fi
 
     # ─── Запускаем ───
