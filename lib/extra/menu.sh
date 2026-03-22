@@ -81,7 +81,7 @@ manage_server_testing() {
 run_speed_test() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   ⚡ Тест скорости сети${NC}"
+    echo -e "${GREEN}        ⚡ Тест скорости сети${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -94,7 +94,7 @@ run_speed_test() {
         ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
     ) &
-    show_spinner "Запущен тест скорости сети..." "Тест скорости сети завершён"
+    show_spinner "Запущен тест скорости сети" "Тест скорости сети завершён"
     echo
 
     local output
@@ -128,46 +128,85 @@ run_speed_test() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
     read -r
+    tput cnorm 2>/dev/null || true
 }
 
 run_services_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌍 Доступность популярных сервисов${NC}"
+    echo -e "${GREEN}        🌍 Доступность популярных сервисов${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    bash <(curl -s storage.umager.ru/checker_all_ru.sh)
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
+    (bash <(curl -s "storage.umager.ru/checker_all_ru.sh") > "$tmpfile" 2>&1) &
+    show_spinner "Проверка доступности сервисов" "Проверка завершена"
+    echo
+    cat "$tmpfile"
+    rm -f "$tmpfile"
+
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
     read -r
+    tput cnorm 2>/dev/null || true
 }
 
 run_regional_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔒 Региональные ограничения${NC}"
+    echo -e "${GREEN}        🔒 Региональные ограничения${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    bash <(curl -s storage.umager.ru/checker_inst_ru.sh)
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
+    (bash <(curl -s "storage.umager.ru/checker_inst_ru.sh") > "$tmpfile" 2>&1) &
+    show_spinner "Проверка региональных ограничений" "Проверка завершена"
+    echo
+    cat "$tmpfile"
+    rm -f "$tmpfile"
+
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
     read -r
+    tput cnorm 2>/dev/null || true
 }
 
 run_geolocation() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📍 Геолокация IP${NC}"
+    echo -e "${GREEN}        📍 Геолокация IP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    bash <(curl -s storage.umager.ru/ipregion.sh)
+
+    # Автоматически установить util-linux если отсутствует
+    if ! dpkg-query -W -f='${Status}' util-linux 2>/dev/null | grep -q "install ok installed"; then
+        (apt-get install -y util-linux >/dev/null 2>&1) &
+        show_spinner "Установка зависимостей" "Зависимости установлены"
+        echo
+    fi
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
+    (bash <(curl -s "storage.umager.ru/ipregion.sh") > "$tmpfile" 2>&1) &
+    show_spinner "Определение геолокации IP" "Геолокация определена"
+    echo
+    cat "$tmpfile"
+    rm -f "$tmpfile"
+
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
     read -r
+    tput cnorm 2>/dev/null || true
 }
 
 # ═══════════════════════════════════════════════════
