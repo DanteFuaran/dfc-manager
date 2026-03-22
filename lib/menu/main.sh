@@ -105,38 +105,41 @@ main_menu() {
                     local inst_action="${inst_actions[$install_choice]:-back}"
                     case "$inst_action" in
                         panel_wizard)
-                            # Шаг 1: страница подписки на этом сервере?
-                            show_arrow_menu "📄  Установка страницы подписки" \
-                                "✔️   Да, установить на этот сервер" \
-                                "❌  Нет, установлю на отдельный сервер" \
-                                "──────────────────────────────────────" \
-                                "⬅️   Назад"
-                            local sub_choice=$?
-                            [[ $sub_choice -eq 255 || $sub_choice -eq 3 ]] && continue
-                            local with_subpage=true
-                            [[ $sub_choice -eq 1 ]] && with_subpage=false
+                            while true; do
+                                # Шаг 1: страница подписки на этом сервере?
+                                show_arrow_menu "📄  Установка страницы подписки" \
+                                    "✔️   Да, установить на этот сервер" \
+                                    "❌  Нет, установлю на отдельный сервер" \
+                                    "──────────────────────────────────────" \
+                                    "⬅️   Назад"
+                                local sub_choice=$?
+                                [[ $sub_choice -eq 255 || $sub_choice -eq 3 ]] && break
+                                local with_subpage=true
+                                [[ $sub_choice -eq 1 ]] && with_subpage=false
 
-                            # Шаг 2: нода на этом сервере?
-                            show_arrow_menu "🌐  Установка ноды" \
-                                "🌐  Да, установить на этот сервер" \
-                                "🖥️   Нет, установлю на отдельный сервер" \
-                                "──────────────────────────────────────" \
-                                "⬅️   Назад"
-                            local node_choice=$?
-                            [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
-                            local with_node=false
-                            [[ $node_choice -eq 0 ]] && with_node=true
+                                # Шаг 2: нода на этом сервере?
+                                show_arrow_menu "🌐  Установка ноды" \
+                                    "✔️   Да, установить на этот сервер" \
+                                    "❌   Нет, установлю на отдельный сервер" \
+                                    "──────────────────────────────────────" \
+                                    "⬅️   Назад"
+                                local node_choice=$?
+                                [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
+                                local with_node=false
+                                [[ $node_choice -eq 0 ]] && with_node=true
 
-                            # Запуск нужного варианта установки
-                            if [ "$with_subpage" = true ] && [ "$with_node" = true ]; then
-                                installation_full || break
-                            elif [ "$with_subpage" = true ]; then
-                                installation_panel true || break
-                            elif [ "$with_node" = true ]; then
-                                installation_panel_with_node || break
-                            else
-                                installation_panel false || break
-                            fi
+                                # Запуск нужного варианта установки
+                                if [ "$with_subpage" = true ] && [ "$with_node" = true ]; then
+                                    installation_full
+                                elif [ "$with_subpage" = true ]; then
+                                    installation_panel true
+                                elif [ "$with_node" = true ]; then
+                                    installation_panel_with_node
+                                else
+                                    installation_panel false
+                                fi
+                                break
+                            done
                             ;;
                         subpage)    installation_subpage || break ;;
                         node)       installation_node  || break ;;
