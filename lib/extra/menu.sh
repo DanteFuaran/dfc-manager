@@ -94,7 +94,7 @@ run_speed_test() {
         ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
     ) &
-    show_spinner "Запущен тест скорости сети" "Тест скорости сети завершён"
+    show_spinner "Запущен тест скорости сети" "Диагностика скорости сети завершёна"
     echo
 
     local output
@@ -113,13 +113,19 @@ run_speed_test() {
     loss=$(echo "$output" | grep -oP 'Packet Loss:\s*\K.*' | sed 's/\s*$//')
 
     if [ -n "$server" ]; then
-        echo -e "      ${DARKGRAY}Сервер подключения:${NC} ${WHITE}${server}${NC}"
-        echo -e "      ${DARKGRAY}Провайдер:${NC} ${WHITE}${isp}${NC}"
+        # Вычисляем ширину колонки под самое длинное имя поля
+        local col_w=22
+        echo -e "${DARKGRAY}──────────────── [ Сервер ] ─────────────────${NC}"
         echo
-        echo -e "      ${DARKGRAY}Задержка:${NC}            ${YELLOW}${latency}${NC}"
-        echo -e "      ${DARKGRAY}Скорость Загрузки:${NC}   ${GREEN}${download}${NC} ${DARKGRAY}| Пинг: ${dl_ping}${NC}"
-        echo -e "      ${DARKGRAY}Скорость Отправки:${NC}   ${GREEN}${upload}${NC} ${DARKGRAY}| Пинг: ${ul_ping}${NC}"
-        echo -e "      ${DARKGRAY}Потеряно пакетов:${NC}    ${WHITE}${loss}${NC}"
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Сервер подключения:")${NC} ${WHITE}${server}${NC}"
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Провайдер:")${NC} ${WHITE}${isp}${NC}"
+        echo
+        echo -e "${DARKGRAY}──────────────── [ Результат ] ─────────────────${NC}"
+        echo
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Задержка:")${NC} ${YELLOW}${latency}${NC}"
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Скорость загрузки:")${NC} ${GREEN}${download}${NC}  ${DARKGRAY}пинг: ${dl_ping}${NC}"
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Скорость отправки:")${NC} ${GREEN}${upload}${NC}  ${DARKGRAY}пинг: ${ul_ping}${NC}"
+        echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Потеряно пакетов:")${NC} ${WHITE}${loss}${NC}"
     else
         echo -e "${RED}Не удалось выполнить тест скорости${NC}"
         [ -n "$output" ] && echo -e "\n$output"
@@ -337,17 +343,10 @@ run_geolocation() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # Автоматически установить util-linux если отсутствует
-    if ! dpkg-query -W -f='${Status}' util-linux 2>/dev/null | grep -q "install ok installed"; then
-        (apt-get install -y util-linux >/dev/null 2>&1) &
-        show_spinner "Установка зависимостей" "Зависимости установлены"
-        echo
-    fi
-
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    (bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null > "$tmpfile" 2>&1) &
-    show_spinner "Определение геолокации IP" "Геолокация определена"
+    (echo y | bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null > "$tmpfile" 2>&1) &
+    show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo
 
     local output
@@ -368,16 +367,18 @@ run_geolocation() {
     geo_coord=$(echo   "$output" | grep -oP '(?i)Коорд[^:]*:[\s]+\K[^\n]+|Coord[^:]*:[\s]+\K[^\n]+|Lat.*Lon[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
 
     if [ -n "$geo_ip$geo_country$geo_city$geo_isp" ]; then
+        local col_w=16
         echo -e "${DARKGRAY}───────────────── [ Сервер ] ─────────────────${NC}"
-        [ -n "$geo_ip"      ] && echo -e " ${DARKGRAY}IP адрес:${NC}            ${WHITE}${geo_ip}${NC}"
-        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}Страна:${NC}             ${WHITE}${geo_country}${NC}"
-        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}Регион:${NC}             ${WHITE}${geo_region}${NC}"
-        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}Город:${NC}              ${WHITE}${geo_city}${NC}"
-        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}Провайдер:${NC}         ${WHITE}${geo_isp}${NC}"
-        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}ASN:${NC}               ${WHITE}${geo_asn}${NC}"
-        [ -n "$geo_org"     ] && echo -e " ${DARKGRAY}Организация:${NC}        ${WHITE}${geo_org}${NC}"
-        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}Часовой пояс:${NC}       ${WHITE}${geo_tz}${NC}"
-        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}Координаты:${NC}         ${WHITE}${geo_coord}${NC}"
+        echo
+        [ -n "$geo_ip"      ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "IP адрес:")${NC} ${WHITE}${geo_ip}${NC}"
+        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Страна:")${NC} ${WHITE}${geo_country}${NC}"
+        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Регион:")${NC} ${WHITE}${geo_region}${NC}"
+        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Город:")${NC} ${WHITE}${geo_city}${NC}"
+        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Провайдер:")${NC} ${WHITE}${geo_isp}${NC}"
+        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "ASN:")${NC} ${WHITE}${geo_asn}${NC}"
+        [ -n "$geo_org"     ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Организация:")${NC} ${WHITE}${geo_org}${NC}"
+        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Часовой пояс:")${NC} ${WHITE}${geo_tz}${NC}"
+        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}$(printf "%-${col_w}s" "Координаты:")${NC} ${WHITE}${geo_coord}${NC}"
     else
         # Фоллбек — показываем сырой вывод без escape-последовательностей
         echo "$output" | sed 's/\x1B\[[0-9;]*[mK]//g'
