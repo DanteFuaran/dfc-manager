@@ -349,7 +349,7 @@ run_regional_check() {
 run_geolocation() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📍 Геолокация IP${NC}"
+    echo -e "${GREEN}        📍 Геолокация IP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -435,7 +435,7 @@ run_geolocation() {
             [[ -z "$svc_val" ]] && continue
             local vc="${GREEN}"
             [[ "$svc_val" =~ ^(N/A|null|-)$ ]] && vc="${DARKGRAY}"
-            echo -e " ${DARKGRAY}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
+            echo -e " ${WHITE}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
             continue
         fi
         # Заголовок секции: Popular services / CDN services / GeoIP services
