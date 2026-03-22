@@ -265,6 +265,7 @@ _mt_do_install() {
     fi
     PROXY_TAG=""
     echo
+    echo
 
     # Подготавливаем файлы
     _mt_write_compose
@@ -345,8 +346,8 @@ _mt_do_config() {
         _mt_press_enter; return
     fi
 
-    local _rs="${RED}● Не запущен${NC}"
-    _mt_running && _rs="${GREEN}● Запущен${NC}"
+    local _rs="${RED}Не запущен${NC}"
+    _mt_running && _rs="${GREEN}Запущен${NC}"
 
     local _cw=12
     echo -e " ${DARKGRAY}$(_mpad "Статус:" $_cw)${NC} ${_rs}"
@@ -457,15 +458,15 @@ _mt_do_stats() {
         echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
 
         # Ждём 5 сек с проверкой Enter/Esc каждые 0.1 сек
-        local _si=0 _sk
+        local _si=0 _sk _rr
         while [ $_si -lt 50 ]; do
             _sk=""
-            IFS= read -rsn1 -t 0.1 _sk 2>/dev/null || true
+            IFS= read -rsn1 -t 0.1 _sk 2>/dev/null && _rr=0 || _rr=$?
             if [[ "$_sk" == $'\e' ]]; then
                 _mt_consume_escape_seq
                 _mt_stats_restore
                 return 1   # Esc = выход в главное меню
-            elif [[ "$_sk" == "" ]]; then
+            elif [[ $_rr -eq 0 && "$_sk" == "" ]]; then
                 _mt_stats_restore
                 return 0   # Enter = назад в меню MTProto
             fi
@@ -538,7 +539,7 @@ _mt_do_uninstall() {
         _mt_press_enter; return
     fi
 
-    echo -e "${YELLOW}Внимание: MTProto будет полностью удалён с сервера.${NC}"
+    echo -e "${YELLOW}MTProto будет полностью удалён с сервера.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"

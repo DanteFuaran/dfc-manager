@@ -39,8 +39,6 @@ main_menu() {
                     if [ "$is_installed" = true ]; then
                         ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager 2>/dev/null || true
                         ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
-                    else
-                        rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
                     fi
 
                     local update_notice="" install_status=""
