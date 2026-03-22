@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
 #   https://github.com/DanteFuaran/dfc-manager
-#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/dev/dfc-manager.sh)
+#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
 
 # ─── Bootstrap: запуск через curl или не из установленной копии ─────────
@@ -16,7 +16,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
     # Ветка: читаем из version-файла рядом со скриптом или из уже установленной копии.
     # Если запуск через curl/pipe — файловая система недоступна, используем значение из version-файла в репозитории.
-    _BRANCH="dev"   # <- этот фолбэк меняется только при смене ветки
+    _BRANCH="main"  # <- этот фолбэк меняется только при смене ветки
     for _vf2 in "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)")/version" \
                 "${_INSTALL_DIR}/version"; do
         if [ -f "$_vf2" ]; then

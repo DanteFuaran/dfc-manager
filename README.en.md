@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="DFC Remna Install" width="100%">
+  <img src="assets/logo.jpg" alt="DFC Manager" width="100%">
 </p>
 
 <p align="center">
@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
 </p>
@@ -20,7 +20,7 @@
 ## 🚀 Quick Start
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/dev/dfc-manager.sh)
+cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
 ```
 
 <sub>After installation, manage everything with <b><code>dfc-manager</code></b> or <b><code>dfc</code></b></sub>

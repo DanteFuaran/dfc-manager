@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="DFC Remna Install" width="100%">
+  <img src="assets/logo.jpg" alt="DFC Manager" width="100%">
 </p>
 
 <p align="center">
@@ -7,20 +7,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
 </p>
 
 <h1 align="center">🛡️ DFC Manager</h1>
-<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой и полным набором инструментов управления</p>
+<p align="center">Интерактивный установщик и менеджер <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>с NGINX, SSL, cookie-защитой, MTProto прокси, мониторингом Beszel и полным набором инструментов управления</p>
 
 ---
 
 ## 🚀 Быстрый старт
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/dev/dfc-manager.sh)
+cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
 ```
 
 <sub>После установки управление доступно через команду <b><code>dfc-manager</code></b> или <b><code>dfc</code></b></sub>
@@ -38,6 +38,8 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-man
 | **Только панель** | Установка панели без ноды |
 | **Только нода** | Установка ноды для подключения к удалённой панели |
 | **Подключить ноду к панели** | Добавление новой ноды на сервер с уже установленной панелью |
+| **MTProto прокси** | Установка MTProto прокси на отдельный сервер |
+| **Beszel мониторинг** | Установка агента или хаба Beszel для мониторинга серверов |
 
 </details>
 
@@ -89,7 +91,8 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-man
 > **🚀 BBR** — включение TCP BBR для оптимизации сети<br>
 > **🛡️ Fail2ban** — защита от брутфорса<br>
 > **📝 Logrotate** — ротация логов Docker-контейнеров<br>
-> **📊 Beszel** — мониторинг сервера (агент + hub)
+> **� MTProto прокси** — установка и управление MTProto прокси-сервером (со статистикой)<br>
+> **�📊 Beszel** — мониторинг сервера (агент + hub)
 
 ### ⚙️ Управление сервисами
 > **Запуск / остановка** всех сервисов одной командой<br>
