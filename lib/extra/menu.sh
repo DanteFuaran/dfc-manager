@@ -55,13 +55,294 @@ _mt_press_enter() {
     tput cnorm 2>/dev/null || true
 }
 
-# Установка / переустановка — делегируем внешнему скрипту
-_mt_do_install() {
-    if command -v mtproto >/dev/null 2>&1; then
-        mtproto
-    else
-        cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-mtproto/refs/heads/main/mtproto-install.sh)
+# ── MTProto install helpers ──────────────────────────────────────────────────
+
+# Поглощает CSI/SS3 escape-последовательность из буфера ввода (после \e)
+_mt_consume_escape_seq() {
+    local _s1="" _s2=""
+    read -rsn1 -t 0.1 _s1 2>/dev/null || _s1=""
+    if [[ "$_s1" == '[' ]] || [[ "$_s1" == 'O' ]]; then
+        while true; do
+            read -rsn1 -t 0.1 _s2 2>/dev/null || { _s2=""; break; }
+            [[ -z "$_s2" ]] && break
+            [[ "$_s2" =~ [a-zA-Z~] ]] && break
+        done
     fi
+}
+
+# Интерактивный ввод строки (Backspace, Esc-поглощение, зелёный ввод)
+# Использование: _mt_read_input VARNAME "Промпт" "default"
+_mt_read_input() {
+    local _var="$1" _prompt="$2" _default="${3:-}"
+    local _typed="" _ch _orig_stty
+    _orig_stty=$(stty -g 2>/dev/null || echo "")
+    stty -icanon -echo min 1 time 0 2>/dev/null || true
+    tput cnorm 2>/dev/null || true
+    printf "\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33m%b\033[0m " "$_prompt"
+    while IFS= read -rsn1 -t 0 _ch 2>/dev/null; do :; done
+    while true; do
+        _ch=""
+        IFS= read -rsn1 _ch 2>/dev/null || _ch=""
+        if [[ "$_ch" == $'\n' ]] || [[ "$_ch" == $'\r' ]] || [[ "$_ch" == "" ]]; then
+            printf "\n"; break
+        elif [[ "$_ch" == $'\x7f' ]] || [[ "$_ch" == $'\b' ]]; then
+            if [ "${#_typed}" -gt 0 ]; then _typed="${_typed%?}"; printf '\b \b'; fi
+        elif [[ "$_ch" == $'\e' ]]; then
+            _mt_consume_escape_seq
+        elif [[ -n "$_ch" ]] && [[ "$_ch" =~ [[:print:]] ]]; then
+            _typed="${_typed}${_ch}"
+            printf "${GREEN}%s${NC}" "$_ch"
+        fi
+    done
+    if [ -n "${_orig_stty}" ]; then stty "$_orig_stty" 2>/dev/null || stty sane 2>/dev/null || true
+    else stty sane 2>/dev/null || true; fi
+    if [ -z "$_typed" ]; then printf -v "$_var" '%s' "$_default"
+    else printf -v "$_var" '%s' "$_typed"; fi
+}
+
+# Получает внешний IP сервера
+_mt_get_server_ip() {
+    curl -s --max-time 5 ifconfig.me 2>/dev/null ||
+    curl -s --max-time 5 icanhazip.com 2>/dev/null ||
+    curl -s --max-time 5 api.ipify.org 2>/dev/null ||
+    echo "YOUR_IP"
+}
+
+# Проверяет/устанавливает Docker
+_mt_check_docker() {
+    if ! command -v docker &>/dev/null; then
+        print_warning "Docker не установлен"
+        echo
+        echo -e "  ${YELLOW}Установить Docker автоматически? [y/N]${NC}"
+        local _ans=""
+        read -r _ans
+        if [[ "$_ans" =~ ^[Yy]$ ]]; then
+            (curl -fsSL https://get.docker.com | sh >/dev/null 2>&1) &
+            show_spinner "Установка Docker..." "Docker установлен"
+        else
+            return 1
+        fi
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        print_error "Docker не запущен"; return 1
+    fi
+}
+
+# Генерирует Fake TLS secret на основе домена
+_mt_generate_fake_tls_secret() {
+    local domain="${1:-google.com}"
+    local domain_hex
+    domain_hex=$(printf '%s' "$domain" | xxd -ps | tr -d '\n')
+    local domain_len=${#domain_hex}
+    local needed=$(( 30 - domain_len ))
+    [ "$needed" -lt 0 ] && needed=0
+    local random_hex=""
+    [ "$needed" -gt 0 ] && random_hex=$(openssl rand -hex 15 2>/dev/null | cut -c1-"$needed")
+    printf 'ee%s%s' "$domain_hex" "$random_hex"
+}
+
+# Ищет свободный порт начиная с base
+_mt_find_free_port() {
+    local base="${1:-1337}"
+    for port in "$base" 8443 8444 8445 9443 10443; do
+        if ! ss -tuln 2>/dev/null | grep -q ":${port} "; then
+            echo "$port"; return 0
+        fi
+    done
+    echo "10443"
+}
+
+# Сохраняет конфиг в .env
+_mt_save_config() {
+    mkdir -p "$_MT_DIR"
+    cat > "$_MT_ENV" << EOF
+PROXY_PORT=${PROXY_PORT}
+PROXY_SECRET=${PROXY_SECRET}
+SERVER_IP=${SERVER_IP}
+FAKE_DOMAIN=${FAKE_DOMAIN}
+PROXY_TAG=${PROXY_TAG}
+EOF
+}
+
+# Записывает run.sh для контейнера
+_mt_write_run_sh() {
+    cat > "$1" << 'RUNSH'
+#!/bin/bash
+if [ ! -z "$DEBUG" ]; then set -x; fi
+mkdir /data 2>/dev/null >/dev/null
+RANDOM=$(printf "%d" "0x$(head -c4 /dev/urandom | od -t x1 -An | tr -d ' ')")
+if [ -z "$WORKERS" ]; then WORKERS=2; fi
+echo "#### Telegram Proxy"
+SECRET_CMD=""
+if [ ! -z "$SECRET" ]; then
+  echo "[+] Using the explicitly passed secret: '$SECRET'."
+elif [ -f /data/secret ]; then
+  SECRET="$(cat /data/secret)"
+  echo "[+] Using the secret in /data/secret: '$SECRET'."
+else
+  SECRET_COUNT="${SECRET_COUNT:-1}"
+  echo "[+] No secret passed. Will generate $SECRET_COUNT random ones."
+  SECRET="$(dd if=/dev/urandom bs=16 count=1 2>&1 | od -tx1 | head -n1 | tail -c +9 | tr -d ' ')"
+  for pass in $(seq 2 $SECRET_COUNT); do
+    SECRET="$SECRET,$(dd if=/dev/urandom bs=16 count=1 2>&1 | od -tx1 | head -n1 | tail -c +9 | tr -d ' ')"
+  done
+fi
+if echo "$SECRET" | grep -qE '^[0-9a-fA-F]{32}(,[0-9a-fA-F]{32}){,15}$'; then
+  SECRET="$(echo "$SECRET" | tr '[:upper:]' '[:lower:]')"
+  SECRET_CMD="-S $(echo "$SECRET" | sed 's/,/ -S /g')"
+  echo -- "$SECRET_CMD" > /data/secret_cmd
+  echo "$SECRET" > /data/secret
+else
+  echo '[F] Bad secret format.'; exit 1
+fi
+TAG_CMD=""
+if [[ ! -z "$TAG" ]]; then
+  if echo "$TAG" | grep -qE '^[0-9a-fA-F]{32}$'; then
+    TAG="$(echo "$TAG" | tr '[:upper:]' '[:lower:]')"
+    TAG_CMD="-P $TAG"
+  fi
+fi
+curl -s https://core.telegram.org/getProxyConfig -o /etc/telegram/backend.conf || { echo '[F] Cannot download proxy config.'; exit 2; }
+CONFIG=/etc/telegram/backend.conf
+IP="$(curl -s -4 "https://digitalresistance.dog/myIp")"
+INTERNAL_IP="$(ip -4 route get 8.8.8.8 | grep '^8\.8\.8\.8\s' | grep -Po 'src\s+\d+\.\d+\.\d+\.\d+' | awk '{print $2}')"
+[ -z "$IP" ] && { echo "[F] Cannot determine external IP."; exit 3; }
+[ -z "$INTERNAL_IP" ] && { echo "[F] Cannot determine internal IP."; exit 4; }
+echo "[*] External IP: $IP"
+sleep 1
+exec /usr/local/bin/mtproto-proxy -p 2398 -H 443 -M "$WORKERS" -C 60000 \
+  --aes-pwd /etc/telegram/hello-explorers-how-are-you-doing \
+  -u root $CONFIG --allow-skip-dh --nat-info "$INTERNAL_IP:$IP" \
+  --http-stats $SECRET_CMD $TAG_CMD
+RUNSH
+    chmod +x "$1"
+}
+
+# Записывает docker-compose.yml
+_mt_write_compose() {
+    mkdir -p "$_MT_DIR"
+    cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
+services:
+  mtproto-proxy:
+    image: telegrammessenger/proxy:latest
+    container_name: mtproto-proxy
+    restart: unless-stopped
+    ports:
+      - "${PROXY_PORT}:443"
+    volumes:
+      - ./run.sh:/run.sh:ro
+    environment:
+      - SECRET=${PROXY_SECRET}
+      - TAG=${PROXY_TAG}
+COMPOSE
+}
+
+# Установка / переустановка MTProto (встроенная реализация)
+_mt_do_install() {
+    set +e
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
+    # Загружаем существующий конфиг если есть
+    PROXY_PORT="1337"
+    FAKE_DOMAIN="google.com"
+    PROXY_SECRET=""
+    SERVER_IP=""
+    PROXY_TAG=""
+    [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}       📦 Установка MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    _mt_check_docker || { _mt_press_enter; return; }
+    echo
+
+    # Fake TLS домен
+    _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+
+    # Порт
+    local _port_default
+    _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
+    _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+
+    # Секрет
+    echo -e "  ${DARKGRAY}Секрет — ключ шифрования подключения (передаётся клиентам в ссылке).${NC}"
+    local _secret_input
+    _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+    if [ -n "$_secret_input" ]; then
+        PROXY_SECRET="$_secret_input"
+    else
+        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+    fi
+
+    # IP/домен для ссылки
+    local _default_host
+    _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
+    _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
+
+    # Proxy Tag
+    echo
+    echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
+    echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
+    local _tag_input
+    _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
+    if [ "$_tag_input" = "$PROXY_SECRET" ]; then
+        echo -e "  ${RED}⚠  Это значение совпадает с секретом — Tag очищен.${NC}"
+        _tag_input=""
+    fi
+    PROXY_TAG="$_tag_input"
+    echo
+
+    # Подготавливаем файлы
+    _mt_write_compose
+    _mt_write_run_sh "${_MT_DIR}/run.sh"
+    _mt_save_config
+    print_success "Подготовка файлов"
+
+    # Чистим старый контейнер если есть
+    if _mt_installed; then
+        (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
+         docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
+        show_spinner "Очистка старого контейнера..." "Старый контейнер удалён"
+    fi
+
+    # Тянем образ и запускаем
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
+    show_spinner "Загрузка образа..." "Образ загружен"
+
+    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск MTProto..." "MTProto запущен"
+
+    # UFW
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow "${PROXY_PORT}/tcp" >/dev/null 2>&1 || true
+    fi
+
+    if _mt_running; then
+        _mt_save_config
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        print_success "MTProto успешно установлен!"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        local _cw=12
+        echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
+        [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    else
+        echo
+        print_error "Контейнер не запустился. Логи:"
+        docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+    fi
+    _mt_press_enter
 }
 
 # Показать конфигурацию и ссылку
@@ -263,36 +544,18 @@ _mt_do_uninstall() {
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
-    show_spinner "Остановка и удаление контейнера..." "Контейнер удалён"
+    show_spinner "Остановка контейнера..." "Контейнер остановлен"
 
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "         ${YELLOW}Удалить образ Docker?${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}  Enter: Удалить   Esc: Оставить${NC}"
-    tput civis 2>/dev/null || true
-    local _del_image=false
-    while true; do
-        local _k2=""
-        IFS= read -rsn1 _k2
-        case "$_k2" in
-            $'\x1b') break ;;
-            "")      _del_image=true; break ;;
-        esac
-    done
-    tput cnorm 2>/dev/null || true
-    if $_del_image; then
-        (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
-        show_spinner "Удаление образа..." "Образ удалён"
-    fi
-
+    (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}/tcp" >/dev/null 2>&1 || true
     fi
-    # Удаляем симлинки и скрипт mtproto
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
-    rm -rf /usr/local/lib/mtproto 2>/dev/null || true
+    rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
+    show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
+
+    echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
     _mt_press_enter
 }
@@ -304,16 +567,23 @@ manage_mtproto() {
         _mt_installed && _installed=true
         _mt_running   && _running=true
 
-        local _status_line=""
-        if   [ "$_running"   = true ]; then
-            _status_line="\n${DARKGRAY}    Статус: ${GREEN}● Запущен${NC}"
-        elif [ "$_installed" = true ]; then
-            _status_line="\n${DARKGRAY}    Статус: ${YELLOW}● Остановлен${NC}"
-        else
-            _status_line="\n${DARKGRAY}    Статус: ${DARKGRAY}● Не установлен${NC}"
-        fi
+        local _line1="📡 MTProto Proxy"
+        local _l1_pad=$(( (38 - ${#_line1}) / 2 ))
+        local _l1_prefix; printf -v _l1_prefix "%${_l1_pad}s" ""
 
-        local _title="  📡 MTProto Proxy${_status_line}"
+        local _stat_word _stat_color
+        if   [ "$_running"   = true ]; then
+            _stat_word="Запущен";       _stat_color="${GREEN}"
+        elif [ "$_installed" = true ]; then
+            _stat_word="Остановлен";    _stat_color="${YELLOW}"
+        else
+            _stat_word="Не установлен"; _stat_color="${DARKGRAY}"
+        fi
+        local _stat_plain="Статус: ● ${_stat_word}"
+        local _l2_pad=$(( (38 - ${#_stat_plain}) / 2 ))
+        local _l2_prefix; printf -v _l2_prefix "%${_l2_pad}s" ""
+
+        local _title="${_l1_prefix}${_line1}\n${_l2_prefix}${DARKGRAY}Статус: ${_stat_color}● ${_stat_word}${NC}"
 
         local -a _items=() _actions=()
 
