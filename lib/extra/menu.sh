@@ -58,7 +58,7 @@ manage_server_testing() {
         echo
 
         show_arrow_menu "🧪  Тестирование сервера" \
-            "⚡  Speed Test (Тест соединения)" \
+            "⚡  Тест скорости сети" \
             "🌍  Доступность популярных сервисов" \
             "🔒  Региональные ограничения" \
             "📍  Геолокация IP" \
@@ -81,20 +81,25 @@ manage_server_testing() {
 run_speed_test() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   ⚡ Speed Test (Тест соединения)${NC}"
+    echo -e "${GREEN}   ⚡ Тест скорости сети${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}Запущен тест скорости соединения...${NC}"
-    echo
 
-    local output
-    output=$(
+    local tmpfile
+    tmpfile=$(mktemp /tmp/speedtest_result.XXXXXX)
+    (
         cd /tmp && \
         curl -sL "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz" -o speedtest.tgz && \
         tar -xzf speedtest.tgz && \
-        ./speedtest --accept-license --accept-gdpr 2>/dev/null && \
+        ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
-    ) || true
+    ) &
+    show_spinner "Запущен тест скорости сети..." "Тест скорости сети завершён"
+    echo
+
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
+    rm -f "$tmpfile"
 
     # Парсим результат
     local server isp latency download dl_ping upload ul_ping loss
