@@ -18,7 +18,7 @@ manage_extra_settings() {
             "📝  Logrotate" \
             "📊  Beszel (мониторинг)" \
             "──────────────────────────────────────" \
-            "❌  Назад"
+            "⬅️  Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 

@@ -229,7 +229,7 @@ db_restore() {
     fi
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("❌  Назад")
+    menu_items+=("⬅️  Назад")
 
     show_arrow_menu "📥  Выберите бэкап для загрузки" "${menu_items[@]}"
     local choice=$?
@@ -783,7 +783,7 @@ manage_database() {
             menu_items+=("⚙️   Включить автобекап");            db_actions+=("ab_configure")
         fi
         menu_items+=("──────────────────────────────────────"); db_actions+=("sep")
-        menu_items+=("❌  Назад");                              db_actions+=("back")
+        menu_items+=("⬅️  Назад");                              db_actions+=("back")
 
         local menu_title="💾  Работа с базой данных"
         if _rw_autobackup_is_active; then

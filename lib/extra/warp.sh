@@ -32,7 +32,7 @@ manage_warp() {
         items+=("➕  Добавить WARP в конфигурацию ноды");  actions+=("add_config")
         items+=("➖  Удалить WARP из конфигурации ноды");  actions+=("del_config")
         items+=("──────────────────────────────────────");  actions+=("sep")
-        items+=("❌  Назад");                               actions+=("back")
+        items+=("⬅️  Назад");                               actions+=("back")
 
     # Только нода (без панели) — только установка/удаление WARP
     elif [ "$has_node" = true ] && [ "$has_panel" = false ]; then
@@ -42,7 +42,7 @@ manage_warp() {
             items+=("🗑️   Удалить WARP");    actions+=("uninstall")
         fi
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("❌  Назад");                              actions+=("back")
+        items+=("⬅️  Назад");                              actions+=("back")
 
     # Оба компонента — все пункты
     else
@@ -55,7 +55,7 @@ manage_warp() {
         items+=("➕  Добавить WARP в конфигурацию ноды");  actions+=("add_config")
         items+=("➖  Удалить WARP из конфигурации ноды");  actions+=("del_config")
         items+=("──────────────────────────────────────");  actions+=("sep")
-        items+=("❌  Назад");                               actions+=("back")
+        items+=("⬅️  Назад");                               actions+=("back")
     fi
 
     show_arrow_menu "🌐  WARP" "${items[@]}"
@@ -398,7 +398,7 @@ add_warp_to_config() {
     done <<< "$configs"
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("❌  Назад")
+    menu_items+=("⬅️  Назад")
 
     show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?
@@ -709,7 +709,7 @@ remove_warp_from_config() {
     done <<< "$configs"
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("❌  Назад")
+    menu_items+=("⬅️  Назад")
 
     show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?

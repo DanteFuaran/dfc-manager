@@ -97,7 +97,7 @@ main_menu() {
                     inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
                     inst_items+=("🌐  Нода");               inst_actions+=("node")
                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
-                    inst_items+=("❌  Назад"); inst_actions+=("back")
+                    inst_items+=("⬅️  Назад"); inst_actions+=("back")
 
                     show_arrow_menu "📦  Выберите тип установки" "${inst_items[@]}"
                     local install_choice=$?
@@ -121,7 +121,7 @@ main_menu() {
                                 "🌐  Да, установить на этот сервер" \
                                 "🖥️   Нет, установлю на отдельный сервер" \
                                 "──────────────────────────────────────" \
-                                "❌   Назад"
+                                "⬅️   Назад"
                             local node_choice=$?
                             [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
                             local with_node=false
@@ -162,7 +162,7 @@ main_menu() {
                 fi
                 del_items+=("🗑️   Удалить скрипт с сервера"); del_actions+=("remove_script")
                 del_items+=("──────────────────────────────────────");        del_actions+=("sep")
-                del_items+=("❌  Назад");                                      del_actions+=("back")
+                del_items+=("⬅️  Назад");                                      del_actions+=("back")
 
                 show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
                 local del_choice=$?

@@ -83,7 +83,7 @@ installation_panel() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "──────────────────────────────────────" \
-            "❌  Назад"
+            "⬅️  Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 

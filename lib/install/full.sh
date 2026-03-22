@@ -79,7 +79,7 @@ installation_full() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "──────────────────────────────────────" \
-            "❌  Назад"
+            "⬅️  Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
@@ -426,7 +426,7 @@ installation_panel_with_node() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "──────────────────────────────────────" \
-            "❌  Назад"
+            "⬅️  Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in

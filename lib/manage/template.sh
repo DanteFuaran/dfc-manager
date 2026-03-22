@@ -30,7 +30,7 @@ manage_random_template() {
     show_arrow_menu "🎨  Выберите способ" \
         "🎲  Случайный шаблон" \
         "📋  Выбрать из списка" \
-        "❌  Назад"
+        "⬅️  Назад"
     local choice=$?
     [[ $choice -eq 255 ]] && return
 
@@ -66,7 +66,7 @@ manage_random_template() {
                 "🎨  Prisma Studio - Дизайн студия" \
                 "💼  Vertex Advisory - Консалтинг центр" \
                 "──────────────────────────────────────" \
-                "❌  Назад"
+                "⬅️  Назад"
             local template_choice=$?
             [[ $template_choice -eq 255 ]] && return
 

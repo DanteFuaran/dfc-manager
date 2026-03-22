@@ -32,7 +32,7 @@ manage_beszel() {
     fi
 
     items+=("──────────────────────────────────────"); actions+=("sep")
-    items+=("❌  Назад");                             actions+=("back")
+    items+=("⬅️  Назад");                             actions+=("back")
 
     show_arrow_menu "📊  Beszel" "${items[@]}"
     local choice=$?
