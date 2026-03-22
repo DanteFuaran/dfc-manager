@@ -143,7 +143,7 @@ run_services_check() {
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
     (bash <(curl -s "storage.umager.ru/checker_all_ru.sh") > "$tmpfile" 2>&1) &
-    show_spinner "Проверка доступности сервисов" "Проверка завершена"
+    show_spinner "Проверка доступности сервисов" "Диагностика доступности сервисов завершена"
     echo
 
     local output
@@ -207,11 +207,15 @@ _print_ipv4_info() {
     [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}${ipv4_country}${NC}"
     [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv4_city}${NC}"
     [ -n "$ipv4_asn"      ] && echo -e " ${DARKGRAY}ASN:${NC} ${WHITE}${ipv4_asn}${NC}"
+    echo
 }
 
 # Выводит блоки секций из вывода чекера (строки типа ====[ Title ]====)
 _print_checker_sections() {
     local output="$1"
+    # Снимаем ANSI-коды перед парсингом
+    local clean
+    clean=$(echo "$output" | sed 's/\x1B\[[0-9;]*[mK]//g')
     local in_section=false
     while IFS= read -r line; do
         # Заголовок секции: ===[ ... ]===
@@ -219,19 +223,21 @@ _print_checker_sections() {
             local title
             title=$(echo "$line" | grep -oP '\[.*?\]' | head -1)
             echo
-            echo -e "${DARKGRAY}────────────${title}────────────${NC}"
+            echo -e "${DARKGRAY}──────────── ${title} ────────────${NC}"
             in_section=true; continue
         fi
         if $in_section; then
             # Конец секции — строка только из =
             if echo "$line" | grep -qP '^\s*=+\s*$'; then
-                echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
                 in_section=false; continue
             fi
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
-            echo -e "${WHITE}$(_svc_yn "$line")${NC}"
+            # Убираем 12 пробелов из выравнивания между именем сервиса и значением
+            local svc_line
+            svc_line=$(echo "$line" | sed 's/:\( \{12\}\)/:/g')
+            echo -e " ${DARKGRAY}$(_svc_yn "$svc_line")${NC}"
         fi
-    done <<< "$output"
+    done <<< "$clean"
 }
 
 # Выводит секцию IPv6 если IPv6 обнаружен в выводе чекера
