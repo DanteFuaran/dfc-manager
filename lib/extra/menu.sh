@@ -274,7 +274,7 @@ _mt_do_install() {
         done
     }
 
-    local _step=1 _secret_input="" _tag_input=""
+    local _step=1 _secret_input=""
 
     while true; do
         case $_step in
@@ -309,15 +309,6 @@ _mt_do_install() {
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
-                    (( _step++ ))
-                else
-                    _mt_erase_lines 1
-                    (( _step-- ))
-                fi
-                ;;
-            5) # Proxy Tag
-                _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
-                if [ $? -eq 0 ]; then
                     break
                 else
                     _mt_erase_lines 1
@@ -333,11 +324,7 @@ _mt_do_install() {
     else
         PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
     fi
-    if [ "$_tag_input" = "$PROXY_SECRET" ]; then
-        echo -e "  ${RED}⚠  Это значение совпадает с секретом — Tag очищен.${NC}"
-        _tag_input=""
-    fi
-    PROXY_TAG="$_tag_input"
+    PROXY_TAG=""
     echo
 
     # Подготавливаем файлы
