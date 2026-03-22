@@ -70,11 +70,12 @@ _mt_consume_escape_seq() {
     fi
 }
 
-# Интерактивный ввод строки (Backspace, Esc-поглощение, зелёный ввод)
-# Использование: _mt_read_input VARNAME "Промпт" "default"
+# Интерактивный ввод строки (Backspace, зелёный ввод)
+# Esc → возвращает 1 ("назад"), Enter → записывает значение и возвращает 0
+# Использование: _mt_read_input VARNAME "Промпт" "default" || { на_шаг_назад; }
 _mt_read_input() {
     local _var="$1" _prompt="$2" _default="${3:-}"
-    local _typed="" _ch _orig_stty
+    local _typed="" _ch _orig_stty _rc=0
     _orig_stty=$(stty -g 2>/dev/null || echo "")
     stty -icanon -echo min 1 time 0 2>/dev/null || true
     tput cnorm 2>/dev/null || true
@@ -89,6 +90,8 @@ _mt_read_input() {
             if [ "${#_typed}" -gt 0 ]; then _typed="${_typed%?}"; printf '\b \b'; fi
         elif [[ "$_ch" == $'\e' ]]; then
             _mt_consume_escape_seq
+            printf "\n"
+            _rc=1; break
         elif [[ -n "$_ch" ]] && [[ "$_ch" =~ [[:print:]] ]]; then
             _typed="${_typed}${_ch}"
             printf "${GREEN}%s${NC}" "$_ch"
@@ -96,8 +99,11 @@ _mt_read_input() {
     done
     if [ -n "${_orig_stty}" ]; then stty "$_orig_stty" 2>/dev/null || stty sane 2>/dev/null || true
     else stty sane 2>/dev/null || true; fi
-    if [ -z "$_typed" ]; then printf -v "$_var" '%s' "$_default"
-    else printf -v "$_var" '%s' "$_typed"; fi
+    if [ "$_rc" -eq 0 ]; then
+        if [ -z "$_typed" ]; then printf -v "$_var" '%s' "$_default"
+        else printf -v "$_var" '%s' "$_typed"; fi
+    fi
+    return $_rc
 }
 
 # Получает внешний IP сервера
@@ -238,10 +244,10 @@ COMPOSE
 }
 
 # Установка / переустановка MTProto (встроенная реализация)
+# Шаги ввода: 1-домен, 2-порт, 3-секрет, 4-IP, 5-tag.  Esc → предыдущий шаг.
 _mt_do_install() {
     set +e
     local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
-    # Загружаем существующий конфиг если есть
     PROXY_PORT="1337"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
@@ -258,35 +264,44 @@ _mt_do_install() {
     _mt_check_docker || { _mt_press_enter; return; }
     echo
 
-    # Fake TLS домен
-    _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+    local _step=1 _secret_input="" _tag_input=""
+    while true; do
+        case $_step in
+            1) # Fake TLS домен
+                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN" \
+                    && (( _step++ )) || return
+                ;;
+            2) # Порт
+                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
+                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default" \
+                    && (( _step++ )) || (( _step-- ))
+                ;;
+            3) # Секрет
+                echo -e "  ${DARKGRAY}Секрет — ключ шифрования подключения (передаётся клиентам в ссылке).${NC}"
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" "" \
+                    && (( _step++ )) || (( _step-- ))
+                ;;
+            4) # IP/домен
+                local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
+                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host" \
+                    && (( _step++ )) || (( _step-- ))
+                ;;
+            5) # Proxy Tag
+                echo
+                echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
+                echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
+                _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}" \
+                    && break || (( _step-- ))
+                ;;
+        esac
+    done
 
-    # Порт
-    local _port_default
-    _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
-    _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
-
-    # Секрет
-    echo -e "  ${DARKGRAY}Секрет — ключ шифрования подключения (передаётся клиентам в ссылке).${NC}"
-    local _secret_input
-    _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+    # Финализация введённых значений
     if [ -n "$_secret_input" ]; then
         PROXY_SECRET="$_secret_input"
     else
         PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
     fi
-
-    # IP/домен для ссылки
-    local _default_host
-    _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
-    _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
-
-    # Proxy Tag
-    echo
-    echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
-    echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
-    local _tag_input
-    _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
     if [ "$_tag_input" = "$PROXY_SECRET" ]; then
         echo -e "  ${RED}⚠  Это значение совпадает с секретом — Tag очищен.${NC}"
         _tag_input=""
