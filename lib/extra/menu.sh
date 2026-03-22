@@ -631,8 +631,6 @@ manage_mtproto() {
             else
                 _items+=("▶️   Запустить прокси");     _actions+=("start")
             fi
-            _items+=("──────────────────────────────────────"); _actions+=("sep")
-            _items+=("🗑️   Удалить MTProto");                  _actions+=("uninstall")
         fi
 
         _items+=("──────────────────────────────────────"); _actions+=("sep")
@@ -651,7 +649,6 @@ manage_mtproto() {
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
             restart)       _mt_do_restart ;;
-            uninstall)     _mt_do_uninstall || return ;;
             back)          return ;;
             *)             continue ;;
         esac

@@ -7,7 +7,7 @@ DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
 
 # Версия, ветка и репозиторий — единый источник: /opt/remnawave/version
-SCRIPT_VERSION="0.0.4"
+SCRIPT_VERSION="0.0.5"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
 # Приоритет: /opt/remnawave/version (рядом с .env), затем /usr/local/dfc-manager/version
