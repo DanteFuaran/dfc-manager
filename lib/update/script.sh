@@ -99,14 +99,18 @@ manage_delete_components() {
             del_items+=("📡  MTProto (Прокси)"); del_actions+=("mtproto")
         }
 
-        # Ничего не осталось — удаляем скрипт автоматически
+        # Ничего не осталось — показываем экран с сообщением
         if [ ${#del_actions[@]} -eq 0 ]; then
             clear
-            rm -f /usr/local/bin/dfc-manager
-            rm -f /usr/local/bin/dfc
-            rm -rf "${DIR_SCRIPT}"
-            cleanup_old_aliases
-            exit 0
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${RED}        🗑️   Удаление компонентов${NC}"
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo
+            echo -e "   🔍  Установленных компонентов не обнаружено"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            show_continue_prompt || true
+            return
         fi
 
         del_items+=("──────────────────────────────────────"); del_actions+=("sep")
