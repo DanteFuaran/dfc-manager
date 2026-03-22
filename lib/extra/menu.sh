@@ -14,8 +14,6 @@ manage_extra_settings() {
             "🌐  WARP" \
             "🛡️   Fail2ban" \
             "📝  Logrotate" \
-            "📊  Beszel (мониторинг)" \
-            "📡  MTProto (Телеграм прокси)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
@@ -26,10 +24,8 @@ manage_extra_settings() {
             1) manage_warp || break ;;
             2) manage_fail2ban || break ;;
             3) manage_logrotate || break ;;
-            4) manage_beszel || break ;;
-            5) manage_mtproto || break ;;
-            6) continue ;;
-            7) return ;;
+            4) continue ;;
+            5) return ;;
         esac
     done
 }
@@ -288,7 +284,7 @@ _mt_do_install() {
     show_spinner "Загрузка образа..." "Образ загружен"
 
     (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск MTProto..." "MTProto запущен"
+    show_spinner "Запуск MTProto..." "MTProto запущен!"
 
     # UFW
     if command -v ufw >/dev/null 2>&1; then
@@ -297,9 +293,12 @@ _mt_do_install() {
 
     if _mt_running; then
         _mt_save_config
-        echo
+        clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        print_success "MTProto успешно установлен!"
+        local _ok_line="✅ MTProto успешно установлен!"
+        local _ok_pad=$(( (38 - ${#_ok_line}) / 2 ))
+        local _ok_prefix; printf -v _ok_prefix "%${_ok_pad}s" ""
+        echo -e "${_ok_prefix}${GREEN}${_ok_line}${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         local _cw=12
@@ -309,7 +308,7 @@ _mt_do_install() {
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
@@ -437,9 +436,9 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${DARKGRAY}${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
 
-        # Ждём 5 сек с проверкой Esc каждые 0.1 сек
+        # Ждём 5 сек с проверкой Enter/Esc каждые 0.1 сек
         local _si=0 _sk
         while [ $_si -lt 50 ]; do
             _sk=""
@@ -447,7 +446,10 @@ _mt_do_stats() {
             if [[ "$_sk" == $'\e' ]]; then
                 _mt_consume_escape_seq
                 _mt_stats_restore
-                return 0
+                return 1   # Esc = выход в главное меню
+            elif [[ "$_sk" == "" ]]; then
+                _mt_stats_restore
+                return 0   # Enter = назад в меню MTProto
             fi
             (( _si++ )) || true
         done
@@ -521,7 +523,7 @@ _mt_do_uninstall() {
     echo -e "${YELLOW}Внимание: MTProto будет полностью удалён с сервера.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}  Enter: Подтвердить   Esc: Отмена${NC}"
+    echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     tput civis 2>/dev/null || true
     while true; do
         local _k=""
@@ -610,7 +612,7 @@ manage_mtproto() {
         local _action="${_actions[$_choice]:-sep}"
         case "$_action" in
             install)       _mt_do_install ;;
-            stats)         _mt_do_stats ;;
+            stats)         _mt_do_stats || return ;;
             config)        _mt_do_config ;;
             change_config) _mt_do_change_config ;;
             start)         _mt_do_start ;;
