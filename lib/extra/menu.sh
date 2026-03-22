@@ -136,13 +136,13 @@ run_speed_test() {
 run_services_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌍 Доступность популярных сервисов${NC}"
+    echo -e "${GREEN} 🌍 Доступность популярных сервисов${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    (bash <(curl -s "storage.umager.ru/checker_all_ru.sh") > "$tmpfile" 2>&1) &
+    (bash <(curl -s "storage.umager.ru/checker_all_ru.sh") </dev/null > "$tmpfile" 2>&1) &
     show_spinner "Проверка доступности сервисов" "Диагностика доступности сервисов завершена"
     echo
 
@@ -234,10 +234,19 @@ _print_checker_sections() {
                 in_section=false; continue
             fi
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
-            # Убираем лишние пробелы между названием сервиса и значением
+            # Нормализуем: убираем стрелку -> и лишние пробелы (4+)
             local svc_line
-            svc_line=$(echo "$line" | sed 's/:[ \t]\{12,\}/: /g')
-            echo -e " ${WHITE}$(_svc_yn "$svc_line")${NC}"
+            svc_line=$(echo "$line" | sed 's/->[ \t]*/ /g; s/:[\t ]\{4,\}/: /g')
+            # Разбиваем на имя (серый) и значение (цветное)
+            local svc_name svc_value
+            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^\s*//')
+            svc_value=$(echo "$svc_line" | cut -d: -f2- | sed 's/^[: \t]*//' | sed 's/\s*$//')
+            svc_value=$(_svc_yn "$svc_value")
+            # Цвет значения
+            local val_color="${WHITE}"
+            echo "$svc_value" | grep -qiP '\b(Нет|No|Failed)\b' && val_color="${RED}"
+            echo "$svc_value" | grep -qiP '\b(Да|Yes)\b'            && val_color="${GREEN}"
+            echo -e " ${DARKGRAY}${svc_name}:${NC} ${val_color}${svc_value}${NC}"
         fi
     done <<< "$clean"
 }
@@ -274,7 +283,7 @@ run_regional_check() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    (bash <(curl -s "storage.umager.ru/checker_inst_ru.sh") > "$tmpfile" 2>&1) &
+    (bash <(curl -s "storage.umager.ru/checker_inst_ru.sh") </dev/null > "$tmpfile" 2>&1) &
     show_spinner "Проверка региональных ограничений" "Диагностика региональных ограничений завершена"
     echo
 
@@ -310,7 +319,7 @@ run_geolocation() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    (bash <(curl -s "storage.umager.ru/ipregion.sh") > "$tmpfile" 2>&1) &
+    (bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null > "$tmpfile" 2>&1) &
     show_spinner "Определение геолокации IP" "Геолокация определена"
     echo
 
