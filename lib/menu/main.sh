@@ -110,7 +110,7 @@ main_menu() {
                                 "✔️   Да, установить на этот сервер" \
                                 "❌  Нет, установлю на отдельный сервер" \
                                 "──────────────────────────────────────" \
-                                "⬅️  Назад"
+                                "⬅️   Назад"
                             local sub_choice=$?
                             [[ $sub_choice -eq 255 || $sub_choice -eq 3 ]] && continue
                             local with_subpage=true
@@ -121,7 +121,7 @@ main_menu() {
                                 "🌐  Да, установить на этот сервер" \
                                 "🖥️   Нет, установлю на отдельный сервер" \
                                 "──────────────────────────────────────" \
-                                "❌  Назад"
+                                "❌   Назад"
                             local node_choice=$?
                             [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
                             local with_node=false
