@@ -38,7 +38,7 @@ manage_bbr() {
         show_arrow_menu "🚀  Настройка BBR" \
             "❌  Выключить BBR" \
             "──────────────────────────────────────" \
-            "⬅️  Назад"
+            "⬅️   Назад"
         local choice=$?
         case $choice in
             0)
@@ -96,7 +96,7 @@ manage_bbr() {
         show_arrow_menu "🚀  Настройка BBR" \
             "✅  Включить BBR" \
             "──────────────────────────────────────" \
-            "⬅️  Назад"
+            "⬅️   Назад"
         local choice=$?
         case $choice in
             0)

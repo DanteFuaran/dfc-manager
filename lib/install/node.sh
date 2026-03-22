@@ -265,7 +265,7 @@ installation_node_local() {
                     "☁️   Cloudflare DNS-01 (wildcard)" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
                     "──────────────────────────────────────" \
-                    "⬅️  Назад"
+                    "⬅️   Назад"
                 local cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=1 ;;
@@ -573,7 +573,7 @@ installation_node_remote() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "──────────────────────────────────────" \
-            "⬅️  Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
@@ -819,7 +819,7 @@ installation_node_with_existing_subpage() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "──────────────────────────────────────" \
-            "⬅️  Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in
