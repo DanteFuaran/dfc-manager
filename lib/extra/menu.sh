@@ -326,13 +326,14 @@ _mt_do_install() {
                 fi
                 ;;
             5) # Proxy Tag
-                echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
-                echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
+                echo -e "  ${DARKGRAY}Proxy Tag — необязателен. Нужен только для статистики подключений.${NC}"
+                echo -e "  ${DARKGRAY}Получить: Telegram → @MTProxybot → Add proxy → скопируйте tag.${NC}"
+                echo -e "  ${DARKGRAY}Просто нажмите Enter чтобы пропустить.${NC}"
                 _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
                 if [ $? -eq 0 ]; then
                     break
                 else
-                    _mt_erase_lines 2  # стираем 2 подсказки тега
+                    _mt_erase_lines 3  # стираем 3 строки подсказок тега
                     _mt_erase_lines $(( _lines_above[4] ))
                     (( _step-- ))
                 fi
