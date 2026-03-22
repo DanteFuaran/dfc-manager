@@ -275,16 +275,13 @@ _mt_do_install() {
     }
 
     local _step=1 _secret_input="" _tag_input=""
-    # lines_above[step] — сколько строк вывел предыдущий шаг (для стирания)
-    # 0-я = не используется; step 1 выводит 1 строку (инпут); шаг 3,5 — доп. строки
-    local -a _lines_above=(0 0 0 0 0 0)
 
     while true; do
         case $_step in
-            1) # Fake TLS домен
-                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+            1) # IP/домен для ссылки
+                local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
+                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
                 if [ $? -eq 0 ]; then
-                    _lines_above[1]=1
                     (( _step++ ))
                 else
                     return  # Esc на первом шаге — выход
@@ -294,47 +291,36 @@ _mt_do_install() {
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
-                    _lines_above[2]=1
                     (( _step++ ))
                 else
-                    # Стираем строку порта и строку домена, чтобы повторно ввести домен
-                    _mt_erase_lines $(( _lines_above[1] ))
+                    _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
-            3) # Секрет
-                echo -e "  ${DARKGRAY}Секрет — ключ шифрования подключения (передаётся клиентам в ссылке).${NC}"
+            3) # Fake TLS домен
+                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+                if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
-                    _lines_above[3]=2  # подсказка + инпут
                     (( _step++ ))
                 else
-                    _mt_erase_lines 1  # стираем подсказку
-                    _mt_erase_lines $(( _lines_above[2] ))
-                    (( _step-- ))
-                fi
-                ;;
-            4) # IP/домен
-                local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
-                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
-                if [ $? -eq 0 ]; then
-                    _lines_above[4]=1
-                    (( _step++ ))
-                else
-                    _mt_erase_lines $(( _lines_above[3] ))
+                    _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
             5) # Proxy Tag
-                echo -e "  ${DARKGRAY}Proxy Tag — необязателен. Нужен только для статистики подключений.${NC}"
-                echo -e "  ${DARKGRAY}Получить: Telegram → @MTProxybot → Add proxy → скопируйте tag.${NC}"
-                echo -e "  ${DARKGRAY}Просто нажмите Enter чтобы пропустить.${NC}"
                 _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
                 if [ $? -eq 0 ]; then
                     break
                 else
-                    _mt_erase_lines 3  # стираем 3 строки подсказок тега
-                    _mt_erase_lines $(( _lines_above[4] ))
+                    _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
@@ -466,8 +452,16 @@ _mt_do_stats() {
         echo "$_container_started" > "$_uptime_file" 2>/dev/null || true
     fi
 
+    local _st_orig_stty
+    _st_orig_stty=$(stty -g 2>/dev/null || echo "")
+    stty -icanon -echo min 0 time 0 2>/dev/null || true
     tput civis 2>/dev/null || true
-    trap 'tput cnorm 2>/dev/null; return 0' INT
+
+    _mt_stats_restore() {
+        if [ -n "${_st_orig_stty}" ]; then stty "$_st_orig_stty" 2>/dev/null || stty sane 2>/dev/null || true
+        else stty sane 2>/dev/null || true; fi
+        tput cnorm 2>/dev/null || true
+    }
 
     while true; do
         local _raw _active _uptime _dc_conns
@@ -512,9 +506,23 @@ _mt_do_stats() {
         echo -e " ${WHITE}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
         echo -e " ${WHITE}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         echo
-        echo -e "${DARKGRAY}Обновление каждые 5 сек • Ctrl+C для выхода${NC}"
-        sleep 5
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${DARKGRAY}Обновление каждые 5 сек • ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+
+        # Ждём 5 сек с проверкой Esc каждые 0.1 сек
+        local _si=0 _sk
+        while [ $_si -lt 50 ]; do
+            _sk=""
+            IFS= read -rsn1 -t 0.1 _sk 2>/dev/null || true
+            if [[ "$_sk" == $'\e' ]]; then
+                _mt_consume_escape_seq
+                _mt_stats_restore
+                return 0
+            fi
+            (( _si++ )) || true
+        done
     done
+    _mt_stats_restore
 }
 
 # Сменить конфигурацию — делегируем mtproto (нужен read_input, generate_fake_tls_secret)
