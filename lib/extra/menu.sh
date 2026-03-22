@@ -77,7 +77,7 @@ _mt_read_input() {
     local _var="$1" _prompt="$2" _default="${3:-}"
     local _typed="" _ch _orig_stty _rc=0
     _orig_stty=$(stty -g 2>/dev/null || echo "")
-    stty -icanon -echo min 1 time 0 2>/dev/null || true
+    stty -icanon -echo isig min 1 time 0 2>/dev/null || true
     tput cnorm 2>/dev/null || true
     printf "\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33m%b\033[0m " "$_prompt"
     while IFS= read -rsn1 -t 0 _ch 2>/dev/null; do :; done
@@ -454,7 +454,7 @@ _mt_do_stats() {
 
     local _st_orig_stty
     _st_orig_stty=$(stty -g 2>/dev/null || echo "")
-    stty -icanon -echo min 0 time 0 2>/dev/null || true
+    stty -icanon -echo isig min 0 time 0 2>/dev/null || true
     tput civis 2>/dev/null || true
 
     _mt_stats_restore() {
