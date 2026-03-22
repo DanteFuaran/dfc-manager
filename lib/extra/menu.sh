@@ -243,7 +243,7 @@ _print_checker_sections() {
         [[ -z "$(echo "$_t" | tr -d '[:space:]')" ]] && continue
         echo "$_t" | grep -q ':' || continue
         _ts=$(echo "$_t" | sed 's/->[[:space:]]*/  /g')
-        _tn=$(echo "$_ts" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/ (.*$//')
+        _tn=$(echo "$_ts" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
         [ ${#_tn} -gt $max_name_len ] && max_name_len=${#_tn}
     done <<< "$clean"
     local col_w=$((max_name_len + 3))
@@ -271,8 +271,7 @@ _print_checker_sections() {
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
             local svc_line svc_name svc_value
             svc_line=$(echo "$line" | sed 's/->[[:space:]]*/  /g; s/:[[:space:]]\{4,\}/: /g')
-            # Убираем хэш/ID в скобках в конце имени: "Name (HASH)" → "Name"
-            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/ (.*$//')
+            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             svc_value=$(echo "$svc_line" | cut -d: -f2- | sed 's/^[[:space:]:]*//' | sed 's/[[:space:]]*$//')
             svc_value=$(_svc_yn "$svc_value")
             # Цвет и форматирование значения
@@ -320,7 +319,7 @@ _print_ipv6_section() {
 run_regional_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔒 Региональные ограничения${NC}"
+    echo -e "${GREEN}     🔒 Региональные ограничения${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
