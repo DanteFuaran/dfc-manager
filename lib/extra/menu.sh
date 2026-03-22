@@ -386,9 +386,6 @@ _mt_do_stats() {
         _mt_press_enter; return
     fi
 
-    tput civis 2>/dev/null || true
-    clear
-
     local _max_file="${_MT_DIR}/stats_max_connections"
     local _uptime_file="${_MT_DIR}/stats_uptime_ts"
     local _max_sim=0
