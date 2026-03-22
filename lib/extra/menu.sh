@@ -355,46 +355,90 @@ run_geolocation() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    # Используем ip-api.com — бесплатный JSON API без зависимостей и интерактивных запросов
-    (curl -sf --max-time 10 \
-        "http://ip-api.com/json/?fields=status,country,countryCode,regionName,city,isp,org,as,timezone,lat,lon,query" \
-        > "$tmpfile" 2>&1) &
+    # Устанавливаем util-linux (нужен ipregion.sh) и запускаем скрипт в фоне
+    (
+        apt-get install -y util-linux >/dev/null 2>&1
+        bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null
+    ) > "$tmpfile" 2>&1 &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo
 
-    local raw
-    raw=$(cat "$tmpfile" 2>/dev/null) || true
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
 
-    local geo_status geo_ip geo_country geo_region geo_city geo_isp geo_asn geo_tz geo_lat geo_lon
-    geo_status=$(echo "$raw" | grep -oP '"status"\s*:\s*"\K[^"]+' | head -1)
-    geo_ip=$(echo      "$raw" | grep -oP '"query"\s*:\s*"\K[^"]+' | head -1)
-    geo_country=$(echo "$raw" | grep -oP '"country"\s*:\s*"\K[^"]+' | head -1)
-    geo_region=$(echo  "$raw" | grep -oP '"regionName"\s*:\s*"\K[^"]+' | head -1)
-    geo_city=$(echo    "$raw" | grep -oP '"city"\s*:\s*"\K[^"]+' | head -1)
-    geo_isp=$(echo     "$raw" | grep -oP '"isp"\s*:\s*"\K[^"]+' | head -1)
-    geo_asn=$(echo     "$raw" | grep -oP '"as"\s*:\s*"\K[^"]+' | head -1)
-    geo_tz=$(echo      "$raw" | grep -oP '"timezone"\s*:\s*"\K[^"]+' | head -1)
-    geo_lat=$(echo     "$raw" | grep -oP '"lat"\s*:\s*\K[\d.-]+' | head -1)
-    geo_lon=$(echo     "$raw" | grep -oP '"lon"\s*:\s*\K[\d.-]+' | head -1)
+    # Очищаем ANSI-коды, \r, и строки от apt/системы
+    local clean
+    clean=$(echo "$output" \
+        | sed 's/\x1B\[[0-9;]*[a-zA-Z]//g; s/\r//g' \
+        | grep -vP '^\s*(Reading package|Building dependency|Reading state|upgraded|newly installed|util-linux|No VM|Made with)')
 
-    if [ "$geo_status" = "success" ] && [ -n "$geo_ip" ]; then
-        local _cw=16
-        local geo_coord=""
-        [ -n "$geo_lat" ] && [ -n "$geo_lon" ] && geo_coord="${geo_lat}, ${geo_lon}"
-        echo -e "${DARKGRAY}───────────────── [ Сервер ] ─────────────────${NC}"
+    # Извлекаем IP и ASN из заголовка
+    local geo_ip geo_asn
+    geo_ip=$(echo "$clean" | grep -oP '^IPv4:\s*\K\S+' | head -1)
+    geo_asn=$(echo "$clean" | grep -oP '^ASN:\s*\K.*' | head -1 | sed 's/\s*$//')
+
+    if [ -z "$geo_ip" ]; then
+        echo -e "${RED}Не удалось получить данные геолокации${NC}"
         echo
-        echo -e " ${DARKGRAY}$(_mpad "IP адрес:" $_cw)${NC} ${WHITE}${geo_ip}${NC}"
-        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}$(_mpad "Страна:" $_cw)${NC} ${WHITE}${geo_country}${NC}"
-        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}$(_mpad "Регион:" $_cw)${NC} ${WHITE}${geo_region}${NC}"
-        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}$(_mpad "Город:" $_cw)${NC} ${WHITE}${geo_city}${NC}"
-        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}$(_mpad "Провайдер:" $_cw)${NC} ${WHITE}${geo_isp}${NC}"
-        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}$(_mpad "ASN:" $_cw)${NC} ${WHITE}${geo_asn}${NC}"
-        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}$(_mpad "Часовой пояс:" $_cw)${NC} ${WHITE}${geo_tz}${NC}"
-        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}$(_mpad "Координаты:" $_cw)${NC} ${WHITE}${geo_coord}${NC}"
-    else
-        echo -e "${RED}Не удалось определить геолокацию${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+        tput civis 2>/dev/null || true
+        read -r
+        tput cnorm 2>/dev/null || true
+        return
     fi
+
+    # Проход 1: найти максимальную длину имени сервиса по всем таблицам
+    local _max_svc=0 _in_tbl=false
+    while IFS= read -r _l; do
+        echo "$_l" | grep -qP '^\s*Service\s' && { _in_tbl=true; continue; }
+        if $_in_tbl; then
+            [[ -z "$(echo "$_l" | tr -d '[:space:]')" ]] && { _in_tbl=false; continue; }
+            local _sn
+            _sn=$(echo "$_l" | sed 's/[[:space:]]\{2,\}.*//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            [ ${#_sn} -gt $_max_svc ] && _max_svc=${#_sn}
+        fi
+    done <<< "$clean"
+    local col_w=$(( _max_svc + 3 ))
+
+    # Заголовок IPv4/ASN
+    echo -e "${DARKGRAY}──────────────── [ IPv4 ] ─────────────────${NC}"
+    echo
+    echo -e " ${DARKGRAY}$(_mpad "IPv4:" 5)${NC} ${WHITE}${geo_ip}${NC}"
+    [ -n "$geo_asn" ] && echo -e " ${DARKGRAY}$(_mpad "ASN:" 5)${NC} ${WHITE}${geo_asn}${NC}"
+
+    # Проход 2: парсим секции и таблицы
+    local _in_tbl=false _first=true
+    while IFS= read -r line; do
+        local _t
+        _t=$(echo "$line" | sed 's/^[[:space:]]*//')
+        [[ -z "$_t" ]] && continue
+        # Пропускаем строки IPv4/ASN (уже показаны)
+        echo "$_t" | grep -qP '^(IPv4|ASN):' && continue
+        # Заголовок таблицы "Service  IPv4"
+        if echo "$_t" | grep -qP '^Service\s'; then
+            _in_tbl=true; continue
+        fi
+        if $_in_tbl; then
+            [[ -z "$(echo "$_t" | tr -d '[:space:]')" ]] && { _in_tbl=false; continue; }
+            local svc_name svc_val
+            svc_name=$(echo "$line" | sed 's/[[:space:]]\{2,\}.*//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            svc_val=$(echo "$line" | grep -oP '[[:space:]]{2,}\K\S.*' | head -1 | sed 's/[[:space:]]*$//')
+            [[ -z "$svc_val" ]] && continue
+            local vc="${WHITE}"
+            [[ "$svc_val" =~ ^(N/A|null|-)$ ]] && vc="${DARKGRAY}"
+            echo -e " ${DARKGRAY}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
+            continue
+        fi
+        # Заголовок секции: строка из букв/цифр/пробелов (Popular services, CDN services…)
+        if echo "$_t" | grep -qP '^[A-Za-z][A-Za-z0-9 ]+$'; then
+            $_first || echo
+            echo -e "${DARKGRAY}──────────── [ ${_t} ] ────────────${NC}"
+            echo
+            _first=false
+        fi
+    done <<< "$clean"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
