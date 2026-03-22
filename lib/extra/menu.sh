@@ -214,19 +214,22 @@ _print_ipv4_info() {
 # Выводит блоки секций из вывода чекера (строки типа ====[ Title ]====)
 _print_checker_sections() {
     local output="$1"
-    # Снимаем ANSI-коды перед парсингом
+    # Снимаем все ANSI-коды и \r перед парсингом
     local clean
-    clean=$(echo "$output" | sed 's/\x1B\[[0-9;]*[mK]//g')
+    clean=$(echo "$output" | sed 's/\x1B\[[0-9;]*[a-zA-Z]//g; s/\r//g')
     local in_section=false
+    local first_section=true
     while IFS= read -r line; do
         # Заголовок секции: ===[ ... ]===
         if echo "$line" | grep -qP '=+\[.*\]=+'; then
             local title
             title=$(echo "$line" | grep -oP '\[.*?\]' | head -1)
-            echo
+            $first_section || echo
             echo -e "${DARKGRAY}──────────── ${title} ────────────${NC}"
             echo
-            in_section=true; continue
+            in_section=true
+            first_section=false
+            continue
         fi
         if $in_section; then
             # Конец секции — строка только из =
@@ -236,16 +239,18 @@ _print_checker_sections() {
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
             # Нормализуем: убираем стрелку -> и лишние пробелы (4+)
             local svc_line
-            svc_line=$(echo "$line" | sed 's/->[ \t]*/ /g; s/:[\t ]\{4,\}/: /g')
+            svc_line=$(echo "$line" | sed 's/->[[:space:]]*/  /g; s/:[[:space:]]\{4,\}/: /g')
             # Разбиваем на имя (серый) и значение (цветное)
             local svc_name svc_value
-            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^\s*//')
-            svc_value=$(echo "$svc_line" | cut -d: -f2- | sed 's/^[: \t]*//' | sed 's/\s*$//')
+            svc_name=$(echo "$svc_line" | cut -d: -f1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            svc_value=$(echo "$svc_line" | cut -d: -f2- | sed 's/^[[:space:]:]*//' | sed 's/[[:space:]]*$//')
             svc_value=$(_svc_yn "$svc_value")
-            # Цвет значения
+            # Цвет значения (case — надёжно с кириллицей без зависимости от locale)
             local val_color="${WHITE}"
-            echo "$svc_value" | grep -qiP '\b(Нет|No|Failed)\b' && val_color="${RED}"
-            echo "$svc_value" | grep -qiP '\b(Да|Yes)\b'            && val_color="${GREEN}"
+            case "$svc_value" in
+                Нет*|No*|*Failed*) val_color="${RED}" ;;
+                Да*|Yes*)          val_color="${GREEN}" ;;
+            esac
             echo -e " ${DARKGRAY}${svc_name}:${NC} ${val_color}${svc_value}${NC}"
         fi
     done <<< "$clean"
