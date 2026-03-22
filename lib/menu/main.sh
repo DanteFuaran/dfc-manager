@@ -91,7 +91,7 @@ main_menu() {
                 while true; do
                     local -a inst_items=() inst_actions=()
                     if ! is_panel_installed; then
-                        inst_items+=("�️   Панель"); inst_actions+=("panel_wizard")
+                        inst_items+=("🖥️   Панель"); inst_actions+=("panel_wizard")
                         inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                     fi
                     inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
