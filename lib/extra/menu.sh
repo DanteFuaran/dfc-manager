@@ -136,7 +136,7 @@ run_speed_test() {
 run_services_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        🌍 Доступность популярных сервисов${NC}"
+    echo -e "${GREEN}   🌍 Доступность популярных сервисов${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -150,26 +150,48 @@ run_services_check() {
     output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
 
-    # Перевод ISO-кода страны в русское название
-    _country_name() {
-        case "$1" in
-            DE) echo "Германия" ;; RU) echo "Россия" ;;    US) echo "США" ;;
-            NL) echo "Нидерланды" ;; GB) echo "Великобритания" ;; FR) echo "Франция" ;;
-            FI) echo "Финляндия" ;; PL) echo "Польша" ;;   UA) echo "Украина" ;;
-            KZ) echo "Казахстан" ;; TR) echo "Турция" ;;   JP) echo "Япония" ;;
-            SG) echo "Сингапур" ;;  CN) echo "Китай" ;;    LV) echo "Латвия" ;;
-            LT) echo "Литва" ;;     EE) echo "Эстония" ;;  SE) echo "Швеция" ;;
-            NO) echo "Норвегия" ;;  DK) echo "Дания" ;;    CH) echo "Швейцария" ;;
-            AT) echo "Австрия" ;;   IT) echo "Италия" ;;   ES) echo "Испания" ;;
-            *) echo "$1" ;;
-        esac
-    }
-    # Перевод Yes/No в Да/Нет
-    _svc_translate() {
-        echo "$1" | sed 's/\bYes\b/Да/g; s/\bNo\b/Нет/g; s/Region:/Регион:/g'
-    }
+    _print_ipv4_info "$output"
+    _print_checker_sections "$output"
+    _print_ipv6_section "$output"
 
-    # Парсим IPv4-блок
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    tput civis 2>/dev/null || true
+    read -r
+    tput cnorm 2>/dev/null || true
+}
+
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
+    rm -f "$tmpfile"
+
+# ═══════════════════════════════════════════════════
+# ХЕЛПЕРЫ ДЛЯ ТЕСТОВ
+# ═══════════════════════════════════════════════════
+_country_name() {
+    case "$1" in
+        DE) echo "Германия" ;; RU) echo "Россия" ;;    US) echo "США" ;;
+        NL) echo "Нидерланды" ;; GB) echo "Великобритания" ;; FR) echo "Франция" ;;
+        FI) echo "Финляндия" ;; PL) echo "Польша" ;;   UA) echo "Украина" ;;
+        KZ) echo "Казахстан" ;; TR) echo "Турция" ;;   JP) echo "Япония" ;;
+        SG) echo "Сингапур" ;;  CN) echo "Китай" ;;    LV) echo "Латвия" ;;
+        LT) echo "Литва" ;;     EE) echo "Эстония" ;;  SE) echo "Швеция" ;;
+        NO) echo "Норвегия" ;;  DK) echo "Дания" ;;    CH) echo "Швейцария" ;;
+        AT) echo "Австрия" ;;   IT) echo "Италия" ;;   ES) echo "Испания" ;;
+        CZ) echo "Чехия" ;;     HU) echo "Венгрия" ;;  RO) echo "Румыния" ;;
+        BG) echo "Болгария" ;;  HR) echo "Хорватия" ;; SK) echo "Словакия" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+_svc_yn() {
+    echo "$1" | sed 's/\bYes\b/Да/g; s/\bNo\b/Нет/g; s/\bRegion:/Регион:/g'
+}
+
+# Выводит шапку IPv4 + провайдерскую инфо из вывода скрипта-чекера
+_print_ipv4_info() {
+    local output="$1"
     local raw_provider raw_cc ipv4_provider ipv4_country ipv4_city ipv4_asn
     raw_provider=$(echo "$output" | grep -oP '(?i)хостинг-провайдер:\s*\K.*' | head -1 | sed 's/\s*$//')
     raw_cc=$(echo "$raw_provider" | grep -oP '^[A-Z]{2}')
@@ -184,53 +206,65 @@ run_services_check() {
     ipv4_city=$(echo "$output" | grep -oP '(?i)Город:\s*\K.*' | head -1 | sed 's/\s*$//')
     ipv4_asn=$(echo "$output"  | grep -oP '(?i)ASN:\s*\K.*'   | head -1 | sed 's/\s*$//')
 
-    echo -e " ${DARKGRAY}Результаты для IPv4${NC}"
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo -e "${DARKGRAY}──────────────── [ IPv4 ] ─────────────────${NC}"
     [ -n "$ipv4_provider" ] && echo -e " ${DARKGRAY}Хостинг провайдер:${NC} ${WHITE}${ipv4_provider}${NC}"
     [ -n "$ipv4_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}${ipv4_country}${NC}"
     [ -n "$ipv4_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv4_city}${NC}"
     [ -n "$ipv4_asn"      ] && echo -e " ${DARKGRAY}ASN:${NC} ${WHITE}${ipv4_asn}${NC}"
-    echo
+}
 
-    # Парсим блок «Глобальный тест»
-    echo -e "${DARKGRAY}────────────[ Глобальный тест ]─────────────${NC}"
-    local in_global=false
+# Выводит блоки секций из вывода чекера (строки типа ====[ Title ]====)
+_print_checker_sections() {
+    local output="$1"
+    local in_section=false
     while IFS= read -r line; do
-        if echo "$line" | grep -qi 'глобальный.*тест\|global.*test'; then
-            in_global=true; continue
+        # Заголовок секции: ===[ ... ]===
+        if echo "$line" | grep -qP '=+\[.*\]=+'; then
+            local title
+            title=$(echo "$line" | grep -oP '\[.*?\]' | head -1)
+            echo
+            echo -e "${DARKGRAY}────────────${title}────────────${NC}"
+            in_section=true; continue
         fi
-        if $in_global; then
+        if $in_section; then
             # Конец секции — строка только из =
             if echo "$line" | grep -qP '^\s*=+\s*$'; then
-                in_global=false; continue
+                echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+                in_section=false; continue
             fi
-            # Пропускаем пустые строки
             [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
-            echo -e "${WHITE}$(_svc_translate "$line")${NC}"
+            echo -e "${WHITE}$(_svc_yn "$line")${NC}"
         fi
     done <<< "$output"
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
+}
 
-    # IPv6 статус
-    if echo "$output" | grep -qi 'ipv6.*не обнаружен\|no.*ipv6\|ipv6.*not'; then
-        echo -e " ${DARKGRAY}Результаты для IPv6:${NC} ${WHITE}IPv6 - Отсутствует${NC}"
-    else
-        echo -e " ${DARKGRAY}Результаты для IPv6:${NC} ${WHITE}Доступен${NC}"
+# Выводит секцию IPv6 если IPv6 обнаружен в выводе чекера
+_print_ipv6_section() {
+    local output="$1"
+    # Если явно написано что IPv6 не найден — не показываем блок
+    if echo "$output" | grep -qi 'ipv6.*не обнаружен\|no.*ipv6\|ipv6.*not\|ipv6.*отсутствует'; then
+        return
     fi
-
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
-    tput civis 2>/dev/null || true
-    read -r
-    tput cnorm 2>/dev/null || true
+    # Если есть строки с IPv6 данными — показываем
+    local ipv6_provider ipv6_country ipv6_city ipv6_asn
+    ipv6_provider=$(echo "$output" | grep -oP '(?i)\[ipv6\].*хостинг-провайдер:\s*\K.*' | head -1 | sed 's/\s*$//')
+    ipv6_country=$(echo "$output" | grep -oP '(?i)\[ipv6\].*страна:\s*\K[A-Z]+' | head -1)
+    ipv6_city=$(echo "$output" | grep -oP '(?i)\[ipv6\].*город:\s*\K.*' | head -1 | sed 's/\s*$//')
+    ipv6_asn=$(echo "$output" | grep -oP '(?i)\[ipv6\].*asn:\s*\K.*' | head -1 | sed 's/\s*$//')
+    if [ -n "$ipv6_provider$ipv6_country$ipv6_city$ipv6_asn" ]; then
+        echo
+        echo -e "${DARKGRAY}──────────────── [ IPv6 ] ─────────────────${NC}"
+        [ -n "$ipv6_provider" ] && echo -e " ${DARKGRAY}Хостинг провайдер:${NC} ${WHITE}${ipv6_provider}${NC}"
+        [ -n "$ipv6_country"  ] && echo -e " ${DARKGRAY}Страна:${NC} ${WHITE}$(_country_name "$ipv6_country")${NC}"
+        [ -n "$ipv6_city"     ] && echo -e " ${DARKGRAY}Город:${NC} ${WHITE}${ipv6_city}${NC}"
+        [ -n "$ipv6_asn"      ] && echo -e " ${DARKGRAY}ASN:${NC} ${WHITE}${ipv6_asn}${NC}"
+    fi
 }
 
 run_regional_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        🔒 Региональные ограничения${NC}"
+    echo -e "${GREEN}   🔒 Региональные ограничения${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -239,8 +273,14 @@ run_regional_check() {
     (bash <(curl -s "storage.umager.ru/checker_inst_ru.sh") > "$tmpfile" 2>&1) &
     show_spinner "Проверка региональных ограничений" "Проверка завершена"
     echo
-    cat "$tmpfile"
+
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
+
+    _print_ipv4_info "$output"
+    _print_checker_sections "$output"
+    _print_ipv6_section "$output"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -253,7 +293,7 @@ run_regional_check() {
 run_geolocation() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        📍 Геолокация IP${NC}"
+    echo -e "${GREEN}   📍 Геолокация IP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -269,8 +309,39 @@ run_geolocation() {
     (bash <(curl -s "storage.umager.ru/ipregion.sh") > "$tmpfile" 2>&1) &
     show_spinner "Определение геолокации IP" "Геолокация определена"
     echo
-    cat "$tmpfile"
+
+    local output
+    output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
+
+    # Парсим поля геолокации
+    local geo_ip geo_country geo_region geo_city geo_isp geo_asn geo_org geo_tz geo_coord
+    geo_ip=$(echo      "$output" | grep -oP '(?i)(ip\s*(address|addr)?:|your\s*ip:|IP:)\s*\K[\d.]+' | head -1)
+    [ -z "$geo_ip" ] && geo_ip=$(echo "$output" | grep -oP '\b(\d{1,3}\.){3}\d{1,3}\b' | head -1)
+    geo_country=$(echo "$output" | grep -oP '(?i)Страна[:\s]+\K[^\n]+|Country[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_region=$(echo  "$output" | grep -oP '(?i)Регион[:\s]+\K[^\n]+|Region[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_city=$(echo    "$output" | grep -oP '(?i)Город[:\s]+\K[^\n]+|City[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_isp=$(echo     "$output" | grep -oP '(?i)Провайдер[:\s]+\K[^\n]+|ISP[:\s]+\K[^\n]+|Provider[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_asn=$(echo     "$output" | grep -oP '(?i)ASN[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_org=$(echo     "$output" | grep -oP '(?i)Организация[:\s]+\K[^\n]+|Org(anization)?[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_tz=$(echo      "$output" | grep -oP '(?i)Часовой.*пояс[:\s]+\K[^\n]+|Timezone[:\s]+\K[^\n]+|TimeZone[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+    geo_coord=$(echo   "$output" | grep -oP '(?i)Коорд[^:]*:[\s]+\K[^\n]+|Coord[^:]*:[\s]+\K[^\n]+|Lat.*Lon[:\s]+\K[^\n]+' | head -1 | sed 's/\s*$//')
+
+    if [ -n "$geo_ip$geo_country$geo_city$geo_isp" ]; then
+        echo -e "${DARKGRAY}───────────────── [ Сервер ] ─────────────────${NC}"
+        [ -n "$geo_ip"      ] && echo -e " ${DARKGRAY}IP адрес:${NC}            ${WHITE}${geo_ip}${NC}"
+        [ -n "$geo_country" ] && echo -e " ${DARKGRAY}Страна:${NC}             ${WHITE}${geo_country}${NC}"
+        [ -n "$geo_region"  ] && echo -e " ${DARKGRAY}Регион:${NC}             ${WHITE}${geo_region}${NC}"
+        [ -n "$geo_city"    ] && echo -e " ${DARKGRAY}Город:${NC}              ${WHITE}${geo_city}${NC}"
+        [ -n "$geo_isp"     ] && echo -e " ${DARKGRAY}Провайдер:${NC}         ${WHITE}${geo_isp}${NC}"
+        [ -n "$geo_asn"     ] && echo -e " ${DARKGRAY}ASN:${NC}               ${WHITE}${geo_asn}${NC}"
+        [ -n "$geo_org"     ] && echo -e " ${DARKGRAY}Организация:${NC}        ${WHITE}${geo_org}${NC}"
+        [ -n "$geo_tz"      ] && echo -e " ${DARKGRAY}Часовой пояс:${NC}       ${WHITE}${geo_tz}${NC}"
+        [ -n "$geo_coord"   ] && echo -e " ${DARKGRAY}Координаты:${NC}         ${WHITE}${geo_coord}${NC}"
+    else
+        # Фоллбек — показываем сырой вывод без escape-последовательностей
+        echo "$output" | sed 's/\x1B\[[0-9;]*[mK]//g'
+    fi
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
