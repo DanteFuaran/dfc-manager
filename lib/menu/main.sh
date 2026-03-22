@@ -66,6 +66,8 @@ main_menu() {
         fi
 
         items+=("🧩  Дополнительные программы"); actions+=("extra")
+        items+=("🧪  Тестирование сервера");       actions+=("testing")
+        items+=("⚙️   Оптимизация сервера");        actions+=("optimization")
         items+=("──────────────────────────────────────"); actions+=("sep")
 
         if [ "$is_installed" = true ]; then
@@ -154,6 +156,8 @@ main_menu() {
             access)           manage_panel_access ;;
             template)         manage_random_template ;;
             extra)            manage_extra_settings ;;
+            testing)          manage_server_testing ;;
+            optimization)     manage_server_optimization ;;
             update_components) manage_update ;;
             update_script)    update_script ;;
             remove)
