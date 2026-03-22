@@ -500,14 +500,13 @@ _mt_do_stats() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         local _cw=22
-        echo -e " ${WHITE}$(_mpad "Активных клиентов:" $_cw)${NC} ${GREEN}${_active}${NC}"
-        echo -e " ${WHITE}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
-        echo -e " ${WHITE}$(_mpad "К серверам Telegram:" $_cw)${NC} ${WHITE}${_dc_conns}${NC}"
-        echo -e " ${WHITE}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
-        echo -e " ${WHITE}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Активных клиентов:" $_cw)${NC} ${GREEN}${_active}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${DARKGRAY}Обновление каждые 5 сек • ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        echo -e "${DARKGRAY}${BLUE}Esc${DARKGRAY}: Выход${NC}"
 
         # Ждём 5 сек с проверкой Esc каждые 0.1 сек
         local _si=0 _sk
