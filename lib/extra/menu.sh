@@ -170,60 +170,6 @@ PROXY_TAG=${PROXY_TAG}
 EOF
 }
 
-# Записывает run.sh для контейнера
-_mt_write_run_sh() {
-    cat > "$1" << 'RUNSH'
-#!/bin/bash
-if [ ! -z "$DEBUG" ]; then set -x; fi
-mkdir /data 2>/dev/null >/dev/null
-RANDOM=$(printf "%d" "0x$(head -c4 /dev/urandom | od -t x1 -An | tr -d ' ')")
-if [ -z "$WORKERS" ]; then WORKERS=2; fi
-echo "#### Telegram Proxy"
-SECRET_CMD=""
-if [ ! -z "$SECRET" ]; then
-  echo "[+] Using the explicitly passed secret: '$SECRET'."
-elif [ -f /data/secret ]; then
-  SECRET="$(cat /data/secret)"
-  echo "[+] Using the secret in /data/secret: '$SECRET'."
-else
-  SECRET_COUNT="${SECRET_COUNT:-1}"
-  echo "[+] No secret passed. Will generate $SECRET_COUNT random ones."
-  SECRET="$(dd if=/dev/urandom bs=16 count=1 2>&1 | od -tx1 | head -n1 | tail -c +9 | tr -d ' ')"
-  for pass in $(seq 2 $SECRET_COUNT); do
-    SECRET="$SECRET,$(dd if=/dev/urandom bs=16 count=1 2>&1 | od -tx1 | head -n1 | tail -c +9 | tr -d ' ')"
-  done
-fi
-if echo "$SECRET" | grep -qE '^[0-9a-fA-F]{32}(,[0-9a-fA-F]{32}){,15}$'; then
-  SECRET="$(echo "$SECRET" | tr '[:upper:]' '[:lower:]')"
-  SECRET_CMD="-S $(echo "$SECRET" | sed 's/,/ -S /g')"
-  echo -- "$SECRET_CMD" > /data/secret_cmd
-  echo "$SECRET" > /data/secret
-else
-  echo '[F] Bad secret format.'; exit 1
-fi
-TAG_CMD=""
-if [[ ! -z "$TAG" ]]; then
-  if echo "$TAG" | grep -qE '^[0-9a-fA-F]{32}$'; then
-    TAG="$(echo "$TAG" | tr '[:upper:]' '[:lower:]')"
-    TAG_CMD="-P $TAG"
-  fi
-fi
-curl -s https://core.telegram.org/getProxyConfig -o /etc/telegram/backend.conf || { echo '[F] Cannot download proxy config.'; exit 2; }
-CONFIG=/etc/telegram/backend.conf
-IP="$(curl -s -4 "https://digitalresistance.dog/myIp")"
-INTERNAL_IP="$(ip -4 route get 8.8.8.8 | grep '^8\.8\.8\.8\s' | grep -Po 'src\s+\d+\.\d+\.\d+\.\d+' | awk '{print $2}')"
-[ -z "$IP" ] && { echo "[F] Cannot determine external IP."; exit 3; }
-[ -z "$INTERNAL_IP" ] && { echo "[F] Cannot determine internal IP."; exit 4; }
-echo "[*] External IP: $IP"
-sleep 1
-exec /usr/local/bin/mtproto-proxy -p 2398 -H 443 -M "$WORKERS" -C 60000 \
-  --aes-pwd /etc/telegram/hello-explorers-how-are-you-doing \
-  -u root $CONFIG --allow-skip-dh --nat-info "$INTERNAL_IP:$IP" \
-  --http-stats $SECRET_CMD $TAG_CMD
-RUNSH
-    chmod +x "$1"
-}
-
 # Записывает docker-compose.yml
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
@@ -235,8 +181,6 @@ services:
     restart: unless-stopped
     ports:
       - "${PROXY_PORT}:443"
-    volumes:
-      - ./run.sh:/run.sh:ro
     environment:
       - SECRET=${PROXY_SECRET}
       - TAG=${PROXY_TAG}
@@ -329,7 +273,6 @@ _mt_do_install() {
 
     # Подготавливаем файлы
     _mt_write_compose
-    _mt_write_run_sh "${_MT_DIR}/run.sh"
     _mt_save_config
     print_success "Подготовка файлов"
 
@@ -451,15 +394,16 @@ _mt_do_stats() {
     }
 
     while true; do
-        local _raw _active _uptime _dc_conns
-        local _pid
-        _pid=$(docker inspect --format '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null) || _pid=""
-        _raw=""
-        [ -n "$_pid" ] && _raw=$(nsenter -t "$_pid" -n curl -s --max-time 2 http://127.0.0.1:2398/stats 2>/dev/null || true)
-        _uptime=$(echo "$_raw" | awk '$1=="uptime"{print $2; exit}')
-        _uptime="${_uptime:-0}"
-        _dc_conns=$(echo "$_raw" | awk '$1=="total_encrypted_connections"{print $2; exit}')
-        _dc_conns="${_dc_conns:-0}"
+        local _active _uptime
+        local _started_at _start_ts _now
+        _started_at=$(docker inspect --format '{{.State.StartedAt}}' "$_MT_CONTAINER" 2>/dev/null || echo "")
+        _now=$(date +%s)
+        if [ -n "$_started_at" ]; then
+            _start_ts=$(date -d "$_started_at" +%s 2>/dev/null || echo "$_now")
+        else
+            _start_ts="$_now"
+        fi
+        _uptime=$(( _now - _start_ts ))
 
         # Активные клиенты из /proc/net/tcp
         _active=$(docker exec "$_MT_CONTAINER" sh -c \
