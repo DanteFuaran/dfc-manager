@@ -6,6 +6,7 @@ main_menu() {
     alias dfc="/usr/local/bin/dfc-manager" 2>/dev/null || true
 
     while true; do
+        tput civis 2>/dev/null || true
         local menu_title="      🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
 
         local -a items=() actions=()
@@ -29,6 +30,7 @@ main_menu() {
         case "$action" in
             remnawave)
                 while true; do
+                    tput civis 2>/dev/null || true
                     local has_panel=false has_node=false has_subpage=false
                     is_panel_installed && has_panel=true
                     is_node_installed  && has_node=true
@@ -91,6 +93,7 @@ main_menu() {
                     case "$rw_action" in
                         install)
                             while true; do
+                                tput civis 2>/dev/null || true
                                 local -a inst_items=() inst_actions=()
                                 if ! is_panel_installed; then
                                     inst_items+=("🖥️   Панель управления Remnawave"); inst_actions+=("panel_wizard")
@@ -108,6 +111,7 @@ main_menu() {
                                 case "$inst_action" in
                                     panel_wizard)
                                         while true; do
+                                            tput civis 2>/dev/null || true
                                             show_arrow_menu "📄  Установка страницы подписки" \
                                                 "✔️   Да, установить на этот сервер" \
                                                 "❌  Нет, установлю на отдельный сервер" \

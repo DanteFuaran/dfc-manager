@@ -3,6 +3,7 @@
 # ═══════════════════════════════════════════════════
 manage_extra_settings() {
     while true; do
+        tput civis 2>/dev/null || true
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${GREEN}   🧩  ДОПОЛНИТЕЛЬНЫЕ ПРОГРАММЫ${NC}"
@@ -580,6 +581,7 @@ _mt_do_uninstall() {
     echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
+        tput civis 2>/dev/null || true
         local _k=""
         IFS= read -rsn1 _k
         case "$_k" in
@@ -591,6 +593,7 @@ _mt_do_uninstall() {
 
 manage_mtproto() {
     while true; do
+        tput civis 2>/dev/null || true
         _mt_load_env
         local _installed=false _running=false
         _mt_installed && _installed=true
@@ -663,6 +666,7 @@ manage_mtproto() {
 # ═══════════════════════════════════════════════════
 manage_server_testing() {
     while true; do
+        tput civis 2>/dev/null || true
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${GREEN}   🧪  ТЕСТИРОВАНИЕ СЕРВЕРА${NC}"
@@ -1086,6 +1090,7 @@ run_geolocation() {
     echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
     tput civis 2>/dev/null || true
     while true; do
+        tput civis 2>/dev/null || true
         local _k=""
         IFS= read -rsn1 _k
         case "$_k" in
@@ -1100,6 +1105,7 @@ run_geolocation() {
 # ═══════════════════════════════════════════════════
 manage_server_optimization() {
     while true; do
+        tput civis 2>/dev/null || true
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${GREEN}   ⚙️  ОПТИМИЗАЦИЯ СЕРВЕРА${NC}"

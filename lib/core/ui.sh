@@ -114,17 +114,20 @@ show_arrow_menu() {
     stty -icanon -echo isig min 1 time 0 2>/dev/null || true
 
     # Функция восстановления терминала
-    _restore_term() {
+    _restore_stty() {
         if [ -n "${original_stty:-}" ]; then
             stty "$original_stty" 2>/dev/null || stty sane 2>/dev/null || true
         else
             stty sane 2>/dev/null || true
         fi
+    }
+    _restore_term() {
+        _restore_stty
         tput cnorm 2>/dev/null || true
     }
 
     # Обработчик ошибок для этой функции
-    trap "_restore_term" RETURN
+    trap "_restore_stty" RETURN
 
     _flush_stdin
 
@@ -214,8 +217,9 @@ show_arrow_menu() {
             fi
 
             if [ "$key_code" -eq 10 ] || [ "$key_code" -eq 13 ]; then
-                # Восстанавливаем состояние терминала перед выходом
-                _restore_term
+                # Восстанавливаем stty, курсор оставляем скрытым (следующий экран сам скроет/покажет)
+                _restore_stty
+                tput civis 2>/dev/null || true
                 return $selected
             fi
         fi
