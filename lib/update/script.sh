@@ -102,13 +102,6 @@ manage_delete_components() {
         # Ничего не осталось — удаляем скрипт автоматически
         if [ ${#del_actions[@]} -eq 0 ]; then
             clear
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${GREEN}   ✅  Все компоненты удалены${NC}"
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo
-            echo -e "${DARKGRAY}   Удаление скрипта с сервера...${NC}"
-            echo
-            sleep 1
             rm -f /usr/local/bin/dfc-manager
             rm -f /usr/local/bin/dfc
             rm -rf "${DIR_SCRIPT}"
