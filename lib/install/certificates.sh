@@ -2,6 +2,35 @@
 # СЕРТИФИКАТЫ
 # ═══════════════════════════════════════════════
 
+# Парсинг ошибки certbot в человекочитаемое сообщение
+_parse_cert_error() {
+    local log_file="$1"
+    local raw
+    raw=$(cat "$log_file" 2>/dev/null)
+
+    if echo "$raw" | grep -qiE "dns.*problem|NXDOMAIN|no valid A|Incorrect TXT|DNS problem"; then
+        echo "DNS-запись не настроена или не указывает на этот сервер"
+    elif echo "$raw" | grep -qiE "connection refused|Could not connect|Timeout|timed out|port 80"; then
+        echo "Порт 80 недоступен — проверьте файрвол и NAT"
+    elif echo "$raw" | grep -qiE "too many requests|rate.limit|rate limit"; then
+        echo "Превышен лимит запросов Let's Encrypt — повторите через час"
+    elif echo "$raw" | grep -qiE "unauthorized|403|invalid response"; then
+        echo "Домен не прошёл проверку — убедитесь что DNS указывает на этот сервер"
+    elif echo "$raw" | grep -qiE "invalid domain|not a FQDN|malformed"; then
+        echo "Некорректное доменное имя"
+    elif echo "$raw" | grep -qiE "cloudflare.*error|API Token|dns_cloudflare"; then
+        echo "Ошибка Cloudflare API — проверьте токен и права доступа"
+    else
+        local detail
+        detail=$(grep -iE "Detail:|error:" "$log_file" 2>/dev/null | head -1 | sed 's/.*Detail: *//;s/.*error: *//')
+        if [ -n "$detail" ]; then
+            echo "$detail"
+        else
+            echo "Не удалось определить причину — проверьте DNS и сетевые настройки"
+        fi
+    fi
+}
+
 handle_certificates() {
     local -n domains_ref=$1
     local cert_method="$2"
@@ -93,11 +122,11 @@ get_cert_cloudflare() {
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
     if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
-        local _cert_error
-        _cert_error=$(grep -iE "error|Detail|Problem|Failed|unauthorized|invalid|Could not" "$_tmp_log" 2>/dev/null | grep -v "^$" | tail -5)
+        local _cert_reason
+        _cert_reason=$(_parse_cert_error "$_tmp_log")
         rm -f "$_tmp_log" "$_exit_file"
         print_error "Не удалось получить сертификат для $domain"
-        [ -n "$_cert_error" ] && echo -e "${DARKGRAY}${_cert_error}${NC}"
+        echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
         return 1
     fi
 
@@ -145,11 +174,11 @@ get_cert_acme() {
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
     if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
-        local _cert_error
-        _cert_error=$(grep -iE "error|Detail|Problem|Failed|unauthorized|invalid|Could not" "$_tmp_log" 2>/dev/null | grep -v "^$" | tail -5)
+        local _cert_reason
+        _cert_reason=$(_parse_cert_error "$_tmp_log")
         rm -f "$_tmp_log" "$_exit_file"
         print_error "Не удалось получить сертификат для $domain"
-        [ -n "$_cert_error" ] && echo -e "${DARKGRAY}${_cert_error}${NC}"
+        echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
         return 1
     fi
 

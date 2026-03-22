@@ -76,16 +76,16 @@ installation_full() {
         needs_certs=true
         echo
         show_arrow_menu "🔐  Метод получения сертификатов" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
         case $cert_choice in
-            0) CERT_METHOD=1 ;;
-            1) CERT_METHOD=2 ;;
+            0) CERT_METHOD=2 ;;
+            1) CERT_METHOD=1 ;;
             2) : ;;
             3) return ;;
         esac
@@ -423,15 +423,15 @@ installation_panel_with_node() {
         needs_certs=true
         echo
         show_arrow_menu "🔐  Метод получения сертификатов" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in
-            0) CERT_METHOD=1 ;;
-            1) CERT_METHOD=2 ;;
+            0) CERT_METHOD=2 ;;
+            1) CERT_METHOD=1 ;;
             2) : ;;
             3) return ;;
         esac

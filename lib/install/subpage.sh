@@ -129,14 +129,14 @@ _installation_subpage_on_panel() {
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐  Метод получения сертификата" \
-                    "☁️   Cloudflare DNS-01 (wildcard)" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
                 local cert_choice=$?
                 case $cert_choice in
-                    0) CERT_METHOD=1 ;;
-                    1) CERT_METHOD=2 ;;
+                    0) CERT_METHOD=2 ;;
+                    1) CERT_METHOD=1 ;;
                     *) return ;;
                 esac
                 setup_cloudflare_credentials || return
@@ -330,11 +330,8 @@ _installation_subpage_on_node() {
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
-    echo -e "${YELLOW}Создайте API токен в панели:${NC}"
-    echo -e "${DARKGRAY}Dashboard → Settings → API Tokens → Create${NC}"
-    echo
     while true; do
-        reading "API токен:" API_TOKEN
+        reading "API токен панели (Настройки Remnawave):" API_TOKEN
         if [ -n "$API_TOKEN" ]; then
             break
         fi
@@ -357,14 +354,14 @@ _installation_subpage_on_node() {
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐  Метод получения сертификата" \
-                    "☁️   Cloudflare DNS-01 (wildcard)" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
                 local cert_choice=$?
                 case $cert_choice in
-                    0) CERT_METHOD=1 ;;
-                    1) CERT_METHOD=2 ;;
+                    0) CERT_METHOD=2 ;;
+                    1) CERT_METHOD=1 ;;
                     *) return ;;
                 esac
                 setup_cloudflare_credentials || return
@@ -523,9 +520,6 @@ _installation_subpage_standalone() {
     echo -e "${GREEN}   📄 УСТАНОВКА СТРАНИЦЫ ПОДПИСКИ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${DARKGRAY}Страница подписки будет установлена как${NC}"
-    echo -e "${DARKGRAY}отдельный сервис на этом сервере.${NC}"
-    echo
 
     mkdir -p "${SUBPAGE_DIR}" && cd "${SUBPAGE_DIR}"
 
@@ -554,11 +548,8 @@ _installation_subpage_standalone() {
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
-    echo -e "${YELLOW}Создайте API токен в панели:${NC}"
-    echo -e "${DARKGRAY}Dashboard → Settings → API Tokens → Create${NC}"
-    echo
     while true; do
-        reading "API токен:" API_TOKEN
+        reading "API токен панели (Настройки Remnawave):" API_TOKEN
         if [ -n "$API_TOKEN" ]; then
             break
         fi
@@ -577,16 +568,16 @@ _installation_subpage_standalone() {
         needs_certs=true
         echo
         show_arrow_menu "🔐  Метод получения сертификатов" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
         case $cert_choice in
-            0) CERT_METHOD=1 ;;
-            1) CERT_METHOD=2 ;;
+            0) CERT_METHOD=2 ;;
+            1) CERT_METHOD=1 ;;
             2) : ;;
             3) return ;;
         esac

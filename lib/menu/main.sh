@@ -98,6 +98,8 @@ main_menu() {
                                 if ! is_panel_installed; then
                                     inst_items+=("🖥️   Панель управления Remnawave"); inst_actions+=("panel_wizard")
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
+                                else
+                                    inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
                                 fi
                                 inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
                                 inst_items+=("🌐  Нода");               inst_actions+=("node")
@@ -146,6 +148,7 @@ main_menu() {
                                         ;;
                                     subpage)    installation_subpage || break ;;
                                     node)       installation_node  || break ;;
+                                    add_node)   installation_node_local || break ;;
                                     *) break ;;
                                 esac
                             done ;;
