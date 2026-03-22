@@ -162,10 +162,6 @@ run_services_check() {
     tput cnorm 2>/dev/null || true
 }
 
-    local output
-    output=$(cat "$tmpfile" 2>/dev/null) || true
-    rm -f "$tmpfile"
-
 # ═══════════════════════════════════════════════════
 # ХЕЛПЕРЫ ДЛЯ ТЕСТОВ
 # ═══════════════════════════════════════════════════
