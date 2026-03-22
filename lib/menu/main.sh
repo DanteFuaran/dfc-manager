@@ -91,18 +91,11 @@ main_menu() {
                 while true; do
                     local -a inst_items=() inst_actions=()
                     if ! is_panel_installed; then
-                        inst_items+=("📦  Панель + Страница подписки"); inst_actions+=("panel_sub")
-                        inst_items+=("🖥️   Только панель");              inst_actions+=("panel_only")
+                        inst_items+=("�️   Панель"); inst_actions+=("panel_wizard")
+                        inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                     fi
-                    inst_items+=("📄  Только страница подписки");         inst_actions+=("subpage")
-                    if ! is_panel_installed && ! is_node_installed; then
-                        inst_items+=("📦  Панель + Страница подписки + Нода (один сервер)"); inst_actions+=("full")
-                    fi
-                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
-                    inst_items+=("🌐  Только нода");    inst_actions+=("node")
-                    if is_panel_installed; then
-                        inst_items+=("➕  Подключить ноду в панель"); inst_actions+=("add_node")
-                    fi
+                    inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
+                    inst_items+=("🌐  Нода");               inst_actions+=("node")
                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                     inst_items+=("❌  Назад"); inst_actions+=("back")
 
@@ -111,12 +104,42 @@ main_menu() {
                     [[ $install_choice -eq 255 ]] && break
                     local inst_action="${inst_actions[$install_choice]:-back}"
                     case "$inst_action" in
-                        full)       installation_full  || break ;;
-                        panel_sub)  installation_panel || break ;;
-                        panel_only) installation_panel false || break ;;
+                        panel_wizard)
+                            # Шаг 1: страница подписки на этом сервере?
+                            show_arrow_menu "📄  Страница подписки" \
+                                "✅  Да, установить на этот сервер" \
+                                "🌐  Нет, установлю на отдельный сервер" \
+                                "──────────────────────────────────────" \
+                                "❌  Назад"
+                            local sub_choice=$?
+                            [[ $sub_choice -eq 255 || $sub_choice -eq 3 ]] && continue
+                            local with_subpage=true
+                            [[ $sub_choice -eq 1 ]] && with_subpage=false
+
+                            # Шаг 2: нода на этом сервере?
+                            show_arrow_menu "🌐  Нода" \
+                                "✅  Да, установить на этот сервер" \
+                                "🖥️   Нет, установлю на отдельный сервер" \
+                                "──────────────────────────────────────" \
+                                "❌  Назад"
+                            local node_choice=$?
+                            [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
+                            local with_node=false
+                            [[ $node_choice -eq 0 ]] && with_node=true
+
+                            # Запуск нужного варианта установки
+                            if [ "$with_subpage" = true ] && [ "$with_node" = true ]; then
+                                installation_full || break
+                            elif [ "$with_subpage" = true ]; then
+                                installation_panel true || break
+                            elif [ "$with_node" = true ]; then
+                                installation_panel_with_node || break
+                            else
+                                installation_panel false || break
+                            fi
+                            ;;
                         subpage)    installation_subpage || break ;;
                         node)       installation_node  || break ;;
-                        add_node)   add_node_to_panel || break ;;
                         *) break ;;
                     esac
                 done ;;
