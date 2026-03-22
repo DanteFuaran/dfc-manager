@@ -245,6 +245,7 @@ COMPOSE
 
 # Установка / переустановка MTProto (встроенная реализация)
 # Шаги ввода: 1-домен, 2-порт, 3-секрет, 4-IP, 5-tag.  Esc → предыдущий шаг.
+# При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
     local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
@@ -262,37 +263,79 @@ _mt_do_install() {
     echo
 
     _mt_check_docker || { _mt_press_enter; return; }
+    echo
+
+    # _mt_erase_lines N — стираем N строк вверх (текущая уже пустая после \r\033[K)
+    _mt_erase_lines() {
+        local n=$1
+        while [ $n -gt 0 ]; do
+            printf "\033[A\033[K"
+            (( n-- ))
+        done
+    }
 
     local _step=1 _secret_input="" _tag_input=""
-    while true; do
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}       📦 Установка MTProto${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo
+    # lines_above[step] — сколько строк вывел предыдущий шаг (для стирания)
+    # 0-я = не используется; step 1 выводит 1 строку (инпут); шаг 3,5 — доп. строки
+    local -a _lines_above=(0 0 0 0 0 0)
 
+    while true; do
         case $_step in
+            1) # Fake TLS домен
+                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+                if [ $? -eq 0 ]; then
+                    _lines_above[1]=1
+                    (( _step++ ))
+                else
+                    return  # Esc на первом шаге — выход
+                fi
+                ;;
             2) # Порт
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
-                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default" \
-                    && (( _step++ )) || (( _step-- ))
+                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+                if [ $? -eq 0 ]; then
+                    _lines_above[2]=1
+                    (( _step++ ))
+                else
+                    # Стираем строку порта и строку домена, чтобы повторно ввести домен
+                    _mt_erase_lines $(( _lines_above[1] ))
+                    (( _step-- ))
+                fi
                 ;;
             3) # Секрет
                 echo -e "  ${DARKGRAY}Секрет — ключ шифрования подключения (передаётся клиентам в ссылке).${NC}"
-                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" "" \
-                    && (( _step++ )) || (( _step-- ))
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+                if [ $? -eq 0 ]; then
+                    _lines_above[3]=2  # подсказка + инпут
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1  # стираем подсказку
+                    _mt_erase_lines $(( _lines_above[2] ))
+                    (( _step-- ))
+                fi
                 ;;
             4) # IP/домен
                 local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
-                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host" \
-                    && (( _step++ )) || (( _step-- ))
+                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
+                if [ $? -eq 0 ]; then
+                    _lines_above[4]=1
+                    (( _step++ ))
+                else
+                    _mt_erase_lines $(( _lines_above[3] ))
+                    (( _step-- ))
+                fi
                 ;;
             5) # Proxy Tag
                 echo -e "  ${DARKGRAY}Proxy Tag — ID прокси для статистики в @MTProxybot.${NC}"
                 echo -e "  ${DARKGRAY}Это${NC} ${YELLOW}НЕ секрет${DARKGRAY} выше! Можно оставить пустым.${NC}"
-                _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}" \
-                    && break || (( _step-- ))
+                _mt_read_input _tag_input "Proxy Tag ${DARKGRAY}[Enter для пропуска]${NC}:" "${PROXY_TAG}"
+                if [ $? -eq 0 ]; then
+                    break
+                else
+                    _mt_erase_lines 2  # стираем 2 подсказки тега
+                    _mt_erase_lines $(( _lines_above[4] ))
+                    (( _step-- ))
+                fi
                 ;;
         esac
     done
