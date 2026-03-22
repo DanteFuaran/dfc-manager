@@ -41,9 +41,10 @@ cleanup_old_aliases() {
 
 # Тихая самоочистка если ничего не установлено
 cleanup_uninstalled() {
-    # Удаляем скрипт и симлинки только если ни панель, ни нода не установлены
+    # Удаляем скрипт и симлинки только если ни панель, ни нода, ни страница подписки не установлены
     if [ ! -f "${DIR_PANEL}docker-compose.yml" ] && \
        [ ! -f "${DIR_NODE}docker-compose.yml" ] && \
+       [ ! -f "/opt/remnasubpage/docker-compose.yml" ] && \
        ! grep -q 'container_name: remnanode' "${DIR_PANEL}docker-compose.yml" 2>/dev/null; then
         rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
         rm -rf "${DIR_REMNAWAVE}" 2>/dev/null || true
