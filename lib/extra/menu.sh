@@ -407,6 +407,7 @@ run_geolocation() {
     echo
     echo -e " ${DARKGRAY}$(_mpad "IPv4:" 5)${NC} ${WHITE}${geo_ip}${NC}"
     [ -n "$geo_asn" ] && echo -e " ${DARKGRAY}$(_mpad "ASN:" 5)${NC} ${WHITE}${geo_asn}${NC}"
+    echo
 
     # Проход 2: парсим секции и таблицы
     local _in_tbl=false _first=true
@@ -426,7 +427,7 @@ run_geolocation() {
             svc_name=$(echo "$line" | sed 's/[[:space:]]\{2,\}.*//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             svc_val=$(echo "$line" | grep -oP '[[:space:]]{2,}\K\S.*' | head -1 | sed 's/[[:space:]]*$//')
             [[ -z "$svc_val" ]] && continue
-            local vc="${WHITE}"
+            local vc="${GREEN}"
             [[ "$svc_val" =~ ^(N/A|null|-)$ ]] && vc="${DARKGRAY}"
             echo -e " ${DARKGRAY}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
             continue
