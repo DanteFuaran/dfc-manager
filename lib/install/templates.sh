@@ -47,7 +47,7 @@ apply_template() {
     find /var/www/html/ -mindepth 1 -not -name '.current_template' -not -name '.template_changed' -delete 2>/dev/null
     
     # Скачиваем шаблон с GitHub
-    local base_url="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/${SCRIPT_BRANCH}/templates/${template_id}"
+    local base_url="https://raw.githubusercontent.com/DanteFuaran/dfc-manager/${SCRIPT_BRANCH}/templates/${template_id}"
     local cache_bust="?t=$(date +%s)"
     
     if curl -fsSL "${base_url}/index.html${cache_bust}" -o /var/www/html/index.html; then

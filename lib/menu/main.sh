@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════════
 
 main_menu() {
-    alias rw="/usr/local/bin/remnawave" 2>/dev/null || true
+    alias dfc="/usr/local/bin/dfc-manager" 2>/dev/null || true
 
     while true; do
         local menu_title="      🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
@@ -37,10 +37,10 @@ main_menu() {
                     { [ "$has_panel" = true ] || [ "$has_node" = true ] || [ "$has_subpage" = true ]; } && is_installed=true
 
                     if [ "$is_installed" = true ]; then
-                        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave 2>/dev/null || true
-                        ln -sf /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+                        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager 2>/dev/null || true
+                        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
                     else
-                        rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+                        rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
                     fi
 
                     local update_notice="" install_status=""

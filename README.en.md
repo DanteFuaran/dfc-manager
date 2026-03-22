@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
 </p>
 
-<h1 align="center">🛡️ DFC Remna Install</h1>
+<h1 align="center">🛡️ DFC Manager</h1>
 <p align="center">Interactive installer and manager for <a href="https://github.com/remnawave/panel">Remnawave VPN Panel</a><br>with NGINX, SSL, cookie-protection and a full suite of management tools</p>
 
 ---
@@ -20,10 +20,10 @@
 ## 🚀 Quick Start
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/dfc-remna-install.sh)
+cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/dev/dfc-manager.sh)
 ```
 
-<sub>After installation, manage everything with <b><code>remnawave</code></b> or <b><code>rw</code></b></sub>
+<sub>After installation, manage everything with <b><code>dfc-manager</code></b> or <b><code>dfc</code></b></sub>
 
 ---
 
@@ -161,9 +161,9 @@ cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-rem
 > ✅ Cloudflare **API Token** is valid (if using DNS-01)
 
 ### Solutions:
-> 📜 Check component logs via `remnawave` → View logs<br>
-> 🔄 Try restarting services via `remnawave` → Start services<br>
-> 🆘 If the issue persists — open an [Issue on GitHub](https://github.com/DanteFuaran/dfc-remna-install/issues) with the error output
+> 📜 Check component logs via `dfc` → View logs<br>
+> 🔄 Try restarting services via `dfc` → Start services<br>
+> 🆘 If the issue persists — open an [Issue on GitHub](https://github.com/DanteFuaran/dfc-manager/issues) with the error output
 
 </details>
 

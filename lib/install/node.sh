@@ -96,7 +96,7 @@ installation_node_local() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Проверяем пакеты
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -230,7 +230,7 @@ installation_node_local() {
         return
     fi
     local token
-    token=$(cat "${DIR_REMNAWAVE}/token")
+    token=$(cat "${DIR_SCRIPT}/token")
 
     # ─── Проверка уникальности домена/имени в API (до изменения конфигов) ───
     if ! check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
@@ -597,7 +597,7 @@ installation_node_remote() {
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -839,7 +839,7 @@ installation_node_with_existing_subpage() {
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 

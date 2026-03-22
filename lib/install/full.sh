@@ -106,7 +106,7 @@ installation_full() {
         done
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -158,7 +158,7 @@ installation_full() {
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
-        cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
+        cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Создание необходимых файлов" || true
 
@@ -449,7 +449,7 @@ installation_panel_with_node() {
         done
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -492,7 +492,7 @@ installation_panel_with_node() {
         generate_nginx_conf_panel_with_node "$PANEL_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
-        cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
+        cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Создание необходимых файлов" || true
 

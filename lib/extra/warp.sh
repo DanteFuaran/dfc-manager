@@ -358,7 +358,7 @@ add_warp_to_config() {
         return 1
     fi
     local token
-    token=$(cat "${DIR_REMNAWAVE}/token")
+    token=$(cat "${DIR_SCRIPT}/token")
     local domain_url="127.0.0.1:3000"
 
     # Получаем список конфигураций
@@ -675,7 +675,7 @@ remove_warp_from_config() {
         return 1
     fi
     local token
-    token=$(cat "${DIR_REMNAWAVE}/token")
+    token=$(cat "${DIR_SCRIPT}/token")
     local domain_url="127.0.0.1:3000"
 
     # Получаем список конфигураций

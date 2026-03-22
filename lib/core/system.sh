@@ -172,8 +172,8 @@ DNSCONF
         fi
 
         # Создаём директорию для флага, если её нет
-        mkdir -p "${DIR_REMNAWAVE}" 2>/dev/null || true
-        touch "${DIR_REMNAWAVE}install_packages"
+        mkdir -p "${DIR_SCRIPT}" 2>/dev/null || true
+        touch "${DIR_SCRIPT}install_packages"
     ) &
     echo
     show_spinner "Установка необходимых пакетов"

@@ -141,7 +141,7 @@ add_node_to_panel() {
         return
     fi
     local token
-    token=$(cat "${DIR_REMNAWAVE}/token")
+    token=$(cat "${DIR_SCRIPT}/token")
 
     local SELFSTEAL_DOMAIN=""
     local entity_name=""

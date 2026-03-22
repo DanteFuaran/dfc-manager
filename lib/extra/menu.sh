@@ -45,7 +45,7 @@ _mt_load_env()  { [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true; }
 _mt_press_enter() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
     tput civis 2>/dev/null || true
     read -r
     tput cnorm 2>/dev/null || true
@@ -344,17 +344,24 @@ _mt_do_config() {
     echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT:-}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN:-}${NC}"
-    if [ -n "${PROXY_TAG:-}" ]; then
-        echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
-    else
-        echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${YELLOW}не задан${NC} ${DARKGRAY}(получить: @MTProxybot)${NC}"
-    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    _mt_press_enter
+
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+    tput civis 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            "")      tput cnorm 2>/dev/null || true; return 0 ;;
+        esac
+    done
 }
 
 # Статистика подключений
@@ -613,7 +620,7 @@ manage_mtproto() {
         case "$_action" in
             install)       _mt_do_install ;;
             stats)         _mt_do_stats || return ;;
-            config)        _mt_do_config ;;
+            config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
@@ -711,7 +718,7 @@ run_speed_test() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
     tput civis 2>/dev/null || true
     read -r
     tput cnorm 2>/dev/null || true
@@ -740,7 +747,7 @@ run_services_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
     tput civis 2>/dev/null || true
     read -r
     tput cnorm 2>/dev/null || true
@@ -918,7 +925,7 @@ run_regional_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
     tput civis 2>/dev/null || true
     read -r
     tput cnorm 2>/dev/null || true
@@ -960,7 +967,7 @@ run_geolocation() {
         echo -e "${RED}Не удалось получить данные геолокации${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
         tput civis 2>/dev/null || true
         read -r
         tput cnorm 2>/dev/null || true
@@ -1027,7 +1034,7 @@ run_geolocation() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Нажмите Enter для продолжения...${NC}"
+    echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить${NC}"
     tput civis 2>/dev/null || true
     read -r
     tput cnorm 2>/dev/null || true

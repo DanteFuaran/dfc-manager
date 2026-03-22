@@ -3,28 +3,28 @@
 # ═══════════════════════════════════════════════
 
 install_script() {
-    mkdir -p "${DIR_REMNAWAVE}"
+    mkdir -p "${DIR_SCRIPT}"
 
     cleanup_old_aliases
 
     # Уже установлен — только актуализируем симлинки
-    if [ -d "${DIR_REMNAWAVE}lib" ]; then
-        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
-        ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
+    if [ -d "${DIR_SCRIPT}lib" ]; then
+        chmod +x "${DIR_SCRIPT}dfc-manager.sh"
+        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
+        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
         return
     fi
 
     # Первичная установка — скачиваем полный архив (ветка берётся из $SCRIPT_BRANCH → version-файл)
-    if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-remna-install/archive/refs/heads/${SCRIPT_BRANCH}.tar.gz" \
-        | tar -xz -C "${DIR_REMNAWAVE}" --strip-components=1; then
+    if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-manager/archive/refs/heads/${SCRIPT_BRANCH}.tar.gz" \
+        | tar -xz -C "${DIR_SCRIPT}" --strip-components=1; then
         echo -e "${RED}✖ Не удалось скачать скрипт${NC}"
         exit 1
     fi
 
-    chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-    ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
-    ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
+    chmod +x "${DIR_SCRIPT}dfc-manager.sh"
+    ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
+    ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
 }
 
 update_script() {
@@ -91,32 +91,32 @@ update_script() {
     done
 
     (
-        rm -rf "${DIR_REMNAWAVE}"
-        mkdir -p "$(dirname "${DIR_REMNAWAVE%/}")"
-        git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" "${DIR_REMNAWAVE%/}" >/dev/null 2>&1
-        chmod +x "${DIR_REMNAWAVE}dfc-remna-install.sh"
-        ln -sf "${DIR_REMNAWAVE}dfc-remna-install.sh" /usr/local/bin/remnawave
-        ln -sf /usr/local/bin/remnawave /usr/local/bin/rw
+        rm -rf "${DIR_SCRIPT}"
+        mkdir -p "$(dirname "${DIR_SCRIPT%/}")"
+        git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" "${DIR_SCRIPT%/}" >/dev/null 2>&1
+        chmod +x "${DIR_SCRIPT}dfc-manager.sh"
+        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
+        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
     ) &
     show_spinner "Загрузка обновлений"
 
-    if [ -f "${DIR_REMNAWAVE}dfc-remna-install.sh" ]; then
+    if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
         # Гарантируем наличие version файла (в директории скрипта)
-        if [ ! -f "${DIR_REMNAWAVE}version" ] || ! grep -q '^version:' "${DIR_REMNAWAVE}version" 2>/dev/null; then
+        if [ ! -f "${DIR_SCRIPT}version" ] || ! grep -q '^version:' "${DIR_SCRIPT}version" 2>/dev/null; then
             printf 'version: %s\nbranch: %s\nrepo: %s\n' \
                 "${remote_version}" "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
-                > "${DIR_REMNAWAVE}version"
+                > "${DIR_SCRIPT}version"
         fi
         # Копируем version файл в директорию панели (рядом с .env)
         if [ -d "${DIR_PANEL}" ]; then
-            cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
+            cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
         fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
         printf "\033[1;34m══════════════════════════════════════\033[0m\n"
         show_continue_prompt || return 0
-        exec /usr/local/bin/remnawave
+        exec /usr/local/bin/dfc-manager
     else
         print_error "Ошибка при обновлении скрипта"
         echo
@@ -207,9 +207,9 @@ remove_script_all() {
     rm -rf "${DIR_PANEL}"
     rm -rf "/opt/remnasubpage"
     rm -rf "${DIR_NODE}"
-    rm -f /usr/local/bin/remnawave
-    rm -f /usr/local/bin/rw
-    rm -rf "${DIR_REMNAWAVE}"
+    rm -f /usr/local/bin/dfc-manager
+    rm -f /usr/local/bin/dfc
+    rm -rf "${DIR_SCRIPT}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases
     print_success "Скрипт и все данные удалены"
@@ -231,9 +231,9 @@ remove_script() {
         return
     fi
 
-    rm -f /usr/local/bin/remnawave
-    rm -f /usr/local/bin/rw
-    rm -rf "${DIR_REMNAWAVE}"
+    rm -f /usr/local/bin/dfc-manager
+    rm -f /usr/local/bin/dfc
+    rm -rf "${DIR_SCRIPT}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases
     echo

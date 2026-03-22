@@ -111,7 +111,7 @@ installation_panel() {
         echo
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -150,7 +150,7 @@ installation_panel() {
             generate_nginx_conf_panel_only "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         fi
-        cp -f "${DIR_REMNAWAVE}version" "${DIR_PANEL}version" 2>/dev/null || true
+        cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Создание файлов" || true
 

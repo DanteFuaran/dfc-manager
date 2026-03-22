@@ -1,13 +1,13 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
-#   DFC REMNA-INSTALL — Установщик Remnawave VPN Panel
-#   https://github.com/DanteFuaran/dfc-remna-install
-#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/dev/dfc-remna-install.sh)
+#   DFC Manager — Установщик Remnawave VPN Panel
+#   https://github.com/DanteFuaran/dfc-manager
+#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/dev/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
 
-# ─── Bootstrap: запуск через curl или не из установленной копии ─────────────
-_INSTALL_DIR="/usr/local/remnawave"
-_INSTALL_SCRIPT="${_INSTALL_DIR}/dfc-remna-install.sh"
+# ─── Bootstrap: запуск через curl или не из установленной копии ─────────
+_INSTALL_DIR="/usr/local/dfc-manager"
+_INSTALL_SCRIPT="${_INSTALL_DIR}/dfc-manager.sh"
 # Если запущены не из установленной копии (напр. через curl/pipe/tmp) — установить или переключиться
 if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; then
     if [ -f "$_INSTALL_SCRIPT" ] && [ -d "${_INSTALL_DIR}/lib" ]; then
@@ -30,7 +30,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
     if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
-            "https://github.com/DanteFuaran/dfc-remna-install.git" \
+            "https://github.com/DanteFuaran/dfc-manager.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
         echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${_NC}"
         rm -rf "${_INSTALL_DIR}"
@@ -41,7 +41,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
 fi
 
 # ─── Основной скрипт ─────────────────────────────────────────
-if [ "${REMNA_INSTALLED_RUN:-}" != "1" ]; then
+if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
     echo -e '\033[1;34mПодготовка скрипта к запуску...\033[0m'
 fi
 cd /opt >/dev/null 2>&1 || true
@@ -115,9 +115,9 @@ check_os
 
 # Если запущены НЕ из установленной копии - скачиваем свежую и переключаемся
 install_script
-if [ "${REMNA_INSTALLED_RUN:-}" != "1" ]; then
-    export REMNA_INSTALLED_RUN=1
-    exec /usr/local/bin/remnawave
+if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
+    export DFC_INSTALLED_RUN=1
+    exec /usr/local/bin/dfc-manager
 fi
 
 # Проверка обновлений (всегда)

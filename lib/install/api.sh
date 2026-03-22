@@ -24,7 +24,7 @@ make_api_request() {
 }
 
 get_panel_token() {
-    local TOKEN_FILE="${DIR_REMNAWAVE}/token"
+    local TOKEN_FILE="${DIR_SCRIPT}/token"
     local domain_url="127.0.0.1:3000"
     local token=""
 

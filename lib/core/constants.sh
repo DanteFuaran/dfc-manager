@@ -2,16 +2,16 @@
 # КОНСТАНТЫ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 # ═══════════════════════════════════════════════
 
-DIR_REMNAWAVE="/usr/local/remnawave/"
+DIR_SCRIPT="/usr/local/dfc-manager/"
 DIR_PANEL="/opt/remnawave/"
 DIR_NODE="/opt/remnanode/"
 
 # Версия, ветка и репозиторий — единый источник: /opt/remnawave/version
 SCRIPT_VERSION="0.1.7"
 SCRIPT_BRANCH="dev"
-SCRIPT_REPO="https://github.com/DanteFuaran/dfc-remna-install.git"
-# Приоритет: /opt/remnawave/version (рядом с .env), затем /usr/local/remnawave/version
-for _vf in "${DIR_PANEL}version" "${DIR_REMNAWAVE}version"; do
+SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
+# Приоритет: /opt/remnawave/version (рядом с .env), затем /usr/local/dfc-manager/version
+for _vf in "${DIR_PANEL}version" "${DIR_SCRIPT}version"; do
     if [ -f "$_vf" ]; then
         _sv=$(grep '^version:' "$_vf" 2>/dev/null | cut -d: -f2 | tr -d ' ')
         _br=$(grep '^branch:'  "$_vf" 2>/dev/null | cut -d: -f2 | tr -d ' ')
@@ -26,7 +26,7 @@ done
 unset _vf
 
 # SCRIPT_URL строится динамически из $SCRIPT_BRANCH — менять только version-файл
-SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-remna-install/refs/heads/${SCRIPT_BRANCH}/remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/${SCRIPT_BRANCH}/dfc-manager.sh"
 # Файлы кэша проверки обновлений (в стабильной директории, а не в /tmp)
-UPDATE_AVAILABLE_FILE="${DIR_REMNAWAVE}update_available"
-UPDATE_CHECK_TIME_FILE="${DIR_REMNAWAVE}last_update_check"
+UPDATE_AVAILABLE_FILE="${DIR_SCRIPT}update_available"
+UPDATE_CHECK_TIME_FILE="${DIR_SCRIPT}last_update_check"

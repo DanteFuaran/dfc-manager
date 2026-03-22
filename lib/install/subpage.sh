@@ -179,7 +179,7 @@ _installation_subpage_on_panel() {
         return
     fi
     local token
-    token=$(cat "${DIR_REMNAWAVE}/token")
+    token=$(cat "${DIR_SCRIPT}/token")
 
     # Обновляем .env — SUB_PUBLIC_DOMAIN
     if grep -q "^SUB_PUBLIC_DOMAIN=" /opt/remnawave/.env 2>/dev/null; then
@@ -290,7 +290,7 @@ _installation_subpage_on_node() {
     echo
 
     # Проверяем пакеты
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -605,7 +605,7 @@ _installation_subpage_standalone() {
         print_success "Сертификат для $SUB_DOMAIN уже существует"
     fi
 
-    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
+    if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
 
@@ -638,7 +638,7 @@ _installation_subpage_standalone() {
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
-        cp -f "${DIR_REMNAWAVE}version" "${SUBPAGE_DIR}/version" 2>/dev/null || true
+        cp -f "${DIR_SCRIPT}version" "${SUBPAGE_DIR}/version" 2>/dev/null || true
     ) &
     show_spinner "Создание файлов" || true
 

@@ -557,7 +557,7 @@ db_restore() {
 # АВТОБЕКАП
 # ═══════════════════════════════════════════════
 
-AUTOBACKUP_SCRIPT="${DIR_REMNAWAVE}autobackup.sh"
+AUTOBACKUP_SCRIPT="${DIR_SCRIPT}autobackup.sh"
 AUTOBACKUP_CONFIG="/opt/remnawave/.env"
 
 # Создание скрипта автобекапа (только отправка в Telegram)

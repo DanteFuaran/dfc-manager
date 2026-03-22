@@ -35,23 +35,16 @@ manage_ufw() {
             # Разделитель (index 1) или Назад (index 2)
             [ "$choice" -ge 1 ] && return 0
         else
-            # Статус UFW
-            clear
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${GREEN}        🔥 FIREWALL (UFW)${NC}"
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo
-
-            local ufw_status
-            ufw_status=$(ufw status 2>/dev/null | head -1)
-            if echo "$ufw_status" | grep -q "active"; then
-                print_success "UFW активен"
+            local _ufw_status_text
+            local _ufw_st
+            _ufw_st=$(ufw status 2>/dev/null | head -1)
+            if echo "$_ufw_st" | grep -q "active"; then
+                _ufw_status_text="\n${NC}${GREEN}✅ UFW активен${NC}"
             else
-                print_warning "UFW не активен"
+                _ufw_status_text="\n${NC}${YELLOW}⚠️  UFW не активен${NC}"
             fi
-            echo
 
-            show_arrow_menu "🔥  Firewall (UFW)" \
+            show_arrow_menu "🔥  Firewall (UFW)${_ufw_status_text}" \
                 "📋  Показать открытые порты" \
                 "➕  Открыть порт" \
                 "➖  Удалить правило" \

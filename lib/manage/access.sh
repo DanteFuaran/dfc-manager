@@ -101,7 +101,7 @@ _update_hosts_port() {
     # Получаем токен
     local token
     token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
-    [ -z "$token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
+    [ -z "$token" ] && [ -f "${DIR_SCRIPT}/token" ] && token=$(cat "${DIR_SCRIPT}/token" 2>/dev/null)
     [ -z "$token" ] && return 0
 
     # Получаем xray inbound port из config profile (если не передан)
@@ -462,7 +462,7 @@ SERVERBLOCK_8443
 
         # Получаем xray inbound port и обновляем хосты
         _api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$dir/.env" 2>/dev/null)
-        [ -z "$_api_token" ] && [ -f "${DIR_REMNAWAVE}/token" ] && _api_token=$(cat "${DIR_REMNAWAVE}/token" 2>/dev/null)
+        [ -z "$_api_token" ] && [ -f "${DIR_SCRIPT}/token" ] && _api_token=$(cat "${DIR_SCRIPT}/token" 2>/dev/null)
         _xray_port=""
         if [ -n "$_api_token" ]; then
             _profiles_resp=$(make_api_request "GET" "127.0.0.1:3000/api/config-profiles" "$_api_token" 2>/dev/null)

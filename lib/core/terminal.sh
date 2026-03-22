@@ -36,6 +36,9 @@ cleanup_old_aliases() {
     # Удаляем старые команды dfc-remna-install / dfc-ri
     rm -f /usr/local/bin/dfc-remna-install 2>/dev/null || true
     rm -f /usr/local/bin/dfc-ri 2>/dev/null || true
+    # Удаляем старые команды remnawave / rw
+    rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+    rm -rf /usr/local/remnawave 2>/dev/null || true
     unalias ri 2>/dev/null || true
 }
 
@@ -46,8 +49,8 @@ cleanup_uninstalled() {
        [ ! -f "${DIR_NODE}docker-compose.yml" ] && \
        [ ! -f "/opt/remnasubpage/docker-compose.yml" ] && \
        ! grep -q 'container_name: remnanode' "${DIR_PANEL}docker-compose.yml" 2>/dev/null; then
-        rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
-        rm -rf "${DIR_REMNAWAVE}" 2>/dev/null || true
+        rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
+        rm -rf "${DIR_SCRIPT}" 2>/dev/null || true
     fi
 }
 
