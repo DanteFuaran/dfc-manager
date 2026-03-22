@@ -203,7 +203,6 @@ _mt_do_install() {
     echo
 
     _mt_check_docker || { _mt_press_enter; return; }
-    echo
 
     # _mt_erase_lines N — стираем N строк вверх (текущая уже пустая после \r\033[K)
     _mt_erase_lines() {
@@ -312,12 +311,24 @@ _mt_do_install() {
         echo
         echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e " ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        tput civis 2>/dev/null || true
+        while true; do
+            local _k=""
+            IFS= read -rsn1 _k
+            case "$_k" in
+                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+                "")      tput cnorm 2>/dev/null || true; return 0 ;;
+            esac
+        done
     else
         echo
         print_error "Контейнер не запустился. Логи:"
         docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+        _mt_press_enter
     fi
-    _mt_press_enter
 }
 
 # Показать конфигурацию и ссылку
@@ -542,6 +553,7 @@ _mt_do_uninstall() {
     done
     tput cnorm 2>/dev/null || true
     echo
+    echo
 
     (if [ -d "$_MT_DIR" ]; then
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
@@ -629,7 +641,7 @@ manage_mtproto() {
 
         local _action="${_actions[$_choice]:-sep}"
         case "$_action" in
-            install)       _mt_do_install ;;
+            install)       _mt_do_install || return ;;
             stats)         _mt_do_stats || return ;;
             config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
