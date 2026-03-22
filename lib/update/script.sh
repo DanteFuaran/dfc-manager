@@ -2,6 +2,141 @@
 # ОБНОВЛЕНИЕ И УДАЛЕНИЕ СКРИПТА
 # ═══════════════════════════════════════════════
 
+# ─── Удаление отдельных компонентов Remnawave ───────────────────────────────
+
+_delete_component_panel() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}   🗑️  Удаление панели Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${RED}⚠️  Все данные панели будут удалены!${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if ! confirm_action; then return; fi
+    echo
+    (
+        cd /opt/remnawave 2>/dev/null
+        docker compose down -v --rmi all >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Удаление панели Remnawave"
+    rm -rf /opt/remnawave
+    print_success "Панель Remnawave удалена"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || true
+}
+
+_delete_component_node() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}    🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${RED}⚠️  Все данные ноды будут удалены!${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if ! confirm_action; then return; fi
+    echo
+    (
+        cd /opt/remnanode 2>/dev/null
+        docker compose down -v --rmi all >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Удаление ноды Remnawave"
+    rm -rf /opt/remnanode
+    print_success "Нода Remnawave удалена"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || true
+}
+
+_delete_component_subpage() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}  🗑️  Удаление страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${RED}⚠️  Все данные страницы подписки будут удалены!${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if ! confirm_action; then return; fi
+    echo
+    (
+        cd /opt/remnasubpage 2>/dev/null
+        docker compose down -v --rmi all >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Удаление страницы подписки"
+    rm -rf /opt/remnasubpage
+    print_success "Страница подписки удалена"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || true
+}
+
+# ─── Меню удаления всех компонентов ─────────────────────────────────────────
+
+manage_delete_components() {
+    while true; do
+        tput civis 2>/dev/null || true
+        local -a del_items=() del_actions=()
+
+        is_panel_installed && {
+            del_items+=("🖥️   Remnawave (Панель)"); del_actions+=("panel")
+        }
+        [ -f "/opt/remnanode/docker-compose.yml" ] && {
+            del_items+=("🌐  Remnawave (Нода)"); del_actions+=("node")
+        }
+        [ -f "/opt/remnasubpage/docker-compose.yml" ] && {
+            del_items+=("📄  Remnawave (Страница подписки)"); del_actions+=("subpage")
+        }
+        [ -f "/opt/beszel/docker-compose.yml" ] && {
+            del_items+=("📊  Beszel (Мониторинг)"); del_actions+=("beszel")
+        }
+        [ -f "/opt/beszel-agent/docker-compose.yml" ] && {
+            del_items+=("📊  Beszel (Агент)"); del_actions+=("beszel_agent")
+        }
+        _mt_installed && {
+            del_items+=("📡  MTProto (Прокси)"); del_actions+=("mtproto")
+        }
+
+        # Ничего не осталось — удаляем скрипт автоматически
+        if [ ${#del_actions[@]} -eq 0 ]; then
+            clear
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${GREEN}   ✅  Все компоненты удалены${NC}"
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo
+            echo -e "${DARKGRAY}   Удаление скрипта с сервера...${NC}"
+            echo
+            sleep 1
+            rm -f /usr/local/bin/dfc-manager
+            rm -f /usr/local/bin/dfc
+            rm -rf "${DIR_SCRIPT}"
+            cleanup_old_aliases
+            exit 0
+        fi
+
+        del_items+=("──────────────────────────────────────"); del_actions+=("sep")
+        del_items+=("⬅️   Назад"); del_actions+=("back")
+
+        show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
+        local del_choice=$?
+        [[ $del_choice -eq 255 ]] && return
+        local del_action="${del_actions[$del_choice]:-sep}"
+
+        case "$del_action" in
+            panel)        _delete_component_panel ;;
+            node)         _delete_component_node ;;
+            subpage)      _delete_component_subpage ;;
+            beszel)       uninstall_beszel ;;
+            beszel_agent) uninstall_beszel_agent ;;
+            mtproto)      _mt_do_uninstall || true ;;
+            back)         return ;;
+            sep)          continue ;;
+        esac
+    done
+}
+
 install_script() {
     mkdir -p "${DIR_SCRIPT}"
 

@@ -18,6 +18,8 @@ main_menu() {
         items+=("🧪  Тестирование сервера");         actions+=("testing")
         items+=("⚙️   Оптимизация сервера");          actions+=("optimization")
         items+=("──────────────────────────────────────"); actions+=("sep")
+        items+=("🗑️   Удаление компонентов");          actions+=("delete_all")
+        items+=("──────────────────────────────────────"); actions+=("sep")
         items+=("❌  Выход");                         actions+=("exit")
 
         MENU_ESC_LABEL="Выход"
@@ -73,9 +75,6 @@ main_menu() {
                         rw_items+=("🎨  Сменить сайт-заглушку");    rw_actions+=("template")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("🔄  Обновить панель/ноду");     rw_actions+=("update_components")
-                        rw_items+=("🔄  Обновить скрипт"); rw_actions+=("update_script")
-                        rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
-                        rw_items+=("🗑️   Удаление компонентов");    rw_actions+=("remove")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     fi
                     rw_items+=("⬅️   Назад"); rw_actions+=("back")
@@ -95,6 +94,7 @@ main_menu() {
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 else
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
+                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
                                 inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
                                 inst_items+=("🌐  Нода");               inst_actions+=("node")
@@ -155,24 +155,6 @@ main_menu() {
                         access)            manage_panel_access ;;
                         template)          manage_random_template ;;
                         update_components) manage_update ;;
-                        update_script)     update_script ;;
-                        remove)
-                            local -a del_items=() del_actions=()
-                            if [ "$is_installed" = true ]; then
-                                del_items+=("💣  Удалить скрипт и все данные Remnawave"); del_actions+=("remove_all")
-                            fi
-                            del_items+=("🗑️   Удалить скрипт с сервера"); del_actions+=("remove_script")
-                            del_items+=("──────────────────────────────────────");        del_actions+=("sep")
-                            del_items+=("⬅️   Назад");                                      del_actions+=("back")
-
-                            show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
-                            local del_choice=$?
-                            local del_action="${del_actions[$del_choice]:-back}"
-                            case "$del_action" in
-                                remove_all)    remove_script_all ;;
-                                remove_script) remove_script ;;
-                                *) continue ;;
-                            esac ;;
                         back) break ;;
                         sep)  continue ;;
                         *)    continue ;;
@@ -183,6 +165,7 @@ main_menu() {
             extra)        manage_extra_settings ;;
             testing)      manage_server_testing ;;
             optimization) manage_server_optimization ;;
+            delete_all)   manage_delete_components ;;
             sep)          continue ;;
             exit)         cleanup_terminal; clear; cleanup_uninstalled; exit 0 ;;
             *)            continue ;;
