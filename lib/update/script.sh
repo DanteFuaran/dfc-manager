@@ -161,7 +161,7 @@ manage_delete_components() {
 
         del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         if [ ${#del_actions[@]} -gt 1 ]; then
-            del_items+=("🗑️  Удалить всё"); del_actions+=("delete_all")
+            del_items+=("🗑️   Удалить всё"); del_actions+=("delete_all")
             del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         fi
         del_items+=("⬅️   Назад"); del_actions+=("back")
