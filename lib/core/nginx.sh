@@ -275,6 +275,7 @@ _strip_nginx_from_compose() {
     [ -f "$compose_file" ] || return 0
     awk '
     /^  remnawave-nginx:/ { skip=1; next }
+    skip && /^[^ ]/ { skip=0 }
     skip && /^  [a-z]/ { skip=0 }
     !skip { print }
     ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
