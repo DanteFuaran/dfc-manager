@@ -62,6 +62,7 @@ install_beszel() {
     local BESZEL_DOMAIN
     prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
     echo
+    echo
 
     # ─── Сертификат ───
     local BESZEL_PORT="8090"
@@ -220,7 +221,6 @@ YAML
     show_spinner "Подготовка файлов"
 
     # ─── Запускаем Beszel ───
-    echo
     (
         cd "${DIR_BESZEL}" && docker compose up -d >/dev/null 2>&1
     ) &
@@ -249,13 +249,14 @@ uninstall_beszel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    echo -e "${YELLOW}⚠️  Beszel и все данные мониторинга будут удалены.${NC}"
+    echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then
         return
     fi
 
+    echo
     echo
     (
         cd "${DIR_BESZEL}" 2>/dev/null
@@ -280,6 +281,7 @@ uninstall_beszel() {
 
     rm -rf "${DIR_BESZEL}"
 
+    echo
     print_success "Beszel удалён"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
