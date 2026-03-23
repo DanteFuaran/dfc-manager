@@ -170,16 +170,10 @@ installation_node_local() {
     # Определяем домены сертификатов
     local panel_cert_domain sub_cert_domain
     panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
-    if [ -z "$panel_cert_domain" ]; then
-        panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
-    fi
     [ -z "$panel_cert_domain" ] && panel_cert_domain="$panel_domain"
 
     if [ "$has_local_sub" = true ]; then
         sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
-        if [ -z "$sub_cert_domain" ]; then
-            sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
-        fi
         [ -z "$sub_cert_domain" ] && sub_cert_domain="$sub_domain"
     fi
 
@@ -301,6 +295,9 @@ installation_node_local() {
     else
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
+
+    # Копируем сертификат ноды в /opt/nginx/ssl/
+    nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
     # ─── Остановка сервисов и обновление конфигов ───
     echo
@@ -634,6 +631,9 @@ installation_node_remote() {
         return
     fi
 
+    # Копируем сертификат ноды в /opt/nginx/ssl/
+    nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
+
     # Создаём директорию для selfsteal до запуска Docker (том монтируется в nginx)
     mkdir -p /var/www/html
 
@@ -850,6 +850,9 @@ installation_node_with_existing_subpage() {
         show_continue_prompt || true
         return
     fi
+
+    # Копируем сертификат ноды в /opt/nginx/ssl/
+    nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
     mkdir -p /var/www/html
     mkdir -p "${NODE_INSTALL_DIR}"

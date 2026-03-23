@@ -113,6 +113,18 @@ http {
 NGINX
 }
 
+# ─── Копирует сертификат из letsencrypt в /opt/nginx/ssl/{domain}/ ───
+# Использование: nginx_copy_cert "example.com"
+nginx_copy_cert() {
+    local domain="$1"
+    local src="/etc/letsencrypt/live/${domain}"
+    local dst="${DIR_NGINX}ssl/${domain}"
+    [ -f "${src}/fullchain.pem" ] || return 1
+    mkdir -p "$dst"
+    cp -fL "${src}/fullchain.pem" "${dst}/fullchain.pem"
+    cp -fL "${src}/privkey.pem"   "${dst}/privkey.pem"
+}
+
 # ─── Добавляет файл server-блока в conf.d ───
 # Использование: nginx_add_block "beszel" "$block_content"
 nginx_add_block() {

@@ -171,17 +171,20 @@ change_panel_domain() {
         return 1
     fi
 
+    # Копируем новый сертификат в /opt/nginx/ssl/
+    nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
+
     local old_cert_domain
-    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
+    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
 
     local boundary
     boundary=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
 
     if [ -n "$old_cert_domain" ] && [ "$old_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$boundary" ]; then
-            sed -i "1,${boundary}s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            sed -i "1,${boundary}s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         else
-            sed -i "s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            sed -i "s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
     sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
@@ -290,7 +293,11 @@ change_sub_domain() {
     fi
 
     local old_sub_cert_domain
-    old_sub_cert_domain=$(grep -A5 "server_name.*${current_sub_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
+    # Копируем новый сертификат в /opt/nginx/ssl/
+    nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
+
+    local old_sub_cert_domain
+    old_sub_cert_domain=$(grep -A5 "server_name.*${current_sub_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/nginx/ssl/\K[^/]+' | head -1)
 
     local start_line end_line
     start_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
@@ -298,9 +305,9 @@ change_sub_domain() {
 
     if [ -n "$old_sub_cert_domain" ] && [ "$old_sub_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$start_line" ] && [ -n "$end_line" ]; then
-            sed -i "${start_line},${end_line}s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            sed -i "${start_line},${end_line}s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         elif [ -n "$start_line" ]; then
-            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            sed -i "${start_line},\$s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
     sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
@@ -388,14 +395,18 @@ change_node_domain() {
     fi
 
     local old_node_cert_domain
-    old_node_cert_domain=$(grep -A5 "server_name.*${current_node_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
+    # Копируем новый сертификат в /opt/nginx/ssl/
+    nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
+
+    local old_node_cert_domain
+    old_node_cert_domain=$(grep -A5 "server_name.*${current_node_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/nginx/ssl/\K[^/]+' | head -1)
 
     local start_line
     start_line=$(grep -n "server_name" "${DIR_NGINX}nginx.conf" | grep -v '_' | sed -n '3p' | cut -d: -f1)
 
     if [ -n "$old_node_cert_domain" ] && [ "$old_node_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$start_line" ]; then
-            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_node_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            sed -i "${start_line},\$s|/etc/nginx/ssl/${old_node_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
     sed -i "s|server_name ${current_node_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"

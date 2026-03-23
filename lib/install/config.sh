@@ -734,9 +734,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -774,9 +774,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -815,9 +815,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -978,9 +978,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1011,9 +1011,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1096,9 +1096,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;
@@ -1433,9 +1433,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1764,9 +1764,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1818,9 +1818,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -2010,9 +2010,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -2100,9 +2100,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;
@@ -2181,9 +2181,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;

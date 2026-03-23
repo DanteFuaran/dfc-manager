@@ -50,17 +50,17 @@ manage_panel_access() {
             1)
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}          🔗  Показать cookie-ссылку${NC}"
+                echo -e "   ${GREEN}🔗  Cookie-ссылка для входа в панель${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 local COOKIE_NAME COOKIE_VALUE
                 if get_cookie_from_nginx; then
                     local pd
                     pd=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | head -1)
                     echo
-                    echo -e "${GREEN}🔗 Cookie-ссылка на панель:${NC}"
+                    echo -e "${GREEN}🔗 Cookie-ссылка для входа в панель:${NC}"
                     echo -e "${WHITE}https://${pd}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
-                    echo
                     if [ -n "$_current_port" ]; then
+                        echo
                         echo -e "${GREEN}🔗 Прямой доступ (порт ${_current_port}):${NC}"
                         echo -e "${WHITE}https://${pd}:${_current_port}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
                     fi
@@ -156,14 +156,14 @@ switch_panel_port() {
     panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
 
     local panel_cert
-    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
+    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
     # Определяем sub_domain (домен подписки → upstream json)
     local sub_domain sub_cert json_line
     json_line=$(grep -n 'proxy_pass http://json' "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
     if [ -n "$json_line" ]; then
         sub_domain=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
-        sub_cert=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | tail -1)
+        sub_cert=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
         [ -z "$sub_cert" ] && sub_cert="$sub_domain"
     fi
 
@@ -171,7 +171,7 @@ switch_panel_port() {
     local selfsteal_domain selfsteal_cert
     selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
     if [ -n "$selfsteal_domain" ]; then
-        selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
+        selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
         [ -z "$selfsteal_cert" ] && selfsteal_cert="$selfsteal_domain"
     fi
 
@@ -197,9 +197,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
@@ -265,9 +265,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/SUB_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/SUB_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/SUB_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/SUB_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
 
     location / {
         proxy_http_version 1.1;
@@ -306,9 +306,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/SELFSTEAL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -370,9 +370,9 @@ server {
     listen [::]:8443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
@@ -504,7 +504,7 @@ auto_enable_panel_access_8443() {
     fi
 
     local panel_cert
-    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
+    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
     if grep -q "# ─── 8443 Fallback" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         ufw allow 8443/tcp >/dev/null 2>&1
@@ -531,9 +531,9 @@ server {
     listen [::]:8443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT/privkey.pem";
-    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT/fullchain.pem";
+    ssl_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 

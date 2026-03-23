@@ -137,9 +137,10 @@ install_beszel() {
     # ─── SSL-пути для nginx ───
     local NGINX_SSL_CERT NGINX_SSL_KEY
     if [[ "$CERT_HOST_FULLCHAIN" == /etc/letsencrypt/* ]]; then
-        # Let's Encrypt — путь внутри контейнера совпадает с хостом
-        NGINX_SSL_CERT="$CERT_HOST_FULLCHAIN"
-        NGINX_SSL_KEY="$CERT_HOST_KEY"
+        # Let's Encrypt — копируем в /opt/nginx/ssl/
+        nginx_copy_cert "$CERT_DOMAIN"
+        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
     else
         # Самоподписанный — копируем в /opt/nginx/ssl/
         mkdir -p "${DIR_NGINX}ssl/${CERT_DOMAIN}"

@@ -96,8 +96,12 @@ main_menu() {
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
-                                inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
-                                inst_items+=("🌐  Нода");               inst_actions+=("node")
+                                if ! is_subpage_remote_installed; then
+                                    inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
+                                fi
+                                if ! is_node_installed; then
+                                    inst_items+=("🌐  Нода");               inst_actions+=("node")
+                                fi
                                 inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 inst_items+=("⬅️   Назад"); inst_actions+=("back")
 

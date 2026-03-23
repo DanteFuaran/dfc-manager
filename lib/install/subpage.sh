@@ -171,6 +171,9 @@ _installation_subpage_on_panel() {
         SUB_CERT_DOMAIN="$SUB_DOMAIN"
     fi
 
+    # Копируем сертификат подписки в /opt/nginx/ssl/
+    nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
+
     # Авторизация в панели
     local _gpt_rc
     get_panel_token; _gpt_rc=$?
@@ -397,6 +400,9 @@ _installation_subpage_on_node() {
     else
         SUB_CERT_DOMAIN="$SUB_DOMAIN"
     fi
+
+    # Копируем сертификат подписки в /opt/nginx/ssl/
+    nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
 
     # Извлекаем selfsteal домен и сертификат ноды
     local selfsteal_domain node_cert_domain
@@ -633,6 +639,9 @@ _installation_subpage_standalone() {
         return
     fi
 
+    # Копируем сертификат подписки в /opt/nginx/ssl/
+    nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
+
     # Генерация конфигов
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
@@ -691,7 +700,7 @@ _installation_subpage_standalone() {
         echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-        echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
+        echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
         echo
         echo -e "${YELLOW}⚠️  Не забудьте обновить SUB_PUBLIC_DOMAIN в настройках панели:${NC}"
         echo -e "${WHITE}   $SUB_DOMAIN${NC}"

@@ -134,6 +134,11 @@ installation_panel() {
         [ "$with_subpage" = true ] && SUB_CERT_DOMAIN="$SUB_DOMAIN"
     fi
 
+    # Копируем сертификаты в /opt/nginx/ssl/
+    ensure_nginx
+    nginx_copy_cert "$PANEL_CERT_DOMAIN" 2>/dev/null || true
+    [ "$with_subpage" = true ] && nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
+
     # Генерируем cookie для защиты панели
     local COOKIE_NAME COOKIE_VALUE
     COOKIE_NAME=$(generate_cookie_key)
@@ -271,7 +276,7 @@ installation_panel() {
         echo
     fi
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
+    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo

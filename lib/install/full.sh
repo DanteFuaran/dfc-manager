@@ -29,7 +29,7 @@ installation_full() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 Установка панели + Подписки + Ноды${NC}"
+    echo -e "${GREEN}📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -104,6 +104,7 @@ installation_full() {
         for domain in "${!domains_to_check[@]}"; do
             print_success "Сертификат для $domain уже существует"
         done
+        echo
     fi
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -131,6 +132,12 @@ installation_full() {
         SUB_CERT_DOMAIN="$SUB_DOMAIN"
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
+
+    # Копируем сертификаты в /opt/nginx/ssl/
+    ensure_nginx
+    nginx_copy_cert "$PANEL_CERT_DOMAIN" 2>/dev/null || true
+    nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
+    nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
     # Генерируем конфиги
 
@@ -160,7 +167,7 @@ installation_full() {
             "$COOKIE_NAME" "$COOKIE_VALUE"
         cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
-    show_spinner "Создание необходимых файлов" || true
+    show_spinner "Подготовка файлов" || true
 
     (
         setup_firewall
@@ -183,7 +190,7 @@ installation_full() {
     show_spinner "Установка сервисов" || true
 
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
+    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -324,10 +331,8 @@ installation_full() {
     clear
     tput civis 2>/dev/null
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "                   ${GREEN}🎉 УСТАНОВКА ЗАВЕРШЕНА!${NC}"
+    echo -e "                   ${GREEN}🎉 Установка завершена!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для входа в панель:${NC}"
     echo -e "${WHITE}https://${PANEL_DOMAIN}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
@@ -335,7 +340,7 @@ installation_full() {
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
+    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
@@ -375,7 +380,7 @@ installation_panel_with_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 Установка панели + Подписки + Ноды${NC}"
+    echo -e "${GREEN}📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -453,6 +458,7 @@ installation_panel_with_node() {
         for domain in "${!domains_to_check[@]}"; do
             print_success "Сертификат для $domain уже существует"
         done
+        echo
     fi
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -478,6 +484,11 @@ installation_panel_with_node() {
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
 
+    # Копируем сертификаты в /opt/nginx/ssl/
+    ensure_nginx
+    nginx_copy_cert "$PANEL_CERT_DOMAIN" 2>/dev/null || true
+    nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
+
     local COOKIE_NAME COOKIE_VALUE
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
@@ -500,7 +511,7 @@ installation_panel_with_node() {
             "$COOKIE_NAME" "$COOKIE_VALUE"
         cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
-    show_spinner "Создание необходимых файлов" || true
+    show_spinner "Подготовка файлов" || true
 
     (
         setup_firewall
@@ -520,7 +531,7 @@ installation_panel_with_node() {
     show_spinner "Установка сервисов" || true
 
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
+    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -642,7 +653,7 @@ installation_panel_with_node() {
     local api_token_display
     api_token_display=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "                   ${GREEN}🎉 УСТАНОВКА ЗАВЕРШЕНА!${NC}"
+    echo -e "                   ${GREEN}🎉 Установка завершена!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для входа в панель:${NC}"
@@ -659,7 +670,7 @@ installation_panel_with_node() {
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}remnawave${NC} или ${GREEN}rw${NC}"
+    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
