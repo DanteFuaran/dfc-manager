@@ -74,6 +74,9 @@ remove_node_from_panel() {
     
     generate_nginx_conf_panel "$panel_domain" "$sub_domain" "$panel_cert" "$sub_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
 
+    # Удаляем неиспользуемые сертификаты (нода удалена — её сертификат больше не нужен)
+    nginx_cleanup_unused_certs
+
     print_action "Закрытие порта 8443..."
     if ufw status 2>/dev/null | grep -q "8443.*ALLOW"; then
         ufw delete allow 8443/tcp >/dev/null 2>&1

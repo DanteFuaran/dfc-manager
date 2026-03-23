@@ -21,6 +21,11 @@ _delete_component_panel() {
     ) &
     show_spinner "Удаление панели Remnawave"
     rm -rf /opt/remnawave
+
+    # Обновляем nginx: минимальный конфиг или удаляем
+    nginx_ensure_conf_for_remaining
+    nginx_cleanup_unused_certs
+
     print_success "Панель Remnawave удалена"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -38,12 +43,30 @@ _delete_component_node() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then return; fi
     echo
+
+    # Извлекаем инфо о sub-page до удаления (для перегенерации nginx.conf)
+    local _sub_domain _sub_cert
+    if [ -f "/opt/remnasubpage/docker-compose.yml" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
+        _sub_domain=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/server_name/{s/.*server_name\s\+//;s/;.*//;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+        _sub_cert=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/ssl_certificate /{s|.*/ssl/||;s|/.*||;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+    fi
+
     (
         cd /opt/remnanode 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление ноды Remnawave"
     rm -rf /opt/remnanode
+
+    # Обновляем nginx: перегенерируем для оставшихся компонентов
+    if [ -f "/opt/remnasubpage/docker-compose.yml" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
+        generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "/opt/remnasubpage"
+        nginx_reload
+    else
+        nginx_ensure_conf_for_remaining
+    fi
+    nginx_cleanup_unused_certs
+
     print_success "Нода Remnawave удалена"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -61,12 +84,30 @@ _delete_component_subpage() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then return; fi
     echo
+
+    # Извлекаем инфо о ноде до удаления (для перегенерации nginx.conf)
+    local _node_domain _node_cert
+    if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
+        _node_domain=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /server_name [^_]/{gsub(/.*server_name[[:space:]]+|;.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
+        _node_cert=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /ssl_certificate /{gsub(/.*\/ssl\/|\/fullchain.*|\/privkey.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
+    fi
+
     (
         cd /opt/remnasubpage 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление страницы подписки"
     rm -rf /opt/remnasubpage
+
+    # Обновляем nginx: перегенерируем для оставшихся компонентов
+    if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
+        generate_nginx_conf_node "$_node_domain" "$_node_cert"
+        nginx_reload
+    else
+        nginx_ensure_conf_for_remaining
+    fi
+    nginx_cleanup_unused_certs
+
     print_success "Страница подписки удалена"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"

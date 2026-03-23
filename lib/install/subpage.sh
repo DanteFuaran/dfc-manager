@@ -305,14 +305,14 @@ _installation_subpage_on_node() {
     # Сохраняем бэкап конфигов ноды
     local backup_compose="" backup_nginx=""
     backup_compose=$(cat "${NODE_DIR}/docker-compose.yml" 2>/dev/null)
-    backup_nginx=$(cat "${NODE_DIR}/nginx.conf" 2>/dev/null)
+    backup_nginx=$(cat "${DIR_NGINX}nginx.conf" 2>/dev/null)
 
     _restore_node_config() {
         if [ -n "$backup_compose" ]; then
             echo "$backup_compose" > "${NODE_DIR}/docker-compose.yml"
         fi
         if [ -n "$backup_nginx" ]; then
-            echo "$backup_nginx" > "${NODE_DIR}/nginx.conf"
+            echo "$backup_nginx" > "${DIR_NGINX}nginx.conf"
         fi
         (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
         show_spinner "Восстановление конфигурации ноды"
@@ -352,7 +352,7 @@ _installation_subpage_on_node() {
     # Определяем метод сертификатов
     local CERT_METHOD
     local LETSENCRYPT_EMAIL=""
-    CERT_METHOD=$(detect_cert_method "$(grep -oP 'server_name\s+\K[^;]+' "${NODE_DIR}/nginx.conf" 2>/dev/null | head -1)" 2>/dev/null || echo "2")
+    CERT_METHOD=$(detect_cert_method "$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)" 2>/dev/null || echo "2")
 
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
@@ -406,8 +406,8 @@ _installation_subpage_on_node() {
 
     # Извлекаем selfsteal домен и сертификат ноды
     local selfsteal_domain node_cert_domain
-    selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${NODE_DIR}/nginx.conf" | head -1)
-    node_cert_domain=$(grep -oP '/ssl/\K[^/]+' "${NODE_DIR}/nginx.conf" | head -1)
+    selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
+    node_cert_domain=$(grep -oP '/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
     [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
 
     # Остановка сервисов ноды

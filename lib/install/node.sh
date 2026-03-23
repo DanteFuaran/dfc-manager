@@ -757,13 +757,13 @@ installation_node_with_existing_subpage() {
 
     PANEL_URL=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${SUBPAGE_DIR}/docker-compose.yml" 2>/dev/null | head -1)
     API_TOKEN=$(grep -oP 'REMNAWAVE_API_TOKEN=\K\S+' "${SUBPAGE_DIR}/docker-compose.yml" 2>/dev/null | head -1)
-    SUB_DOMAIN=$(grep -oP 'server_name\s+\K[^;]+' "${SUBPAGE_DIR}/nginx.conf" 2>/dev/null | head -1)
-    SUB_CERT_DOMAIN=$(grep -oP '/ssl/\K[^/]+' "${SUBPAGE_DIR}/nginx.conf" 2>/dev/null | head -1)
+    SUB_DOMAIN=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '_' | head -1)
+    SUB_CERT_DOMAIN=$(grep -oP '/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
     [ -z "$SUB_CERT_DOMAIN" ] && SUB_CERT_DOMAIN="$SUB_DOMAIN"
 
     if [ -z "$PANEL_URL" ] || [ -z "$API_TOKEN" ] || [ -z "$SUB_DOMAIN" ]; then
         print_error "Не удалось извлечь данные из существующей установки страницы подписки."
-        print_error "Проверьте ${SUBPAGE_DIR}/docker-compose.yml и ${SUBPAGE_DIR}/nginx.conf"
+        print_error "Проверьте ${SUBPAGE_DIR}/docker-compose.yml и ${DIR_NGINX}nginx.conf"
         show_continue_prompt || return 1
         return
     fi

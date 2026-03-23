@@ -226,6 +226,8 @@ change_panel_domain() {
         show_spinner "Обновление cookie доступа"
     fi
 
+    nginx_cleanup_unused_certs
+
     echo
     print_success "Домен панели изменён на ${new_domain}"
 
@@ -329,6 +331,8 @@ change_sub_domain() {
     ) &
     show_spinner "Перезапуск сервисов"
 
+    nginx_cleanup_unused_certs
+
     echo
     print_success "Домен страницы подписки изменён на ${new_domain}"
     echo
@@ -427,6 +431,8 @@ change_node_domain() {
         docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Перезапуск сервисов"
+
+    nginx_cleanup_unused_certs
 
     echo
     print_success "Домен ноды изменён на ${new_domain}"

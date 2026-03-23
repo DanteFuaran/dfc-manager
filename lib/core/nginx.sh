@@ -146,6 +146,8 @@ nginx_has_users() {
     if is_panel_installed || is_node_installed; then
         return 0
     fi
+    # Standalone страница подписки
+    [ -f "/opt/remnasubpage/docker-compose.yml" ] && return 0
     # Standalone-компоненты через conf.d
     local f
     for f in "${DIR_NGINX}conf.d/"*.conf; do
@@ -190,7 +192,7 @@ _strip_nginx_from_compose() {
 # Вызывается после удаления компонента Remnawave.
 # Если остались только conf.d-блоки — заменяет nginx.conf на минимальный.
 nginx_ensure_conf_for_remaining() {
-    if ! is_panel_installed && ! is_node_installed; then
+    if ! is_panel_installed && ! is_node_installed && ! [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
         # Remnawave удалён, но возможно остались conf.d-блоки
         local f has_blocks=false
         for f in "${DIR_NGINX}conf.d/"*.conf; do
@@ -203,4 +205,25 @@ nginx_ensure_conf_for_remaining() {
             nginx_teardown
         fi
     fi
+}
+
+# ─── Удаляет сертификаты из /opt/nginx/ssl/ которые больше не используются ───
+# Проверяет ссылки в nginx.conf и conf.d/ — если домен не упоминается, удаляет его.
+nginx_cleanup_unused_certs() {
+    [ -d "${DIR_NGINX}ssl" ] || return 0
+    local d dn
+    for d in "${DIR_NGINX}ssl/"*/; do
+        [ -d "$d" ] || continue
+        dn=$(basename "$d")
+        # Все ещё используется в nginx.conf?
+        if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q "/ssl/${dn}/" "${DIR_NGINX}nginx.conf"; then
+            continue
+        fi
+        # Используется в conf.d/?
+        if grep -rq "/ssl/${dn}/" "${DIR_NGINX}conf.d/" 2>/dev/null; then
+            continue
+        fi
+        # Не используется — удаляем из ssl/ (letsencrypt остаётся)
+        rm -rf "$d"
+    done
 }

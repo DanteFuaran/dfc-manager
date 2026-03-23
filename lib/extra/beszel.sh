@@ -264,6 +264,9 @@ uninstall_beszel() {
     # Удаляем conf.d блок из nginx
     nginx_remove_block "beszel"
 
+    # Удаляем неиспользуемые сертификаты из /opt/nginx/ssl/
+    nginx_cleanup_unused_certs
+
     # Перезапускаем или удаляем nginx
     if nginx_has_users; then
         (nginx_reload) &
