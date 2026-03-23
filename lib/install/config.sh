@@ -1276,14 +1276,14 @@ COMPOSE_NETWORK_NEW
 
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
 
-    ensure_nginx
-    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
 volumes:
   remnawave-db-data:
     driver: local
     external: false
     name: remnawave-db-data
 COMPOSE_VOLUMES
+
+    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
 }
 
 # ─── Nginx: Только Панель (без страницы подписки) ───

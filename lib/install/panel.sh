@@ -158,7 +158,7 @@ installation_panel() {
         fi
         cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
-    show_spinner "Создание файлов" || true
+    show_spinner "Подготовка файлов" || true
 
     (setup_firewall) &
     show_spinner "Настройка файрвола" || true
@@ -170,11 +170,9 @@ installation_panel() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
+        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 || true
     ) &
     show_spinner "Запуск сервисов" || true
-
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -182,6 +180,7 @@ installation_panel() {
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
         print_error "API не отвечает"
         echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || true
         return
     fi

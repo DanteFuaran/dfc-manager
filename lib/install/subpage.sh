@@ -662,7 +662,7 @@ _installation_subpage_standalone() {
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
         cp -f "${DIR_SCRIPT}version" "${SUBPAGE_DIR}/version" 2>/dev/null || true
     ) &
-    show_spinner "Создание файлов" || true
+    show_spinner "Подготовка файлов" || true
 
     (
         ufw allow 443/tcp >/dev/null 2>&1 || true
