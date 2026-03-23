@@ -25,16 +25,16 @@ show_spinner() {
     local i=0 msg="$1" done_msg="${2:-$1}"
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
+        printf "\r${GREEN}%s${NC}  %b" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r\033[K${GREEN}\u2705${NC} %s\n" "$done_msg"
+        printf "\r\033[K${GREEN}\u2705${NC} %b\n" "$done_msg"
     else
-        printf "\r\033[K${RED}\u2716${NC} %s\n" "$done_msg"
+        printf "\r\033[K${RED}\u2716${NC} %b\n" "$done_msg"
     fi
     tput cnorm 2>/dev/null || true
     return $exit_code
