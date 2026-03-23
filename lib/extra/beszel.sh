@@ -845,12 +845,13 @@ install_beszel_agent() {
     echo
     echo
 
-    # ─── Шаг 1: Установка пакетов (ufw, docker) ───
+    # ─── Шаг 1: Обновление системы и установка пакетов ───
     (
-        if ! command -v ufw >/dev/null 2>&1; then
-            apt-get update -qq >/dev/null 2>&1
-            apt-get install -y -qq ufw >/dev/null 2>&1
-        fi
+        export DEBIAN_FRONTEND=noninteractive
+        local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+        apt-get update -qq >/dev/null 2>&1
+        apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
+        apt-get install -y -qq $DPKG_OPTS ca-certificates curl ufw wget >/dev/null 2>&1
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
             curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
             sh /tmp/get-docker.sh >/dev/null 2>&1
