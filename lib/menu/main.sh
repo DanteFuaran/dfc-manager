@@ -3,6 +3,11 @@
 # ═══════════════════════════════════════════════
 
 main_menu() {
+    # Если stdin не является TTY — выходим без бесконечного цикла
+    if ! [ -t 0 ]; then
+        exit 0
+    fi
+
     alias dfc="/usr/local/bin/dfc-manager" 2>/dev/null || true
 
     while true; do

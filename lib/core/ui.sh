@@ -120,6 +120,11 @@ show_arrow_menu() {
     local num_options=${#options[@]}
     local selected=0
 
+    # Если stdin не является TTY — не пытаемся читать, возвращаем 255
+    if ! [ -t 0 ]; then
+        return 255
+    fi
+
     # Сохраняем настройки терминала
     local original_stty=""
     original_stty=$(stty -g 2>/dev/null || echo "")
