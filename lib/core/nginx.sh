@@ -198,12 +198,36 @@ nginx_remove_server_block() {
 
 # ─── Восстанавливает внешние server-блоки в nginx.conf из памяти ───
 # Вызывается после каждой перегенерации nginx.conf.
+# Адаптирует listen-директивы под текущий конфиг (unix socket vs port 443).
 nginx_restore_server_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
-    local name
+    local name content uses_socket=false
+    if grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        uses_socket=true
+    fi
     for name in "${!_NGINX_EXTERNAL_BLOCKS[@]}"; do
         grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
-        _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "${_NGINX_EXTERNAL_BLOCKS[$name]}"
+        content="${_NGINX_EXTERNAL_BLOCKS[$name]}"
+        if $uses_socket; then
+            # Заменяем listen 443 → unix socket
+            content=$(printf '%s\n' "$content" | sed \
+                -e '/listen \[::\]:443/d' \
+                -e 's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+            # Добавляем proxy_protocol headers если отсутствуют
+            if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
+                content=$(printf '%s\n' "$content" | sed '/http2 on;/a\
+    real_ip_header proxy_protocol;\
+    set_real_ip_from unix:;')
+            fi
+        else
+            # Заменяем unix socket → listen 443
+            content=$(printf '%s\n' "$content" | sed \
+                -e 's|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|listen 443 ssl;\n    listen [::]:443 ssl;|' \
+                -e '/real_ip_header proxy_protocol;/d' \
+                -e '/set_real_ip_from unix:;/d')
+        fi
+        _NGINX_EXTERNAL_BLOCKS["$name"]="$content"
+        _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "$content"
     done
 }
 

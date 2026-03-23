@@ -187,18 +187,16 @@ installation_full() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
+        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 || true
     ) &
     show_spinner "Установка сервисов" || true
-
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
     local node_dir="${DIR_NODE}"
     local sub_dir="${DIR_SUB}"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
+    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 60; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         echo
         show_continue_prompt || true
@@ -309,15 +307,15 @@ installation_full() {
 
     # 10. Шаблон selfsteal
     randomhtml
-    echo
 
     # 11. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
+    echo
     (
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
-    show_spinner "Запуск сервисов" || true
+    show_spinner "Запуск панели" || true
 
     (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск ноды" || true
@@ -325,8 +323,9 @@ installation_full() {
     (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск страницы подписки" || true
 
+    echo
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск nginx" || true
+    show_spinner "Запуск сервисов" || true
 
     # 12. Сброс суперадмина — при первом входе пользователь задаст свои данные
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
@@ -537,17 +536,15 @@ installation_panel_with_node() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
+        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 || true
     ) &
     show_spinner "Установка сервисов" || true
-
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
     local node_dir="${DIR_NODE}"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
+    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 60; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         echo
         show_continue_prompt || true
@@ -641,20 +638,21 @@ installation_panel_with_node() {
     print_success "Обновление конфигураций"
 
     randomhtml
-    echo
 
+    echo
     (
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
-    show_spinner "Запуск сервисов" || true
+    show_spinner "Запуск панели" || true
 
     (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск ноды" || true
 
+    echo
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск nginx" || true
+    show_spinner "Запуск сервисов" || true
 
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 
