@@ -46,7 +46,7 @@ manage_beszel() {
 install_beszel() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       📊 УСТАНОВКА BESZEL${NC}"
+    echo -e "${GREEN}       📊 Установка Beszel${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
