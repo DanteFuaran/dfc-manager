@@ -819,7 +819,6 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -971,7 +970,6 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -1108,7 +1106,6 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -1401,7 +1398,6 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -1785,7 +1781,6 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -1941,7 +1936,6 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
@@ -2119,7 +2113,6 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
-    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
     nginx_restore_server_blocks
