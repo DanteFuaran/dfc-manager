@@ -837,23 +837,34 @@ install_beszel_agent() {
         echo; show_continue_prompt || return 1; return 1
     fi
 
-    # ─── Устанавливаем Docker, если не установлен ───
-    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-        (
+    # ─── Нормализуем URL (добавляем https:// если не указан протокол) ───
+    if [[ "$BESZEL_HUB_URL" != http://* ]] && [[ "$BESZEL_HUB_URL" != https://* ]]; then
+        BESZEL_HUB_URL="https://${BESZEL_HUB_URL}"
+    fi
+
+    echo
+    echo
+
+    # ─── Шаг 1: Установка пакетов (ufw, docker) ───
+    (
+        if ! command -v ufw >/dev/null 2>&1; then
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq ufw >/dev/null 2>&1
+        fi
+        if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
             curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
             sh /tmp/get-docker.sh >/dev/null 2>&1
             rm -f /tmp/get-docker.sh
             systemctl start docker >/dev/null 2>&1 || true
             systemctl enable docker >/dev/null 2>&1 || true
-        ) &
-        show_spinner "Установка Docker"
-    fi
+        fi
+    ) &
+    show_spinner "Обновление пакетов"
 
-    # ─── Создаём файлы и запускаем агент ───
+    # ─── Открываем порт в UFW ───
     ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
 
-    echo
-    echo
+    # ─── Шаг 2: Создаём файлы ───
     (
         mkdir -p "${DIR_BESZEL_AGENT}"
         cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
