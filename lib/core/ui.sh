@@ -26,7 +26,7 @@ show_spinner_prepare() {
     local i=0 msg="$1"
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r${BLUE}%s${NC}  %s" "${spin[$i]}" "$msg"
+        printf "\r${BLUE}%s${NC}  ${BLUE}%s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
