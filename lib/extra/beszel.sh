@@ -46,44 +46,96 @@ _beszel_wait_api() {
     return 1
 }
 
+# Восстанавливает first-run состояние Beszel после авто-настройки агента.
+# Удаляет временного пользователя и возвращает суперадмина _@b.b.
+# Аргументы: <hub_url> <email> <password>
+_beszel_restore_firstrun() {
+    local HUB_URL="$1" EMAIL="$2" PASS="$3"
+    _BZ_HUB="$HUB_URL" _BZ_EMAIL="$EMAIL" _BZ_PASS="$PASS" \
+    python3 - <<'PYEOF' 2>/dev/null
+import urllib.request, urllib.parse, urllib.error, json, os, secrets
+hub   = os.environ['_BZ_HUB']
+email = os.environ['_BZ_EMAIL']
+pw    = os.environ['_BZ_PASS']
+
+def api(method, path, body=None, token=None):
+    req = urllib.request.Request(hub + path, method=method)
+    req.add_header('Content-Type', 'application/json')
+    if token:
+        req.add_header('Authorization', token)
+    data = json.dumps(body).encode() if body else None
+    try:
+        with urllib.request.urlopen(req, data=data, timeout=10) as r:
+            return json.loads(r.read().decode() or '{}')
+    except Exception:
+        return {}
+
+# Авторизуемся как суперпользователь
+su = api('POST', '/api/collections/_superusers/auth-with-password',
+         {'identity': email, 'password': pw})
+su_token = su.get('token', '')
+if not su_token:
+    raise SystemExit(1)
+
+# Восстанавливаем временного суперадмина _@b.b для first-run UI
+tmp_pw = secrets.token_urlsafe(24)
+api('POST', '/api/collections/_superusers/records',
+    {'email': '_@b.b', 'password': tmp_pw, 'passwordConfirm': tmp_pw}, su_token)
+
+# Удаляем временного обычного пользователя
+filt = urllib.parse.urlencode({'filter': f"email='{email}'", 'perPage': '1'})
+users = api('GET', f'/api/collections/users/records?{filt}', token=su_token)
+for u in users.get('items', []):
+    api('DELETE', f'/api/collections/users/records/{u["id"]}', token=su_token)
+
+# Удаляем временного суперпользователя (последним — инвалидирует токен)
+sus = api('GET', f'/api/collections/_superusers/records?{filt}', token=su_token)
+for s in sus.get('items', []):
+    api('DELETE', f'/api/collections/_superusers/records/{s["id"]}', token=su_token)
+PYEOF
+}
+
 # Авто-установка агента на локальной машине после запуска хаба.
-# Аргументы: <admin_email> <admin_password>
 _beszel_auto_install_agent() {
-    local ADMIN_EMAIL="$1" ADMIN_PASSWORD="$2"
     local AGENT_PORT="45876"
     local HUB_URL="http://127.0.0.1:8090"
 
-    # 1. Получаем публичный ключ из приватного ключа
+    # 1. Получаем публичный ключ из приватного ключа в volume
     local KEY_PATH
     KEY_PATH=$(docker volume inspect beszel_beszel-data --format '{{.Mountpoint}}' 2>/dev/null)/id_ed25519
     local BESZEL_KEY
     BESZEL_KEY=$(ssh-keygen -y -f "$KEY_PATH" 2>/dev/null)
-    if [ -z "$BESZEL_KEY" ]; then
-        return 1
-    fi
+    [ -z "$BESZEL_KEY" ] && return 1
 
-    # 2. Авторизуемся — формируем JSON безопасно через python
-    local AUTH_BODY
-    AUTH_BODY=$(_EMAIL="$ADMIN_EMAIL" _PASS="$ADMIN_PASSWORD" \
-                python3 -c "import json,os; print(json.dumps({'identity':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
-    local AUTH_RESP
+    # 2. Генерируем временные учётные данные
+    local TEMP_EMAIL TEMP_PASS
+    TEMP_EMAIL="setup@beszel.local"
+    TEMP_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
+
+    # 3. Создаём первого пользователя через first-run API
+    local CREATE_BODY
+    CREATE_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
+        python3 -c "import json,os; print(json.dumps({'email':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
+    _beszel_http POST "${HUB_URL}/api/beszel/create-user" "$CREATE_BODY" >/dev/null 2>&1
+
+    # 4. Авторизуемся как пользователь
+    local AUTH_BODY AUTH_RESP AUTH_TOKEN
+    AUTH_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
+        python3 -c "import json,os; print(json.dumps({'identity':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
     AUTH_RESP=$(_beszel_http POST "${HUB_URL}/api/collections/users/auth-with-password" "$AUTH_BODY")
-    local AUTH_TOKEN
     AUTH_TOKEN=$(echo "$AUTH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
-    if [ -z "$AUTH_TOKEN" ]; then
-        return 1
-    fi
+    [ -z "$AUTH_TOKEN" ] && return 1
 
-    # 3. Создаём universal token (постоянный)
-    local TOKEN_RESP
+    # 5. Создаём постоянный universal token
+    local TOKEN_RESP UNIVERSAL_TOKEN
     TOKEN_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/universal-token?enable=1&permanent=1" "" "$AUTH_TOKEN")
-    local UNIVERSAL_TOKEN
     UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
-    if [ -z "$UNIVERSAL_TOKEN" ]; then
-        return 1
-    fi
+    [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
-    # 4. Поднимаем агент
+    # 6. Восстанавливаем first-run состояние — удаляем временного пользователя
+    _beszel_restore_firstrun "$HUB_URL" "$TEMP_EMAIL" "$TEMP_PASS" || true
+
+    # 7. Поднимаем агент
     ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
@@ -135,6 +187,8 @@ manage_beszel() {
 
     if ! is_beszel_agent_installed; then
         items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
+    else
+        items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
     fi
 
     items+=("──────────────────────────────────────"); actions+=("sep")
@@ -145,9 +199,10 @@ manage_beszel() {
     local action="${actions[$choice]:-back}"
 
     case "$action" in
-        install_hub)   install_beszel ;;
-        change_domain) change_domain_beszel ;;
-        install_agent) install_beszel_agent ;;
+        install_hub)       install_beszel ;;
+        change_domain)     change_domain_beszel ;;
+        install_agent)     install_beszel_agent ;;
+        change_agent_hub)  change_agent_hub_url ;;
         *) return 0 ;;
     esac
 }
@@ -304,12 +359,6 @@ ${REAL_IP_BLOCK}
 NGINX
 )
 
-    # ─── Генерируем учётные данные для первого пользователя ───
-    local BESZEL_ADMIN_EMAIL BESZEL_ADMIN_PASS
-    BESZEL_ADMIN_EMAIL="admin@beszel.local"
-    BESZEL_ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || \
-                        python3 -c "import secrets,string; print(secrets.token_urlsafe(18))")
-
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
         mkdir -p "${DIR_BESZEL}"
@@ -321,9 +370,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8090:8090"
-    environment:
-      USER_EMAIL: "${BESZEL_ADMIN_EMAIL}"
-      USER_PASSWORD: "${BESZEL_ADMIN_PASS}"
     volumes:
       - beszel-data:/beszel_data
       - beszel-socket:/beszel_socket
@@ -354,7 +400,7 @@ YAML
 
     # ─── Авто-установка агента на этом же сервере ───
     (
-        _beszel_wait_api && _beszel_auto_install_agent "$BESZEL_ADMIN_EMAIL" "$BESZEL_ADMIN_PASS"
+        _beszel_wait_api && _beszel_auto_install_agent
     ) &
     show_spinner "Подключение агента мониторинга"
 
@@ -370,9 +416,7 @@ YAML
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
     echo
-    echo -e "${YELLOW}👤 Данные для входа:${NC}"
-    echo -e "${WHITE}Email:    ${BESZEL_ADMIN_EMAIL}${NC}"
-    echo -e "${WHITE}Пароль:   ${BESZEL_ADMIN_PASS}${NC}"
+    echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
@@ -523,11 +567,66 @@ NGINX
     (nginx_reload) &
     show_spinner "Перезапуск Nginx"
 
+    # Если агент использует публичный домен (не localhost) — обновляем его HUB_URL
+    if is_beszel_agent_installed; then
+        local _AGENT_HUB
+        _AGENT_HUB=$(grep 'HUB_URL:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
+        if [[ "$_AGENT_HUB" != "http://127.0.0.1"* ]] && [ -n "$_AGENT_HUB" ]; then
+            (
+                sed -i "s|HUB_URL: \"[^\"]*\"|HUB_URL: \"https://${NEW_DOMAIN}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
+                cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
+            ) &
+            show_spinner "Обновление агента"
+        fi
+    fi
     echo
     print_success "Домен Beszel изменён"
     echo
     echo -e "${YELLOW}🔗 Новый адрес панели:${NC}"
     echo -e "${WHITE}https://${NEW_DOMAIN}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 0
+}
+
+# ─── Изменение адреса хаба для локального агента ───
+change_agent_hub_url() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    🔗  Изменить адрес хаба агента${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    if ! is_beszel_agent_installed; then
+        print_error "Агент Beszel не установлен"
+        return 1
+    fi
+
+    local CURRENT_HUB_URL
+    CURRENT_HUB_URL=$(grep 'HUB_URL:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
+
+    echo -e "${DARKGRAY}Текущий адрес хаба: ${WHITE}${CURRENT_HUB_URL:-не указан}${NC}"
+    echo
+
+    local NEW_HUB_URL
+    reading_inline "Новый адрес хаба (например https://monitor.example.com):" NEW_HUB_URL
+    [[ $? -eq 2 ]] && return 1
+    if [ -z "$NEW_HUB_URL" ]; then
+        print_error "Адрес не может быть пустым"
+        echo; show_continue_prompt || return 1; return 1
+    fi
+
+    (
+        sed -i "s|HUB_URL: \"[^\"]*\"|HUB_URL: \"${NEW_HUB_URL}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
+        cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
+    ) &
+    show_spinner "Обновление адреса хаба"
+
+    echo
+    print_success "Адрес хаба обновлён"
+    echo
+    echo -e "${YELLOW}🔗 Новый адрес хаба:${NC}"
+    echo -e "${WHITE}${NEW_HUB_URL}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
