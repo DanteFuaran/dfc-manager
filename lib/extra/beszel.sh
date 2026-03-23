@@ -19,11 +19,11 @@ manage_beszel() {
 
     if ! is_beszel_installed; then
         items+=("📊  Установить панель Beszel"); actions+=("install_hub")
+    else
+        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
     fi
 
-    if is_beszel_agent_installed; then
-        items+=("🗑️   Удалить агент Beszel");   actions+=("uninstall_agent")
-    else
+    if ! is_beszel_agent_installed; then
         items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
     fi
 
@@ -35,10 +35,9 @@ manage_beszel() {
     local action="${actions[$choice]:-back}"
 
     case "$action" in
-        install_hub)     install_beszel ;;
-        uninstall_hub)   uninstall_beszel ;;
-        install_agent)   install_beszel_agent ;;
-        uninstall_agent) uninstall_beszel_agent ;;
+        install_hub)   install_beszel ;;
+        change_domain) change_domain_beszel ;;
+        install_agent) install_beszel_agent ;;
         *) return 0 ;;
     esac
 }
@@ -248,6 +247,161 @@ YAML
     show_continue_prompt || return 0
 }
 
+# ─── Изменение домена Beszel ───
+change_domain_beszel() {
+    if ! is_beszel_installed; then
+        print_error "Beszel не установлен"
+        return 1
+    fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}     🌐  Изменить домен Beszel${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    local NEW_DOMAIN
+    prompt_domain_with_retry "Новый домен для Beszel:" NEW_DOMAIN true || return 1
+    echo
+    echo
+
+    # Получаем сертификат
+    local CERT_DOMAIN CERT_HOST_FULLCHAIN CERT_HOST_KEY
+    local base_domain
+    base_domain=$(extract_domain "$NEW_DOMAIN")
+
+    if [ -f "/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem" ]; then
+        print_success "Сертификат для ${NEW_DOMAIN} уже существует"
+        echo
+        CERT_DOMAIN="$NEW_DOMAIN"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
+    elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
+        print_success "Сертификат для ${base_domain} уже существует"
+        echo
+        CERT_DOMAIN="$base_domain"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+    else
+        show_arrow_menu "🔒  SSL сертификат" \
+            "🌐  ACME (Let's Encrypt HTTP-01)" \
+            "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🔐  Самоподписанный сертификат" \
+            "──────────────────────────────────────" \
+            "❌  Отмена"
+        local cert_choice=$?
+        [[ $cert_choice -eq 255 ]] && return 0
+
+        case $cert_choice in
+            0)
+                reading "Email для Let's Encrypt:" BESZEL_EMAIL
+                if [ -z "$BESZEL_EMAIL" ]; then print_error "Email не может быть пустым"; return 1; fi
+                echo
+                get_cert_acme "$NEW_DOMAIN" "$BESZEL_EMAIL" || return 1
+                CERT_DOMAIN="$NEW_DOMAIN"
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
+                ;;
+            1)
+                reading "Email для Let's Encrypt:" BESZEL_EMAIL
+                if [ -z "$BESZEL_EMAIL" ]; then print_error "Email не может быть пустым"; return 1; fi
+                if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
+                    setup_cloudflare_credentials || return 1
+                fi
+                echo
+                get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL" || return 1
+                CERT_DOMAIN="$base_domain"
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+                ;;
+            2)
+                local SELF_SIGNED_DIR
+                SELF_SIGNED_DIR=$(mktemp -d)
+                (
+                    openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+                        -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
+                        -out "${SELF_SIGNED_DIR}/fullchain.pem" \
+                        -subj "/CN=${NEW_DOMAIN}" >/dev/null 2>&1
+                ) &
+                show_spinner "Генерация самоподписанного сертификата"
+                CERT_DOMAIN="$NEW_DOMAIN"
+                CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
+                CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
+                ;;
+            *) return 0 ;;
+        esac
+    fi
+
+    local NGINX_SSL_CERT NGINX_SSL_KEY
+    if [[ "$CERT_HOST_FULLCHAIN" == /etc/letsencrypt/* ]]; then
+        nginx_copy_cert "$CERT_DOMAIN"
+        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+    else
+        mkdir -p "${DIR_NGINX}ssl/${CERT_DOMAIN}"
+        cp -f "$CERT_HOST_FULLCHAIN" "${DIR_NGINX}ssl/${CERT_DOMAIN}/fullchain.pem"
+        cp -f "$CERT_HOST_KEY" "${DIR_NGINX}ssl/${CERT_DOMAIN}/privkey.pem"
+        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+        rm -rf "${SELF_SIGNED_DIR:-}" 2>/dev/null || true
+    fi
+
+    local LISTEN_BLOCK REAL_IP_BLOCK
+    if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
+        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        REAL_IP_BLOCK=$'\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;'
+    else
+        LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+        REAL_IP_BLOCK=""
+    fi
+
+    local BESZEL_BLOCK
+    BESZEL_BLOCK=$(cat <<NGINX
+server {
+    server_name ${NEW_DOMAIN};
+$(echo -e "$LISTEN_BLOCK")
+    http2 on;
+${REAL_IP_BLOCK}
+
+    ssl_certificate     ${NGINX_SSL_CERT};
+    ssl_certificate_key ${NGINX_SSL_KEY};
+    ssl_trusted_certificate ${NGINX_SSL_CERT};
+
+    access_log /dev/stdout combined;
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+NGINX
+)
+
+    (
+        nginx_cleanup_unused_certs
+        nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
+    ) &
+    show_spinner "Обновление конфигурации Nginx"
+
+    (nginx_reload) &
+    show_spinner "Перезапуск Nginx"
+
+    echo
+    print_success "Домен Beszel изменён"
+    echo
+    echo -e "${YELLOW}🔗 Новый адрес панели:${NC}"
+    echo -e "${WHITE}https://${NEW_DOMAIN}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 0
+}
+
 uninstall_beszel() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -297,7 +451,7 @@ uninstall_beszel() {
 install_beszel_agent() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    🖥️  ПОДКЛЮЧЕНИЕ АГЕНТА BESZEL${NC}"
+    echo -e "${GREEN}    🖥️  Подключение агента Beszel${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -347,10 +501,14 @@ install_beszel_agent() {
         echo; show_continue_prompt || return 1; return 1
     fi
 
-    # ─── Создаём docker-compose ───
-    mkdir -p "${DIR_BESZEL_AGENT}"
+    # ─── Создаём файлы и запускаем агент ───
+    ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
 
-    cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
+    echo
+    echo
+    (
+        mkdir -p "${DIR_BESZEL_AGENT}"
+        cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
 services:
   beszel-agent:
     image: henrygd/beszel-agent:latest
@@ -375,17 +533,16 @@ services:
 volumes:
   beszel-agent-data:
 YAML
+    ) &
+    show_spinner "Подготовка файлов"
 
-    # Открываем порт агента в UFW
-    ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
-
-    echo
     (
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Добавление агента Beszel"
 
-    print_success "Агент Beszel добавлен и запущен"
+    echo
+    print_success "Агент Beszel добавлен"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
