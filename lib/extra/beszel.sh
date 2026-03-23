@@ -286,9 +286,12 @@ manage_beszel() {
 
     if ! is_beszel_agent_installed; then
         items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
-    else
+    elif ! is_beszel_installed; then
+        # Агент есть, хаба нет — меняем адрес хаба у агента
         items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
     fi
+    # Если и хаб, и агент установлены — пункт для домена уже добавлен выше,
+    # отдельного пункта для агента не нужно (домен хаба покрывает это).
 
     items+=("──────────────────────────────────────"); actions+=("sep")
     items+=("⬅️   Назад");                             actions+=("back")
