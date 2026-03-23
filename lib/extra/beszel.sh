@@ -99,6 +99,7 @@ install_beszel() {
                     return 1
                 fi
                 echo
+                echo
                 get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL" || return 1
                 CERT_DOMAIN="$BESZEL_DOMAIN"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
@@ -113,6 +114,7 @@ install_beszel() {
                 if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                     setup_cloudflare_credentials || return 1
                 fi
+                echo
                 echo
                 get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL" || return 1
                 CERT_DOMAIN="$base_domain"
@@ -384,8 +386,8 @@ NGINX
 )
 
     (
-        nginx_cleanup_unused_certs
         nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
+        nginx_cleanup_unused_certs
     ) &
     show_spinner "Обновление конфигурации Nginx"
 
@@ -403,21 +405,23 @@ NGINX
 }
 
 uninstall_beszel() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}       🗑️  УДАЛЕНИЕ BESZEL${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
+    local _force=false
+    [[ "${1:-}" == "--force" ]] && _force=true
 
-    echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
-        return
+    if [ "$_force" = false ]; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}       🗑️  УДАЛЕНИЕ BESZEL${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        if ! confirm_action; then return; fi
+        echo
+        echo
     fi
 
-    echo
-    echo
     (
         cd "${DIR_BESZEL}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
@@ -549,20 +553,22 @@ YAML
 }
 
 uninstall_beszel_agent() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}    🗑️  УДАЛЕНИЕ АГЕНТА BESZEL${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
+    local _force=false
+    [[ "${1:-}" == "--force" ]] && _force=true
 
-    echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
-        return
+    if [ "$_force" = false ]; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}    🗑️  УДАЛЕНИЕ АГЕНТА BESZEL${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        if ! confirm_action; then return; fi
+        echo
     fi
 
-    echo
     local AGENT_PORT_STORED
     AGENT_PORT_STORED=$(grep 'LISTEN:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
 
