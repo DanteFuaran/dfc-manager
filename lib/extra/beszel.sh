@@ -21,8 +21,6 @@ manage_beszel() {
         items+=("📊  Установить панель Beszel"); actions+=("install_hub")
     fi
 
-    items+=("──────────────────────────────────────"); actions+=("sep")
-
     if is_beszel_agent_installed; then
         items+=("🗑️   Удалить агент Beszel");   actions+=("uninstall_agent")
     else
@@ -151,32 +149,7 @@ install_beszel() {
         NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
     fi
 
-    # ─── Создаём директорию и docker-compose ───
-    mkdir -p "${DIR_BESZEL}"
-
-    cat > "${DIR_BESZEL}docker-compose.yml" <<YAML
-services:
-  beszel:
-    image: henrygd/beszel:latest
-    container_name: beszel
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8090:8090"
-    volumes:
-      - ./beszel_data:/beszel_data
-      - ./beszel_socket:/beszel_socket
-    healthcheck:
-      test: ["CMD", "/beszel", "health", "--url", "http://127.0.0.1:8090"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-YAML
-
-    # ─── Централизованный nginx: conf.d блок ───
-    ensure_nginx
-
-    # Определяем listen-режим (unix socket vs порт 443)
+    # ─── Определяем listen-режим до запуска ensure_nginx ───
     local LISTEN_BLOCK REAL_IP_BLOCK
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
         LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
@@ -213,12 +186,35 @@ ${REAL_IP_BLOCK}
 }
 NGINX
 )
-    nginx_add_block "beszel" "$BESZEL_BLOCK"
 
-    # Если основного nginx.conf нет (не установлен Remnawave) — создаём минимальный
-    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
-        nginx_generate_minimal_conf
-    fi
+    # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
+    (
+        mkdir -p "${DIR_BESZEL}"
+        cat > "${DIR_BESZEL}docker-compose.yml" <<YAML
+services:
+  beszel:
+    image: henrygd/beszel:latest
+    container_name: beszel
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./beszel_data:/beszel_data
+      - ./beszel_socket:/beszel_socket
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://127.0.0.1:8090"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+YAML
+        ensure_nginx
+        nginx_add_block "beszel" "$BESZEL_BLOCK"
+        if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
+            nginx_generate_minimal_conf
+        fi
+    ) &
+    show_spinner "Подготовка файлов"
 
     # ─── Запускаем Beszel ───
     echo
@@ -229,7 +225,7 @@ NGINX
 
     # Запускаем/перезапускаем nginx
     (nginx_reload) &
-    show_spinner "Запуск nginx"
+    show_spinner "Запуск Nginx"
 
     echo
     print_success "Beszel успешно установлен"
