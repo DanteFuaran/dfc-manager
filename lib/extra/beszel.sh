@@ -17,9 +17,7 @@ manage_beszel() {
     local -a items=()
     local -a actions=()
 
-    if is_beszel_installed; then
-        items+=("🗑️   Удалить панель Beszel"); actions+=("uninstall_hub")
-    else
+    if ! is_beszel_installed; then
         items+=("📊  Установить панель Beszel"); actions+=("install_hub")
     fi
 
