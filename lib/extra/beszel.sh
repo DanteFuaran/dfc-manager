@@ -445,6 +445,8 @@ uninstall_beszel() {
 
     rm -rf "${DIR_BESZEL}"
 
+    [ "$_force" = true ] && return 0
+
     echo
     print_success "Beszel удалён"
     echo
@@ -583,6 +585,8 @@ uninstall_beszel_agent() {
     fi
 
     rm -rf "${DIR_BESZEL_AGENT}"
+
+    [ "$_force" = true ] && return 0
 
     print_success "Агент Beszel удалён"
     echo
