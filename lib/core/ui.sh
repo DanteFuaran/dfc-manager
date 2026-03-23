@@ -18,6 +18,23 @@ _flush_stdin() {
 # СПИННЕРЫ
 # ═══════════════════════════════════════════════
 
+# Спиннер подготовки к запуску: синий, без финального сообщения
+show_spinner_prepare() {
+    local pid=$!
+    local delay=0.08
+    local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local i=0 msg="$1"
+    tput civis 2>/dev/null || true
+    while kill -0 $pid 2>/dev/null; do
+        printf "\r${BLUE}%s${NC}  %s" "${spin[$i]}" "$msg"
+        i=$(( (i+1) % 10 ))
+        sleep $delay
+    done
+    wait $pid 2>/dev/null || true
+    printf "\r\033[K"
+    tput cnorm 2>/dev/null || true
+}
+
 show_spinner() {
     local pid=$!
     local delay=0.08

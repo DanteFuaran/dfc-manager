@@ -144,7 +144,7 @@ _UPDATE_FLAG="/tmp/.dfc_upd_$$"
         sleep 0.5
     fi
 ) &
-show_spinner "${BLUE}Подготовка скрипта к запуску${NC}"
+show_spinner_prepare "Подготовка скрипта к запуску"
 
 if [ -f "$_UPDATE_FLAG" ]; then
     rm -f "$_UPDATE_FLAG"
