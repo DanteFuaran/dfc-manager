@@ -380,6 +380,9 @@ volumes:
     external: false
     name: remnawave-db-data
 COMPOSE_VOLUMES
+
+    ensure_nginx
+    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
 }
 
 # ─── Docker-Compose: Только Панель ───
@@ -605,6 +608,9 @@ COMPOSE_NETWORK_NEW
 volumes:
   remnawave-db-data:
     driver: local
+
+    ensure_nginx
+    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
     external: false
     name: remnawave-db-data
 COMPOSE_VOLUMES
@@ -663,9 +669,9 @@ generate_nginx_conf_full() {
     local cookie_value=$8
 
     # http-обёртка
-    _nginx_http_header > /opt/remnawave/nginx.conf
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> /opt/remnawave/nginx.conf <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -728,9 +734,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -768,9 +774,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -809,9 +815,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -895,6 +901,7 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -909,9 +916,9 @@ generate_nginx_conf_panel() {
     local cookie_value=$6
 
     # http-обёртка
-    _nginx_http_header > /opt/remnawave/nginx.conf
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> /opt/remnawave/nginx.conf <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -971,9 +978,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1004,9 +1011,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1045,6 +1052,7 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -1056,12 +1064,12 @@ generate_nginx_conf_node() {
     local target_dir="${3:-/opt/remnawave}"
 
     # Удаляем если nginx.conf — директория (может быть создана Docker)
-    [ -d "${target_dir}/nginx.conf" ] && rm -rf "${target_dir}/nginx.conf"
+    [ -d "${DIR_NGINX}/nginx.conf" ] && rm -rf "${DIR_NGINX}/nginx.conf"
 
     # http-обёртка
-    _nginx_http_header > "${target_dir}/nginx.conf"
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> "${target_dir}/nginx.conf" <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 map \$http_upgrade \$connection_upgrade {
@@ -1088,9 +1096,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;
@@ -1180,6 +1188,7 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -1346,6 +1355,9 @@ COMPOSE_NETWORK_NEW
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
+
+    ensure_nginx
+    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
 volumes:
   remnawave-db-data:
     driver: local
@@ -1362,9 +1374,9 @@ generate_nginx_conf_panel_only() {
     local cookie_value=$4
 
     # http-обёртка
-    _nginx_http_header > /opt/remnawave/nginx.conf
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> /opt/remnawave/nginx.conf <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -1421,9 +1433,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1468,6 +1480,7 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -1666,6 +1679,9 @@ networks:
     external: false
 
 COMPOSE_NETWORK_NEW
+
+    ensure_nginx
+    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
@@ -1686,9 +1702,9 @@ generate_nginx_conf_panel_with_node() {
     local cookie_name=$5
     local cookie_value=$6
 
-    _nginx_http_header > /opt/remnawave/nginx.conf
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> /opt/remnawave/nginx.conf <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 # Не логируем частые Telegram webhook-запросы
@@ -1748,9 +1764,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$panel_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$panel_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -1802,9 +1818,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -1879,6 +1895,7 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -1947,6 +1964,9 @@ services:
         max-size: '30m'
         max-file: '5'
 EOL
+
+    ensure_nginx
+    _strip_nginx_from_compose "${target_dir}/docker-compose.yml"
 }
 
 # ─── Nginx: Только Страница подписки (standalone) ───
@@ -1955,9 +1975,9 @@ generate_nginx_conf_subpage() {
     local sub_cert=$2
     local target_dir=$3
 
-    _nginx_http_header > "${target_dir}/nginx.conf"
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> "${target_dir}/nginx.conf" <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 limit_req_zone \$binary_remote_addr zone=sub_limit:10m rate=10r/s;
@@ -1990,9 +2010,9 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -2030,6 +2050,7 @@ server {
     server_name _;
     ssl_reject_handshake on;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -2042,11 +2063,11 @@ generate_nginx_conf_node_with_subpage() {
     local sub_cert=$4
     local target_dir="${5:-/opt/remnanode}"
 
-    [ -d "${target_dir}/nginx.conf" ] && rm -rf "${target_dir}/nginx.conf"
+    [ -d "${DIR_NGINX}/nginx.conf" ] && rm -rf "${DIR_NGINX}/nginx.conf"
 
-    _nginx_http_header > "${target_dir}/nginx.conf"
+    _nginx_http_header > "${DIR_NGINX}nginx.conf"
 
-    cat >> "${target_dir}/nginx.conf" <<EOL
+    cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
 
 limit_req_zone \$binary_remote_addr zone=sub_limit:10m rate=10r/s;
@@ -2079,9 +2100,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$node_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$node_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;
@@ -2160,9 +2181,9 @@ server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/$sub_cert/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/$sub_cert/fullchain.pem";
 
     real_ip_header   proxy_protocol;
     set_real_ip_from unix:;
@@ -2206,6 +2227,7 @@ server {
     ssl_reject_handshake on;
     return 444;
 }
+    include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
 }
@@ -2303,6 +2325,9 @@ services:
         max-size: '30m'
         max-file: '5'
 EOL
+
+    ensure_nginx
+    _strip_nginx_from_compose "${target_dir}/docker-compose.yml"
 }
 
 # ═══════════════════════════════════════════════

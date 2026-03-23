@@ -167,6 +167,9 @@ installation_panel() {
     ) &
     show_spinner "Запуск сервисов" || true
 
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
+
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
 
@@ -224,6 +227,9 @@ installation_panel() {
             docker compose up -d >/dev/null 2>&1
         ) &
         show_spinner "Запуск контейнеров" || true
+
+        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+        show_spinner "Перезапуск nginx" || true
 
         # Ожидаем готовность после перезапуска
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"

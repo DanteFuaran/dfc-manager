@@ -59,7 +59,7 @@ installation_node() {
         show_spinner "Удаление контейнера ноды"
 
         # Если нода стоит отдельно (не на сервере панели) — чистим .env и compose
-        if ! [ -f "/opt/remnawave/nginx.conf" ]; then
+        if ! [ -f "${DIR_NGINX}nginx.conf" ]; then
             (
                 cd /opt/remnawave 2>/dev/null
                 docker compose down -v 2>/dev/null || true
@@ -73,7 +73,7 @@ installation_node() {
 
     # ─── Определяем режим: локальная панель или удалённая ───
     local is_local_panel=false
-    if [ -f "/opt/remnawave/docker-compose.yml" ] && [ -f "/opt/remnawave/nginx.conf" ] && \
+    if [ -f "/opt/remnawave/docker-compose.yml" ] && [ -f "${DIR_NGINX}nginx.conf" ] && \
        grep -q "remnawave:" /opt/remnawave/docker-compose.yml 2>/dev/null && \
        ! grep -q "remnanode" /opt/remnawave/docker-compose.yml 2>/dev/null; then
         is_local_panel=true
@@ -106,7 +106,7 @@ installation_node_local() {
     # ─── Сохраняем бэкап конфигов для восстановления при отмене ───
     local backup_compose="" backup_nginx=""
     backup_compose=$(cat /opt/remnawave/docker-compose.yml 2>/dev/null)
-    backup_nginx=$(cat /opt/remnawave/nginx.conf 2>/dev/null)
+    backup_nginx=$(cat ${DIR_NGINX}nginx.conf 2>/dev/null)
 
     # Функция восстановления при отмене (до изменения конфигов)
     _restore_panel_config() {
@@ -114,7 +114,7 @@ installation_node_local() {
             echo "$backup_compose" > /opt/remnawave/docker-compose.yml
         fi
         if [ -n "$backup_nginx" ]; then
-            echo "$backup_nginx" > /opt/remnawave/nginx.conf
+            echo "$backup_nginx" > ${DIR_NGINX}nginx.conf
         fi
         # Перезапускаем панель с оригинальными конфигами
         (
@@ -138,10 +138,10 @@ installation_node_local() {
 
     # Извлекаем домены из nginx.conf
     local panel_domain sub_domain
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '1p')
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
 
     if [ "$has_local_sub" = true ]; then
-        sub_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '2p')
+        sub_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '2p')
     else
         # Страница подписки на удалённом сервере — берём домен из .env
         sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
@@ -169,16 +169,16 @@ installation_node_local() {
 
     # Определяем домены сертификатов
     local panel_cert_domain sub_cert_domain
-    panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+    panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
     if [ -z "$panel_cert_domain" ]; then
-        panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
+        panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
     fi
     [ -z "$panel_cert_domain" ] && panel_cert_domain="$panel_domain"
 
     if [ "$has_local_sub" = true ]; then
-        sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+        sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         if [ -z "$sub_cert_domain" ]; then
-            sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
+            sub_cert_domain=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP 'live/\K[^/]+' | head -1)
         fi
         [ -z "$sub_cert_domain" ] && sub_cert_domain="$sub_domain"
     fi
@@ -377,6 +377,9 @@ installation_node_local() {
         return
     fi
 
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
+
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
@@ -465,6 +468,9 @@ installation_node_local() {
         docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск контейнеров" || true
+
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+    show_spinner "Перезапуск nginx" || true
 
     randomhtml
 
@@ -633,33 +639,9 @@ installation_node_remote() {
 
     # Docker-compose для ноды
     (
+        ensure_nginx
         cat > "${NODE_INSTALL_DIR}/docker-compose.yml" <<EOL
 services:
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt/live/$NODE_CERT_DOMAIN/fullchain.pem:/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem:ro
-      - /etc/letsencrypt/live/$NODE_CERT_DOMAIN/privkey.pem:/etc/nginx/ssl/$NODE_CERT_DOMAIN/privkey.pem:ro
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-    network_mode: host
-    depends_on:
-      - remnanode
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
-
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
@@ -687,7 +669,7 @@ services:
         max-size: '30m'
         max-file: '5'
 EOL
-        generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_INSTALL_DIR"
+        generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN"
     ) &
     show_spinner "Подготовка файлов" || true
 
@@ -710,6 +692,9 @@ EOL
         show_continue_prompt || true
         return
     fi
+
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
 
@@ -906,6 +891,9 @@ installation_node_with_existing_subpage() {
         show_continue_prompt || true
         return
     fi
+
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
 
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 

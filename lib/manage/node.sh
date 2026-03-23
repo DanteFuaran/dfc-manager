@@ -37,13 +37,13 @@ remove_node_from_panel() {
     fi
 
     local panel_domain sub_domain panel_cert sub_cert COOKIE_NAME COOKIE_VALUE
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '1p')
-    sub_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '2p')
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
+    sub_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '2p')
     
     get_cookie_from_nginx
     
-    panel_cert=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
-    sub_cert=$(grep -A5 "server_name ${sub_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+    panel_cert=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+    sub_cert=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
     [ -z "$panel_cert" ] && panel_cert="$panel_domain"
     [ -z "$sub_cert" ] && sub_cert="$sub_domain"
 
@@ -107,7 +107,7 @@ remove_node_from_panel() {
 }
 
 add_node_to_panel() {
-    if [ ! -f "/opt/remnawave/docker-compose.yml" ] || [ ! -f "/opt/remnawave/nginx.conf" ]; then
+    if [ ! -f "/opt/remnawave/docker-compose.yml" ] || [ ! -f "${DIR_NGINX}nginx.conf" ]; then
         print_error "Панель Remnawave не найдена на этом сервере"
         echo -e "${YELLOW}Эта функция регистрирует ноду на удалённом сервере в панели.${NC}"
         echo -e "${YELLOW}Панель должна быть установлена на этом сервере.${NC}"

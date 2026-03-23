@@ -6,9 +6,9 @@ manage_panel_access() {
     while true; do
         # Определяем текущий активный порт прямого доступа
         local _current_port=""
-        if grep -q "# ─── 8443 Fallback" /opt/remnawave/nginx.conf 2>/dev/null; then
+        if grep -q "# ─── 8443 Fallback" ${DIR_NGINX}nginx.conf 2>/dev/null; then
             _current_port="8443"
-        elif grep -q "# ─── 443 Direct" /opt/remnawave/nginx.conf 2>/dev/null; then
+        elif grep -q "# ─── 443 Direct" ${DIR_NGINX}nginx.conf 2>/dev/null; then
             _current_port="443"
         fi
 
@@ -25,7 +25,7 @@ manage_panel_access() {
         # Показываем cookie-ссылку
         local COOKIE_NAME COOKIE_VALUE _panel_domain
         get_cookie_from_nginx 2>/dev/null
-        _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf 2>/dev/null | head -1)
+        _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf 2>/dev/null | head -1)
 
         show_arrow_menu "🔓  Доступ к панели" \
             "$_toggle_label" \
@@ -55,7 +55,7 @@ manage_panel_access() {
                 local COOKIE_NAME COOKIE_VALUE
                 if get_cookie_from_nginx; then
                     local pd
-                    pd=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | head -1)
+                    pd=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | head -1)
                     echo
                     echo -e "${GREEN}🔗 Cookie-ссылка на панель:${NC}"
                     echo -e "${WHITE}https://${pd}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
@@ -139,7 +139,7 @@ switch_panel_port() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    if [ ! -f "$dir/nginx.conf" ]; then
+    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
         print_error "Файл nginx.conf не найден"
         sleep 2
         return 1
@@ -153,38 +153,38 @@ switch_panel_port() {
     fi
 
     local panel_domain
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "$dir/nginx.conf" | head -1)
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
 
     local panel_cert
-    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
 
     # Определяем sub_domain (домен подписки → upstream json)
     local sub_domain sub_cert json_line
-    json_line=$(grep -n 'proxy_pass http://json' "$dir/nginx.conf" | head -1 | cut -d: -f1)
+    json_line=$(grep -n 'proxy_pass http://json' "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
     if [ -n "$json_line" ]; then
-        sub_domain=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
-        sub_cert=$(head -n "$json_line" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
+        sub_domain=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
+        sub_cert=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | tail -1)
         [ -z "$sub_cert" ] && sub_cert="$sub_domain"
     fi
 
     # Определяем selfsteal_domain (третий домен, не панель и не подписка)
     local selfsteal_domain selfsteal_cert
-    selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "$dir/nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
+    selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
     if [ -n "$selfsteal_domain" ]; then
-        selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+        selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
         [ -z "$selfsteal_cert" ] && selfsteal_cert="$selfsteal_domain"
     fi
 
     # Удаляем любые существующие блоки прямого доступа
-    sed -i '/# ─── 8443 Fallback/,/^}$/d' "$dir/nginx.conf"
-    sed -i '/# ─── 443 Direct/,/^}$/d' "$dir/nginx.conf"
-    sed -i '/# ─── Sub Direct/,/^}$/d' "$dir/nginx.conf"
-    sed -i '/# ─── Selfsteal Direct/,/^}$/d' "$dir/nginx.conf"
-    sed -i '/# ─── Default Direct/,/^}$/d' "$dir/nginx.conf"
+    sed -i '/# ─── 8443 Fallback/,/^}$/d' "${DIR_NGINX}nginx.conf"
+    sed -i '/# ─── 443 Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
+    sed -i '/# ─── Sub Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
+    sed -i '/# ─── Selfsteal Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
+    sed -i '/# ─── Default Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
 
     # Вставляем после последнего серверного блока
     local insert_after_line
-    insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
+    insert_after_line=$(grep -n "^}$" "${DIR_NGINX}nginx.conf" | tail -1 | cut -d: -f1)
 
     local temp_file="/tmp/remnawave_port_switch_$$.conf"
     if [ "$target_port" = "443" ]; then
@@ -197,9 +197,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
@@ -265,9 +265,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/SUB_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/SUB_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/SUB_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/SUB_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/SUB_CERT_PH/fullchain.pem";
 
     location / {
         proxy_http_version 1.1;
@@ -306,9 +306,9 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/SELFSTEAL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/SELFSTEAL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/SELFSTEAL_CERT_PH/fullchain.pem";
 
     root /var/www/html;
     index index.html;
@@ -370,9 +370,9 @@ server {
     listen [::]:8443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT_PH/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT_PH/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT_PH/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
@@ -432,16 +432,16 @@ SERVERBLOCK_8443
     sed -i "s/PANEL_CERT_PH/${panel_cert}/g" "$temp_file"
 
     if [ -n "$insert_after_line" ]; then
-        sed -i "${insert_after_line}r ${temp_file}" "$dir/nginx.conf"
+        sed -i "${insert_after_line}r ${temp_file}" "${DIR_NGINX}nginx.conf"
     else
-        cat "$temp_file" >> "$dir/nginx.conf"
+        cat "$temp_file" >> "${DIR_NGINX}nginx.conf"
     fi
     rm -f "$temp_file"
 
     (
-        cd "$dir"
-        docker compose down remnawave-nginx >/dev/null 2>&1
-        docker compose up -d remnawave-nginx >/dev/null 2>&1
+        cd "${DIR_NGINX}"
+        docker compose down nginx >/dev/null 2>&1
+        docker compose up -d nginx >/dev/null 2>&1
         _i=0
         _nginx_ok=0
         while [ $_i -lt 20 ]; do
@@ -497,16 +497,16 @@ auto_enable_panel_access_8443() {
     local cookie_value="${3:-}"
     local dir="/opt/remnawave"
 
-    [ ! -f "$dir/nginx.conf" ] && return 1
+    [ ! -f "${DIR_NGINX}nginx.conf" ] && return 1
 
     if [ -z "$panel_domain" ]; then
-        panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "$dir/nginx.conf" | head -1)
+        panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
     fi
 
     local panel_cert
-    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "$dir/nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' | head -1)
 
-    if grep -q "# ─── 8443 Fallback" "$dir/nginx.conf" 2>/dev/null; then
+    if grep -q "# ─── 8443 Fallback" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         ufw allow 8443/tcp >/dev/null 2>&1
         return 0
     fi
@@ -519,7 +519,7 @@ auto_enable_panel_access_8443() {
 
     local insert_after_line
     # Вставляем перед закрывающей скобкой http{} (новый формат) или после последнего server{} (старый формат)
-    insert_after_line=$(grep -n "^}$" "$dir/nginx.conf" | tail -1 | cut -d: -f1)
+    insert_after_line=$(grep -n "^}$" "${DIR_NGINX}nginx.conf" | tail -1 | cut -d: -f1)
 
     local temp_file="/tmp/remnawave_8443_auto_$$.conf"
     cat > "$temp_file" << 'EOF'
@@ -531,9 +531,9 @@ server {
     listen [::]:8443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/PANEL_CERT/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/PANEL_CERT/fullchain.pem";
+    ssl_certificate "/etc/letsencrypt/live/PANEL_CERT/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/PANEL_CERT/privkey.pem";
+    ssl_trusted_certificate "/etc/letsencrypt/live/PANEL_CERT/fullchain.pem";
 
     add_header Set-Cookie $set_cookie_header;
 
@@ -593,16 +593,16 @@ EOF
     sed -i "s/PANEL_CERT/${panel_cert}/g" "$temp_file"
 
     if [ -n "$insert_after_line" ]; then
-        sed -i "${insert_after_line}r ${temp_file}" "$dir/nginx.conf"
+        sed -i "${insert_after_line}r ${temp_file}" "${DIR_NGINX}nginx.conf"
     else
-        cat "$temp_file" >> "$dir/nginx.conf"
+        cat "$temp_file" >> "${DIR_NGINX}nginx.conf"
     fi
 
     rm -f "$temp_file"
 
     (
-        cd "$dir"
-        docker compose restart remnawave-nginx >/dev/null 2>&1
+        cd "${DIR_NGINX}"
+        docker compose restart nginx >/dev/null 2>&1
     ) &
     show_spinner "Активация доступа по 8443"
 
@@ -679,7 +679,7 @@ regenerate_cookies() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    if [ ! -f /opt/remnawave/nginx.conf ]; then
+    if [ ! -f ${DIR_NGINX}nginx.conf ]; then
         print_error "Файл nginx.conf не найден"
         sleep 2
         tput cnorm 2>/dev/null
@@ -713,10 +713,10 @@ regenerate_cookies() {
     echo
     print_action "Обновление cookie..."
 
-    sed -i "s|~\*${OLD_NAME}=${OLD_VALUE}|~*${NEW_NAME}=${NEW_VALUE}|g" /opt/remnawave/nginx.conf
-    sed -i "s|\$arg_${OLD_NAME}|\$arg_${NEW_NAME}|g" /opt/remnawave/nginx.conf
-    sed -i "s|    \"[^\"]*\" \"${OLD_NAME}=${OLD_VALUE}; Path=|    \"${NEW_VALUE}\" \"${NEW_NAME}=${NEW_VALUE}; Path=|g" /opt/remnawave/nginx.conf
-    sed -i "s|\"${OLD_VALUE}\" 1|\"${NEW_VALUE}\" 1|g" /opt/remnawave/nginx.conf
+    sed -i "s|~\*${OLD_NAME}=${OLD_VALUE}|~*${NEW_NAME}=${NEW_VALUE}|g" ${DIR_NGINX}nginx.conf
+    sed -i "s|\$arg_${OLD_NAME}|\$arg_${NEW_NAME}|g" ${DIR_NGINX}nginx.conf
+    sed -i "s|    \"[^\"]*\" \"${OLD_NAME}=${OLD_VALUE}; Path=|    \"${NEW_VALUE}\" \"${NEW_NAME}=${NEW_VALUE}; Path=|g" ${DIR_NGINX}nginx.conf
+    sed -i "s|\"${OLD_VALUE}\" 1|\"${NEW_VALUE}\" 1|g" ${DIR_NGINX}nginx.conf
 
     print_success "Cookie успешно обновлены!"
 
@@ -728,7 +728,7 @@ regenerate_cookies() {
     show_spinner "Перезапуск nginx"
 
     local panel_domain
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | head -1)
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | head -1)
 
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"

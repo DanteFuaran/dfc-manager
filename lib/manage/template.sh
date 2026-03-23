@@ -91,8 +91,8 @@ manage_random_template() {
 
     if docker ps --filter "name=remnawave-nginx" --format "{{.Names}}" 2>/dev/null | grep -q "remnawave-nginx"; then
         (
-            cd "${DIR_PANEL}" 2>/dev/null
-            docker compose restart remnawave-nginx >/dev/null 2>&1
+            cd "${DIR_NGINX}" 2>/dev/null
+            docker compose restart nginx >/dev/null 2>&1
         ) &
         show_spinner "Применение изменений"
     fi

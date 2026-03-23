@@ -182,6 +182,9 @@ installation_full() {
     ) &
     show_spinner "Установка сервисов" || true
 
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
+
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
 
@@ -305,6 +308,9 @@ installation_full() {
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
     show_spinner "Запуск сервисов" || true
+
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+    show_spinner "Перезапуск nginx" || true
 
     # 12. Сброс суперадмина — при первом входе пользователь задаст свои данные
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
@@ -513,6 +519,9 @@ installation_panel_with_node() {
     ) &
     show_spinner "Установка сервисов" || true
 
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
+
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
 
@@ -618,6 +627,9 @@ installation_panel_with_node() {
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
     show_spinner "Запуск сервисов" || true
+
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+    show_spinner "Перезапуск nginx" || true
 
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 

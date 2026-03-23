@@ -62,6 +62,7 @@ source "${SCRIPT_DIR}/lib/core/colors.sh"
 source "${SCRIPT_DIR}/lib/core/terminal.sh"
 source "${SCRIPT_DIR}/lib/core/ui.sh"
 source "${SCRIPT_DIR}/lib/core/system.sh"
+source "${SCRIPT_DIR}/lib/core/nginx.sh"
 
 # Install: генераторы и утилиты установки
 source "${SCRIPT_DIR}/lib/install/generators.sh"

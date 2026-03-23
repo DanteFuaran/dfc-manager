@@ -71,23 +71,25 @@ _installation_subpage_on_panel() {
     # Сохраняем бэкап конфигов
     local backup_compose="" backup_nginx=""
     backup_compose=$(cat /opt/remnawave/docker-compose.yml 2>/dev/null)
-    backup_nginx=$(cat /opt/remnawave/nginx.conf 2>/dev/null)
+    backup_nginx=$(cat ${DIR_NGINX}nginx.conf 2>/dev/null)
 
     _restore_config() {
         if [ -n "$backup_compose" ]; then
             echo "$backup_compose" > /opt/remnawave/docker-compose.yml
         fi
         if [ -n "$backup_nginx" ]; then
-            echo "$backup_nginx" > /opt/remnawave/nginx.conf
+            echo "$backup_nginx" > ${DIR_NGINX}nginx.conf
         fi
         (cd /opt/remnawave && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
         show_spinner "Восстановление конфигурации"
+        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+        show_spinner "Перезапуск nginx"
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
     }
 
     # Извлекаем домен панели из nginx.conf
     local panel_domain
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' /opt/remnawave/nginx.conf | sed -n '1p')
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
     if [ -z "$panel_domain" ]; then
         print_error "Не удалось определить домен панели из nginx.conf"
         show_continue_prompt || return 1
@@ -104,7 +106,7 @@ _installation_subpage_on_panel() {
 
     # Извлекаем домен сертификата панели
     local panel_cert_domain
-    panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+    panel_cert_domain=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
     [ -z "$panel_cert_domain" ] && panel_cert_domain="$panel_domain"
 
     local AUTO_CERT_METHOD
@@ -203,8 +205,8 @@ _installation_subpage_on_panel() {
         # Panel + Node — нужно определить selfsteal домен и сертификат
         local selfsteal_domain node_cert_domain
         # Ищем selfsteal домен по server-блоку с root /var/www/html (не зависит от позиции)
-        selfsteal_domain=$(grep -B5 'root /var/www/html' /opt/remnawave/nginx.conf | grep -oP 'server_name\s+\K[^;]+' | head -1)
-        node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" /opt/remnawave/nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+        selfsteal_domain=$(grep -B5 'root /var/www/html' ${DIR_NGINX}nginx.conf | grep -oP 'server_name\s+\K[^;]+' | head -1)
+        node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
 
         (
@@ -240,6 +242,9 @@ _installation_subpage_on_panel() {
     # Запуск сервисов
     (cd /opt/remnawave && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск сервисов" || true
+
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+    show_spinner "Перезапуск nginx" || true
 
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
@@ -462,6 +467,9 @@ EOL
         return
     fi
 
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
+
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
 
     # Проверка здоровья
@@ -649,6 +657,9 @@ _installation_subpage_standalone() {
         show_continue_prompt || true
         return
     fi
+
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
 
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
 

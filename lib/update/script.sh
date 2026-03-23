@@ -279,10 +279,12 @@ remove_script_all() {
         (
             cd /opt/beszel 2>/dev/null
             docker compose down -v --rmi all >/dev/null 2>&1 || true
-            local NGINX_CONF="/opt/remnawave/nginx.conf"
-            local DOCKER_COMPOSE_DEL="/opt/remnawave/docker-compose.yml"
-            [ -f "$NGINX_CONF" ] && sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
-            [ -f "$DOCKER_COMPOSE_DEL" ] && sed -i '/# beszel-cert$/d' "$DOCKER_COMPOSE_DEL"
+            nginx_remove_block "beszel" 2>/dev/null || true
+            if nginx_has_users; then
+                nginx_reload
+            else
+                nginx_teardown
+            fi
         ) &
         show_spinner "Удаление Beszel"
         rm -rf /opt/beszel
@@ -336,6 +338,7 @@ remove_script_all() {
         docker system prune -af >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление контейнеров Remnawave"
+    nginx_teardown
     rm -rf "${DIR_PANEL}"
     rm -rf "/opt/remnasubpage"
     rm -rf "${DIR_NODE}"

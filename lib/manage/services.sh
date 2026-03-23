@@ -10,6 +10,8 @@ manage_start() {
         docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск сервисов"
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск nginx" || true
     print_success "Сервисы запущены"
     echo
     show_continue_prompt || return 1
@@ -23,6 +25,8 @@ manage_stop() {
         docker compose down >/dev/null 2>&1
     ) &
     show_spinner "Остановка сервисов"
+    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1) &
+    show_spinner "Остановка nginx" || true
     print_success "Сервисы остановлены"
     echo
     show_continue_prompt || return 1
@@ -72,6 +76,9 @@ manage_update() {
     ) &
     show_spinner "Перезапуск сервисов"
 
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
+    show_spinner "Перезапуск nginx" || true
+
     (
         docker image prune -af >/dev/null 2>&1
     ) &
@@ -117,6 +124,8 @@ manage_reinstall() {
         docker system prune -af 2>&1
     ) &
     show_spinner "Удаление контейнеров и данных" || true
+
+    nginx_teardown
 
     (
         rm -rf "$rw_path"

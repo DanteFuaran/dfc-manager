@@ -138,8 +138,20 @@ install_beszel() {
             *) return 0 ;;
         esac
     fi
-    SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
-    SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+    # ─── SSL-пути для nginx ───
+    local NGINX_SSL_CERT NGINX_SSL_KEY
+    if [[ "$CERT_HOST_FULLCHAIN" == /etc/letsencrypt/* ]]; then
+        # Let's Encrypt — путь внутри контейнера совпадает с хостом
+        NGINX_SSL_CERT="$CERT_HOST_FULLCHAIN"
+        NGINX_SSL_KEY="$CERT_HOST_KEY"
+    else
+        # Самоподписанный — копируем в /opt/nginx/ssl/
+        mkdir -p "${DIR_NGINX}ssl/${CERT_DOMAIN}"
+        cp -f "$CERT_HOST_FULLCHAIN" "${DIR_NGINX}ssl/${CERT_DOMAIN}/fullchain.pem"
+        cp -f "$CERT_HOST_KEY" "${DIR_NGINX}ssl/${CERT_DOMAIN}/privkey.pem"
+        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+    fi
 
     # ─── Создаём директорию и docker-compose ───
     mkdir -p "${DIR_BESZEL}"
@@ -163,35 +175,30 @@ services:
       start_period: 10s
 YAML
 
-    # ─── Добавляем server block в nginx.conf ───
-    local NGINX_CONF="/opt/remnawave/nginx.conf"
-    if [ -f "$NGINX_CONF" ]; then
-        # Удаляем существующий блок beszel если есть
-        sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
+    # ─── Централизованный nginx: conf.d блок ───
+    ensure_nginx
 
-        # Определяем режим: panel+node (unix socket) или panel-only (порт 443)
-        local LISTEN_BLOCK REAL_IP_BLOCK
-        if grep -q 'listen unix:/dev/shm/nginx.sock' "$NGINX_CONF"; then
-            LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
-            REAL_IP_BLOCK="    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;"
-        else
-            LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
-            REAL_IP_BLOCK=""
-        fi
+    # Определяем listen-режим (unix socket vs порт 443)
+    local LISTEN_BLOCK REAL_IP_BLOCK
+    if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
+        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        REAL_IP_BLOCK=$'\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;'
+    else
+        LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+        REAL_IP_BLOCK=""
+    fi
 
-        # Вставляем перед закрывающей скобкой http {}
-        local BESZEL_BLOCK
-        BESZEL_BLOCK=$(cat <<NGINX
-# >>> BESZEL
+    local BESZEL_BLOCK
+    BESZEL_BLOCK=$(cat <<NGINX
 server {
     server_name ${BESZEL_DOMAIN};
 $(echo -e "$LISTEN_BLOCK")
     http2 on;
-$([ -n "$REAL_IP_BLOCK" ] && echo -e "\n$REAL_IP_BLOCK")
+${REAL_IP_BLOCK}
 
-    ssl_certificate     ${SSL_CERT};
-    ssl_certificate_key ${SSL_KEY};
-    ssl_trusted_certificate ${SSL_CERT};
+    ssl_certificate     ${NGINX_SSL_CERT};
+    ssl_certificate_key ${NGINX_SSL_KEY};
+    ssl_trusted_certificate ${NGINX_SSL_CERT};
 
     access_log /dev/stdout combined;
 
@@ -206,104 +213,25 @@ $([ -n "$REAL_IP_BLOCK" ] && echo -e "\n$REAL_IP_BLOCK")
         proxy_set_header Connection "upgrade";
     }
 }
-# <<< BESZEL
 NGINX
 )
-        # Вставляем перед default_server блоком (до него), иначе — перед концом http {}
-        local beszel_tmp="/tmp/remnawave_beszel_$$.conf"
-        echo "$BESZEL_BLOCK" > "$beszel_tmp"
+    nginx_add_block "beszel" "$BESZEL_BLOCK"
 
-        local insert_line=""
-        local ds_line
-        ds_line=$(grep -n 'default_server' "$NGINX_CONF" | tail -1 | cut -d: -f1)
-        if [ -n "$ds_line" ]; then
-            insert_line=$(head -n "$ds_line" "$NGINX_CONF" | grep -n '^server {' | tail -1 | cut -d: -f1)
-        fi
-        if [ -z "$insert_line" ]; then
-            insert_line=$(grep -n '^} # ─── end http' "$NGINX_CONF" | tail -1 | cut -d: -f1)
-        fi
-        if [ -z "$insert_line" ]; then
-            insert_line=$(grep -n '^}' "$NGINX_CONF" | tail -1 | cut -d: -f1)
-        fi
-
-        if [ -n "$insert_line" ]; then
-            sed -i "$((insert_line-1))r $beszel_tmp" "$NGINX_CONF"
-        else
-            cat "$beszel_tmp" >> "$NGINX_CONF"
-        fi
-        rm -f "$beszel_tmp"
-
-        # ─── Добавляем cert volume в nginx docker-compose ───
-        local DOCKER_COMPOSE="/opt/remnawave/docker-compose.yml"
-        if [ -f "$DOCKER_COMPOSE" ] && [ -n "$CERT_DOMAIN" ]; then
-            if ! grep -q "/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem" "$DOCKER_COMPOSE" 2>/dev/null; then
-                sed -i "/\/dev\/shm:\/dev\/shm/i\\      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem:ro # beszel-cert\n      - ${CERT_HOST_KEY}:/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem:ro # beszel-cert" "$DOCKER_COMPOSE"
-            fi
-        fi
-    else
-        # ─── Standalone nginx (Remnawave не установлен) ───
-        cat > "${DIR_BESZEL}nginx.conf" <<NGINXEOF
-events {}
-
-http {
-    server {
-        listen 443 ssl;
-        listen [::]:443 ssl;
-        server_name ${BESZEL_DOMAIN};
-        http2 on;
-
-        ssl_certificate     /etc/nginx/ssl/fullchain.pem;
-        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
-
-        location / {
-            proxy_pass http://127.0.0.1:8090;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-    }
-
-    server {
-        listen 80;
-        listen [::]:80;
-        server_name ${BESZEL_DOMAIN};
-        return 301 https://\$host\$request_uri;
-    }
-}
-NGINXEOF
-
-        cat >> "${DIR_BESZEL}docker-compose.yml" <<YAML
-
-  beszel-nginx:
-    image: nginx:alpine
-    container_name: beszel-nginx
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ${CERT_HOST_FULLCHAIN}:/etc/nginx/ssl/fullchain.pem:ro
-      - ${CERT_HOST_KEY}:/etc/nginx/ssl/privkey.pem:ro
-    depends_on:
-      - beszel
-YAML
+    # Если основного nginx.conf нет (не установлен Remnawave) — создаём минимальный
+    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
+        nginx_generate_minimal_conf
     fi
 
-    # ─── Запускаем ───
+    # ─── Запускаем Beszel ───
     echo
     (
         cd "${DIR_BESZEL}" && docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Установка Beszel"
 
-    # Пересоздаём nginx (для применения новых volume-маунтов)
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "remnawave-nginx"; then
-        (cd /opt/remnawave && docker compose up -d remnawave-nginx >/dev/null 2>&1) &
-        show_spinner "Перезапуск nginx"
-    fi
+    # Запускаем/перезапускаем nginx
+    (nginx_reload) &
+    show_spinner "Запуск nginx"
 
     echo
     print_success "Beszel успешно установлен"
@@ -338,18 +266,16 @@ uninstall_beszel() {
     ) &
     show_spinner "Удаление контейнеров Beszel"
 
-    # Удаляем блок из nginx и cert volumes из docker-compose
-    local NGINX_CONF="/opt/remnawave/nginx.conf"
-    local DOCKER_COMPOSE_DEL="/opt/remnawave/docker-compose.yml"
-    if [ -f "$NGINX_CONF" ]; then
-        sed -i '/# >>> BESZEL/,/# <<< BESZEL/d' "$NGINX_CONF"
-    fi
-    if [ -f "$DOCKER_COMPOSE_DEL" ]; then
-        sed -i '/# beszel-cert$/d' "$DOCKER_COMPOSE_DEL"
-    fi
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "remnawave-nginx"; then
-        (cd /opt/remnawave && docker compose up -d remnawave-nginx >/dev/null 2>&1) &
+    # Удаляем conf.d блок из nginx
+    nginx_remove_block "beszel"
+
+    # Перезапускаем или удаляем nginx
+    if nginx_has_users; then
+        (nginx_reload) &
         show_spinner "Перезапуск nginx"
+    else
+        (nginx_teardown) &
+        show_spinner "Удаление nginx"
     fi
 
     rm -rf "${DIR_BESZEL}"

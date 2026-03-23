@@ -58,7 +58,7 @@ obtain_cert_for_domain() {
     else
         (
             cd "$panel_dir"
-            docker compose stop remnawave-nginx >/dev/null 2>&1
+            cd "${DIR_NGINX}" && docker compose stop nginx >/dev/null 2>&1
         ) &
         show_spinner "Остановка nginx"
 
@@ -92,7 +92,7 @@ obtain_cert_for_domain() {
         echo
         (
             cd "$panel_dir"
-            docker compose start remnawave-nginx >/dev/null 2>&1
+            cd "${DIR_NGINX}" && docker compose start nginx >/dev/null 2>&1
         ) &
         show_spinner "Запуск nginx"
         echo
@@ -101,7 +101,7 @@ obtain_cert_for_domain() {
 
     print_success "SSL-сертификат получен"
 
-    local _deploy_hook='for d in /opt/remnawave /opt/remnanode; do [ -f "$d/docker-compose.yml" ] && cd "$d" && docker compose restart remnawave-nginx 2>/dev/null; done'
+    local _deploy_hook='cd /opt/nginx 2>/dev/null && docker compose restart nginx 2>/dev/null'
     local cron_rule
     if [ "$cert_method" != "1" ]; then
         # ACME (standalone) — нужно открывать/закрывать порт 80
@@ -139,7 +139,7 @@ change_panel_domain() {
     fi
 
     local current_domain
-    current_domain=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | head -1)
+    current_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
     echo -e "${WHITE}Текущий домен панели:${NC} ${YELLOW}${current_domain}${NC}"
     echo
 
@@ -172,19 +172,19 @@ change_panel_domain() {
     fi
 
     local old_cert_domain
-    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' "${panel_dir}/nginx.conf" | head -1)
+    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/letsencrypt/live/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
 
     local boundary
-    boundary=$(grep -nP '^\s*server_name\s' "${panel_dir}/nginx.conf" | sed -n '2p' | cut -d: -f1)
+    boundary=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
 
     if [ -n "$old_cert_domain" ] && [ "$old_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$boundary" ]; then
-            sed -i "1,${boundary}s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${panel_dir}/nginx.conf"
+            sed -i "1,${boundary}s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         else
-            sed -i "s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${panel_dir}/nginx.conf"
+            sed -i "s|/etc/letsencrypt/live/${old_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
-    sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${panel_dir}/nginx.conf"
+    sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
     
     (sleep 0.3) &
     show_spinner "Обновление nginx.conf"
@@ -211,14 +211,14 @@ change_panel_domain() {
         NEW_COOKIE_NAME=$(generate_cookie_key)
         NEW_COOKIE_VALUE=$(generate_cookie_key)
         
-        sed -i "s|~\*${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}|~*${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}|g" "${panel_dir}/nginx.conf"
-        sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${panel_dir}/nginx.conf"
-        sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${panel_dir}/nginx.conf"
-        sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${panel_dir}/nginx.conf"
+        sed -i "s|~\*${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}|~*${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}|g" "${DIR_NGINX}nginx.conf"
+        sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${DIR_NGINX}nginx.conf"
+        sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${DIR_NGINX}nginx.conf"
+        sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${DIR_NGINX}nginx.conf"
         
         (
             cd "$panel_dir"
-            docker compose restart remnawave-nginx >/dev/null 2>&1
+            cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
         ) &
         show_spinner "Обновление cookie доступа"
     fi
@@ -257,7 +257,7 @@ change_sub_domain() {
     local current_sub_domain
     current_sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
     if [ -z "$current_sub_domain" ]; then
-        current_sub_domain=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | sed -n '2p')
+        current_sub_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sed -n '2p')
     fi
     echo -e "${WHITE}Текущий домен подписки:${NC} ${YELLOW}${current_sub_domain}${NC}"
     echo
@@ -290,20 +290,20 @@ change_sub_domain() {
     fi
 
     local old_sub_cert_domain
-    old_sub_cert_domain=$(grep -A5 "server_name.*${current_sub_domain}" "${panel_dir}/nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
+    old_sub_cert_domain=$(grep -A5 "server_name.*${current_sub_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
 
     local start_line end_line
-    start_line=$(grep -nP '^\s*server_name\s' "${panel_dir}/nginx.conf" | sed -n '2p' | cut -d: -f1)
-    end_line=$(grep -nP '^\s*server_name\s' "${panel_dir}/nginx.conf" | sed -n '3p' | cut -d: -f1)
+    start_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
+    end_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '3p' | cut -d: -f1)
 
     if [ -n "$old_sub_cert_domain" ] && [ "$old_sub_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$start_line" ] && [ -n "$end_line" ]; then
-            sed -i "${start_line},${end_line}s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${panel_dir}/nginx.conf"
+            sed -i "${start_line},${end_line}s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         elif [ -n "$start_line" ]; then
-            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${panel_dir}/nginx.conf"
+            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_sub_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
-    sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${panel_dir}/nginx.conf"
+    sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
     
     (sleep 0.3) &
     show_spinner "Обновление nginx.conf"
@@ -345,7 +345,7 @@ change_node_domain() {
     fi
 
     local current_node_domain
-    current_node_domain=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | grep -v '^_$' | sed -n '3p')
+    current_node_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | grep -v '^_$' | sed -n '3p')
 
     if [ -z "$current_node_domain" ]; then
         echo -e "${YELLOW}⚠️  Нода не обнаружена в конфигурации nginx.${NC}"
@@ -388,17 +388,17 @@ change_node_domain() {
     fi
 
     local old_node_cert_domain
-    old_node_cert_domain=$(grep -A5 "server_name.*${current_node_domain}" "${panel_dir}/nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
+    old_node_cert_domain=$(grep -A5 "server_name.*${current_node_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/letsencrypt/live/\K[^/]+' | head -1)
 
     local start_line
-    start_line=$(grep -n "server_name" "${panel_dir}/nginx.conf" | grep -v '_' | sed -n '3p' | cut -d: -f1)
+    start_line=$(grep -n "server_name" "${DIR_NGINX}nginx.conf" | grep -v '_' | sed -n '3p' | cut -d: -f1)
 
     if [ -n "$old_node_cert_domain" ] && [ "$old_node_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$start_line" ]; then
-            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_node_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${panel_dir}/nginx.conf"
+            sed -i "${start_line},\$s|/etc/letsencrypt/live/${old_node_cert_domain}/|/etc/letsencrypt/live/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
         fi
     fi
-    sed -i "s|server_name ${current_node_domain}|server_name ${new_domain}|g" "${panel_dir}/nginx.conf"
+    sed -i "s|server_name ${current_node_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
     
     (sleep 0.3) &
     show_spinner "Обновление nginx.conf"
@@ -442,14 +442,14 @@ manage_domains() {
     fi
 
     local current_panel
-    current_panel=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | head -1)
+    current_panel=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
     local current_sub
     current_sub=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
     if [ -z "$current_sub" ]; then
-        current_sub=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | sed -n '2p')
+        current_sub=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sed -n '2p')
     fi
     local current_node
-    current_node=$(grep -oP 'server_name\s+\K[^;]+' "${panel_dir}/nginx.conf" | grep -v '^_$' | sed -n '3p')
+    current_node=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | grep -v '^_$' | sed -n '3p')
 
     echo -e "${WHITE}Домен панели:${NC}   ${YELLOW}${current_panel:-не задан}${NC}"
     echo -e "${WHITE}Домен подписки:${NC} ${YELLOW}${current_sub:-не задан}${NC}"

@@ -41,7 +41,7 @@ generate_cookie_key() {
 
 get_cookie_from_nginx() {
     # Извлекаем COOKIE_NAME и COOKIE_VALUE из nginx.conf
-    local nginx_conf="/opt/remnawave/nginx.conf"
+    local nginx_conf="${DIR_NGINX}nginx.conf"
     if [ ! -f "$nginx_conf" ]; then
         return 1
     fi
