@@ -44,12 +44,17 @@ cleanup_old_aliases() {
 
 # Тихая самоочистка если ничего не установлено
 cleanup_uninstalled() {
-    # Удаляем скрипт и симлинки только если ни панель, ни нода, ни страница подписки не установлены
-    if [ ! -f "${DIR_PANEL}docker-compose.yml" ] && \
-       [ ! -f "${DIR_NODE}docker-compose.yml" ] && \
-       [ ! -f "/opt/remnasubpage/docker-compose.yml" ] && \
-       [ ! -f "/opt/subscribe-page/docker-compose.yml" ] && \
-       ! grep -q 'container_name: remnanode' "${DIR_PANEL}docker-compose.yml" 2>/dev/null; then
+    # Удаляем скрипт и симлинки только если ни одно из приложений не установлено
+    local _any=false
+    [ -f "${DIR_PANEL}docker-compose.yml" ]                      && _any=true
+    [ -f "${DIR_NODE}docker-compose.yml" ]                       && _any=true
+    [ -f "/opt/remnasubpage/docker-compose.yml" ]                && _any=true
+    [ -f "/opt/subscribe-page/docker-compose.yml" ]             && _any=true
+    [ -f "/opt/beszel/docker-compose.yml" ]                      && _any=true
+    [ -f "/opt/beszel-agent/docker-compose.yml" ]               && _any=true
+    [ -f "/opt/MTProto/docker-compose.yml" ]                     && _any=true
+    [ -d "/opt/MTProto" ] && ls /opt/MTProto/*.conf 2>/dev/null | grep -q . && _any=true
+    if [ "$_any" = false ]; then
         rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
         rm -rf "${DIR_SCRIPT}" 2>/dev/null || true
     fi

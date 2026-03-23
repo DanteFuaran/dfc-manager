@@ -90,8 +90,8 @@ check_domain() {
 
     if [ -z "$domain_ip" ]; then
         echo
-        echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} не соответствует IP вашего сервера ${YELLOW}$server_ip${NC}"
-        echo -e "${RED}❗Убедитесь что DNS записи настроены правильно.${NC}"
+        echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} не найден в DNS${NC}"
+        echo -e "${RED}❗ Убедитесь что A-запись домена настроена и DNS успел обновиться.${NC}"
         return 1
     fi
 
@@ -150,8 +150,8 @@ check_domain() {
     
     if [ "$ip_match" = false ]; then
         echo
-        echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} не соответствует IP вашего сервера ${YELLOW}$server_ip${NC}"
-        echo -e "${RED}⚠️ Убедитесь что DNS записи настроены правильно.${NC}"
+        echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} указывает на ${YELLOW}${domain_ip}${RED}, а не на IP сервера ${YELLOW}${server_ip}${NC}"
+        echo -e "${RED}⚠️ Проверьте A-запись домена или нажмите S чтобы пропустить проверку.${NC}"
         return 1
     fi
     
@@ -164,6 +164,8 @@ prompt_ip_with_retry() {
 
     while true; do
         reading_inline "$prompt_text" "$var_name"
+        local _rc=$?
+        [ $_rc -eq 2 ] && return 1
 
         if echo "${!var_name}" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
             return 0
@@ -171,16 +173,19 @@ prompt_ip_with_retry() {
 
         print_error "Некорректный IP адрес"
         echo
-        echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить     ${BLUE}Esc${DARKGRAY}: Назад${NC}"
 
+        tput civis 2>/dev/null || true
         local key
         while true; do
             read -s -n 1 key
             if [[ "$key" == $'\x1b' ]]; then
+                tput cnorm 2>/dev/null || true
                 echo
                 return 1
             elif [[ "$key" == "" ]]; then
+                tput cnorm 2>/dev/null || true
                 local lines_up=5
                 for ((l=0; l<lines_up; l++)); do
                     tput cuu1 2>/dev/null
@@ -203,12 +208,16 @@ prompt_domain_with_retry() {
         if [ "$first" = true ]; then
             if [ "$use_inline" = true ]; then
                 reading_inline "$prompt_text" "$var_name"
+                local _rc=$?
+                [ $_rc -eq 2 ] && return 1
             else
                 reading "$prompt_text" "$var_name"
             fi
             first=false
         else
             reading_inline "$prompt_text" "$var_name"
+            local _rc=$?
+            [ $_rc -eq 2 ] && return 1
         fi
 
         local check_ip_flag=true
@@ -218,17 +227,28 @@ prompt_domain_with_retry() {
         fi
 
         echo
-        echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-        echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить     ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
 
+        tput civis 2>/dev/null || true
         local key
         while true; do
             read -s -n 1 key
             if [[ "$key" == $'\x1b' ]]; then
+                tput cnorm 2>/dev/null || true
                 echo
                 return 1
+            elif [[ "$key" == "s" || "$key" == "S" ]]; then
+                tput cnorm 2>/dev/null || true
+                echo
+                local skip_lines=7
+                for ((l=0; l<skip_lines; l++)); do
+                    tput cuu1 2>/dev/null
+                    tput el 2>/dev/null
+                done
+                return 0
             elif [[ "$key" == "" ]]; then
-                # Очищаем всё после ввода домена и показываем промпт заново
+                tput cnorm 2>/dev/null || true
                 local lines_up=7
                 for ((l=0; l<lines_up; l++)); do
                     tput cuu1 2>/dev/null
