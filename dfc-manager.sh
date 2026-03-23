@@ -118,10 +118,11 @@ if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
     exec /usr/local/bin/dfc-manager
 fi
 
-# ─── Подготовка к запуску — спиннер только при первой проверке обновлений ─────
+# ─── Подготовка к запуску — спиннер единожды, минимум 1 сек ──────────────────
 if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
     export DFC_AUTO_UPDATED=1
     _UPDATE_FLAG="/tmp/.dfc_upd_$$"
+    export _START_TIME=$(date +%s)
     (
         _api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
         _remote_sha=$(curl -sL --max-time 5 -H "Cache-Control: no-cache" \
@@ -137,6 +138,9 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
             touch "$_UPDATE_FLAG"
         fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || true
+        # Гарантируем минимум 1 сек на экране
+        _ELAPSED=$(($(date +%s) - _START_TIME))
+        [ $_ELAPSED -lt 1 ] && sleep $((1 - _ELAPSED))
     ) &
     show_spinner_prepare "Подготовка скрипта к запуску"
 
@@ -144,7 +148,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
         rm -f "$_UPDATE_FLAG"
         exec /usr/local/bin/dfc-manager
     fi
-    unset _UPDATE_FLAG
+    unset _UPDATE_FLAG _START_TIME
 fi
 
 main_menu
