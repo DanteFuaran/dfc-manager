@@ -537,8 +537,10 @@ SUBPAGE_COMPOSE
 # ─── Nginx: Главный конфиг — объединённый (заменяет /etc/nginx/nginx.conf) ───
 # Общая http-обёртка, используемая всеми вариантами nginx.conf.
 # Вызывается из generate_nginx_conf_full / generate_nginx_conf_panel / generate_nginx_conf_node.
+# Сохраняет внешние server-блоки (Beszel и др.) перед перезаписью файла.
 _nginx_http_header() {
-    cat <<'NGINX_HTTP_HEAD'
+    _nginx_extract_external_blocks
+    cat > "${DIR_NGINX}nginx.conf" <<'NGINX_HTTP_HEAD'
 user  nginx;
 worker_processes  auto;
 
@@ -587,7 +589,7 @@ generate_nginx_conf_full() {
     local cookie_value=$8
 
     # http-обёртка
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -834,7 +836,7 @@ generate_nginx_conf_panel() {
     local cookie_value=$6
 
     # http-обёртка
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -985,7 +987,7 @@ generate_nginx_conf_node() {
     [ -d "${DIR_NGINX}/nginx.conf" ] && rm -rf "${DIR_NGINX}/nginx.conf"
 
     # http-обёртка
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -1292,7 +1294,7 @@ generate_nginx_conf_panel_only() {
     local cookie_value=$4
 
     # http-обёртка
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -1588,7 +1590,7 @@ generate_nginx_conf_panel_with_node() {
     local cookie_name=$5
     local cookie_value=$6
 
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -1861,7 +1863,7 @@ generate_nginx_conf_subpage() {
     local sub_cert=$2
     local target_dir=$3
 
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
@@ -1951,7 +1953,7 @@ generate_nginx_conf_node_with_subpage() {
 
     [ -d "${DIR_NGINX}/nginx.conf" ] && rm -rf "${DIR_NGINX}/nginx.conf"
 
-    _nginx_http_header > "${DIR_NGINX}nginx.conf"
+    _nginx_http_header
 
     cat >> "${DIR_NGINX}nginx.conf" <<EOL
 server_names_hash_bucket_size 64;
