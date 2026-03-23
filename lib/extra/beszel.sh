@@ -121,8 +121,8 @@ install_beszel() {
                 CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
                 ;;
             2) # Самоподписанный
-                local SELF_SIGNED_DIR="${DIR_BESZEL}ssl"
-                mkdir -p "$SELF_SIGNED_DIR"
+                local SELF_SIGNED_DIR
+                SELF_SIGNED_DIR=$(mktemp -d)
                 (
                     openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
                         -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
@@ -151,6 +151,8 @@ install_beszel() {
         cp -f "$CERT_HOST_KEY" "${DIR_NGINX}ssl/${CERT_DOMAIN}/privkey.pem"
         NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
         NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+        # Удаляем временную директорию сертификата
+        rm -rf "${SELF_SIGNED_DIR:-}" 2>/dev/null || true
     fi
 
     # ─── Определяем listen-режим до запуска ensure_nginx ───
@@ -203,14 +205,18 @@ services:
     ports:
       - "127.0.0.1:8090:8090"
     volumes:
-      - ./beszel_data:/beszel_data
-      - ./beszel_socket:/beszel_socket
+      - beszel-data:/beszel_data
+      - beszel-socket:/beszel_socket
     healthcheck:
       test: ["CMD", "/beszel", "health", "--url", "http://127.0.0.1:8090"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  beszel-data:
+  beszel-socket:
 YAML
         ensure_nginx
         if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
@@ -352,7 +358,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./beszel_agent_data:/var/lib/beszel-agent
+      - beszel-agent-data:/var/lib/beszel-agent
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       LISTEN: "${BESZEL_AGENT_PORT}"
@@ -365,10 +371,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-YAML
 
-    # Сохраняем порт для удаления
-    echo "$BESZEL_AGENT_PORT" > "${DIR_BESZEL_AGENT}port"
+volumes:
+  beszel-agent-data:
+YAML
 
     # Открываем порт агента в UFW
     ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
@@ -401,7 +407,7 @@ uninstall_beszel_agent() {
 
     echo
     local AGENT_PORT_STORED
-    AGENT_PORT_STORED=$(cat "${DIR_BESZEL_AGENT}port" 2>/dev/null)
+    AGENT_PORT_STORED=$(grep 'LISTEN:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
 
     (
         cd "${DIR_BESZEL_AGENT}" 2>/dev/null

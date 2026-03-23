@@ -121,27 +121,26 @@ fi
 # Авто-обновление при каждом запуске (однократно на сессию)
 if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
     export DFC_AUTO_UPDATED=1
-    _remote_ver=$(get_remote_version 2>/dev/null) || true
-    if [ -n "$_remote_ver" ]; then
-        _local_num=$(echo "$SCRIPT_VERSION" | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
-        _remote_num=$(echo "$_remote_ver"   | awk -F. '{printf "%03d%03d%03d",$1,$2,$3}')
-        if [ "$_remote_num" -gt "$_local_num" ] 2>/dev/null; then
-            (
-                rm -rf "${DIR_SCRIPT}"
-                git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
-                    "${DIR_SCRIPT%/}" >/dev/null 2>&1
-                chmod +x "${DIR_SCRIPT}dfc-manager.sh"
-                ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
-                ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
-            ) &
-            show_spinner "Обновление скрипта"
-            if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
-                printf "\r\033[K"
-                exec /usr/local/bin/dfc-manager
-            fi
+    _api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
+    _remote_sha=$(curl -sL --max-time 5 -H "Cache-Control: no-cache" \
+        "https://api.github.com/repos/${_api_repo}/commits/${SCRIPT_BRANCH}" 2>/dev/null \
+        | grep -m1 '"sha"' | cut -d'"' -f4 2>/dev/null || true)
+    _local_sha=$(git -C "${DIR_SCRIPT%/}" rev-parse HEAD 2>/dev/null || true)
+    if [ -n "$_remote_sha" ] && [ -n "$_local_sha" ] && [ "$_remote_sha" != "$_local_sha" ]; then
+        (
+            git -C "${DIR_SCRIPT%/}" fetch --depth=1 origin "${SCRIPT_BRANCH}" >/dev/null 2>&1
+            git -C "${DIR_SCRIPT%/}" reset --hard FETCH_HEAD >/dev/null 2>&1
+            chmod +x "${DIR_SCRIPT}dfc-manager.sh"
+            ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
+            ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+        ) &
+        show_spinner "Обновление скрипта"
+        if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
+            printf "\r\033[K"
+            exec /usr/local/bin/dfc-manager
         fi
     fi
-    unset _remote_ver _local_num _remote_num
+    unset _api_repo _remote_sha _local_sha
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || true
 fi
 
