@@ -81,7 +81,7 @@ installation_node() {
 
     if [ "$is_local_panel" = true ]; then
         installation_node_local
-    elif [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
+    elif [ -f "/opt/remnasubpage/docker-compose.yml" ] || [ -f "/opt/subscribe-page/docker-compose.yml" ]; then
         installation_node_with_existing_subpage
     else
         installation_node_remote
@@ -737,7 +737,7 @@ EOL
 
 # ─── Установка ноды на сервер с уже установленной страницей подписки ───
 installation_node_with_existing_subpage() {
-    local SUBPAGE_DIR="/opt/remnasubpage"
+    local SUBPAGE_DIR="${DIR_SUB%/}"
     local NODE_INSTALL_DIR="/opt/remnanode"
 
     cd /opt 2>/dev/null || true

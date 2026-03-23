@@ -6,16 +6,14 @@
 # Beszel и др.) используют общий nginx-контейнер.
 #
 # Структура:
-#   /opt/nginx/docker-compose.yml   — фиксированный compose
-#   /opt/nginx/nginx.conf           — основной конфиг (полный или минимальный)
-#   /opt/nginx/conf.d/              — блоки сторонних сервисов (beszel.conf и т.д.)
-#   /opt/nginx/ssl/                 — самоподписанные сертификаты
+#   /opt/nginx/docker-compose.yml      — фиксированный compose
+#   /opt/nginx/nginx.conf              — основной конфиг (полный или минимальный)
+#   /opt/nginx/blocks/                 — сохранённые server-блоки (beszel и др.)
+#   /opt/nginx/conf.d/                 — legacy conf.d (для совместимости)
+#   /opt/nginx/ssl/                    — самоподписанные сертификаты
 #
-# Сертификаты Let's Encrypt монтируются целиком: /etc/letsencrypt → /etc/letsencrypt
-# Самоподписанные: /opt/nginx/ssl/ → /etc/nginx/ssl/
-#
-# В nginx.conf:  include /etc/nginx/conf.d/*.conf;
-# — автоматически подхватывает блоки из conf.d/
+# Server-блоки Beszel и сторонних сервисов хранятся в /opt/nginx/blocks/
+# и автоматически вставляются в nginx.conf при каждой генерации/перезагрузке.
 
 DIR_NGINX="/opt/nginx/"
 
@@ -24,7 +22,7 @@ ensure_nginx() {
     if [ -f "${DIR_NGINX}docker-compose.yml" ]; then
         return 0
     fi
-    mkdir -p "${DIR_NGINX}" "${DIR_NGINX}conf.d" "${DIR_NGINX}ssl"
+    mkdir -p "${DIR_NGINX}" "${DIR_NGINX}conf.d" "${DIR_NGINX}ssl" "${DIR_NGINX}blocks"
     cat > "${DIR_NGINX}docker-compose.yml" <<'COMPOSE'
 services:
   nginx:
@@ -74,7 +72,7 @@ COMPOSE
 # ─── Генерирует минимальный nginx.conf (без Remnawave) ───
 # Используется когда установлены только сторонние сервисы (Beszel и т.д.)
 nginx_generate_minimal_conf() {
-    mkdir -p "${DIR_NGINX}conf.d"
+    mkdir -p "${DIR_NGINX}conf.d" "${DIR_NGINX}blocks"
     cat > "${DIR_NGINX}nginx.conf" <<'NGINX'
 user  nginx;
 worker_processes  auto;
@@ -111,6 +109,8 @@ http {
 
 } # ─── end http ───
 NGINX
+    # Restore saved server blocks (e.g. Beszel) into new minimal conf
+    nginx_restore_server_blocks
 }
 
 # ─── Копирует сертификат из letsencrypt в /opt/nginx/ssl/{domain}/ ───
@@ -125,8 +125,71 @@ nginx_copy_cert() {
     cp -fL "${src}/privkey.pem"   "${dst}/privkey.pem"
 }
 
-# ─── Добавляет файл server-блока в conf.d ───
-# Использование: nginx_add_block "beszel" "$block_content"
+# ─── Вставляет server-блок перед '} # ─── end http ───' в nginx.conf ───
+_nginx_insert_server_block() {
+    local conf_file="$1"
+    local name="$2"
+    local content="$3"
+    local tmp="${conf_file}.tmp"
+    local block_file
+    block_file=$(mktemp)
+    printf '# BEGIN_%s_BLOCK\n%s\n# END_%s_BLOCK\n' "$name" "$content" "$name" > "$block_file"
+    awk -v blockfile="$block_file" '
+        /^} # ─── end http ───/ {
+            while ((getline line < blockfile) > 0) print line
+            close(blockfile)
+        }
+        { print }
+    ' "$conf_file" > "$tmp" && mv "$tmp" "$conf_file"
+    rm -f "$block_file"
+}
+
+# ─── Добавляет server-блок в nginx.conf и сохраняет в blocks/ для восстановления ───
+# Использование: nginx_add_server_block "BESZEL" "$block_content"
+nginx_add_server_block() {
+    local name="${1^^}"
+    local content="$2"
+    mkdir -p "${DIR_NGINX}blocks"
+    # Сохраняем блок для последующего восстановления после перегенерации nginx.conf
+    printf '%s\n' "$content" > "${DIR_NGINX}blocks/${name}.block"
+    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
+        nginx_generate_minimal_conf
+        return
+    fi
+    # Если блок уже вставлен — удаляем и вставляем заново (обновление)
+    if grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        sed -i "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf"
+    fi
+    _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "$content"
+}
+
+# ─── Удаляет server-блок из nginx.conf и удаляет файл из blocks/ ───
+nginx_remove_server_block() {
+    local name="${1^^}"
+    rm -f "${DIR_NGINX}blocks/${name}.block"
+    if [ -f "${DIR_NGINX}nginx.conf" ]; then
+        sed -i "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf"
+    fi
+}
+
+# ─── Восстанавливает SERVER-блоки из blocks/ в nginx.conf если они там отсутствуют ───
+# Вызывается после перегенерации nginx.conf чтобы не потерять Beszel и др.
+nginx_restore_server_blocks() {
+    local blocks_dir="${DIR_NGINX}blocks"
+    [ -d "$blocks_dir" ] || return 0
+    [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+    local block_file name content
+    for block_file in "${blocks_dir}/"*.block; do
+        [ -f "$block_file" ] || continue
+        name=$(basename "$block_file" .block | tr '[:lower:]' '[:upper:]')
+        if ! grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+            content=$(cat "$block_file")
+            _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "$content"
+        fi
+    done
+}
+
+# ─── Добавляет файл server-блока в conf.d (legacy, для совместимости) ───
 nginx_add_block() {
     local name="$1"
     local content="$2"
@@ -134,7 +197,7 @@ nginx_add_block() {
     echo "$content" > "${DIR_NGINX}conf.d/${name}.conf"
 }
 
-# ─── Удаляет файл server-блока из conf.d ───
+# ─── Удаляет файл server-блока из conf.d (legacy) ───
 nginx_remove_block() {
     local name="$1"
     rm -f "${DIR_NGINX}conf.d/${name}.conf"
@@ -147,9 +210,14 @@ nginx_has_users() {
         return 0
     fi
     # Standalone страница подписки
+    [ -f "/opt/subscribe-page/docker-compose.yml" ] && return 0
     [ -f "/opt/remnasubpage/docker-compose.yml" ] && return 0
-    # Standalone-компоненты через conf.d
+    # Сохранённые server-блоки (Beszel и др.)
     local f
+    for f in "${DIR_NGINX}blocks/"*.block; do
+        [ -f "$f" ] && return 0
+    done
+    # Legacy conf.d
     for f in "${DIR_NGINX}conf.d/"*.conf; do
         [ -f "$f" ] && return 0
     done
@@ -161,6 +229,8 @@ nginx_reload() {
     if ! [ -f "${DIR_NGINX}docker-compose.yml" ]; then
         return 1
     fi
+    # Restore any server blocks that may have been wiped by nginx.conf regeneration
+    [ -f "${DIR_NGINX}nginx.conf" ] && nginx_restore_server_blocks
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "remnawave-nginx"; then
         (cd "${DIR_NGINX}" && docker compose down nginx >/dev/null 2>&1; docker compose up -d nginx >/dev/null 2>&1)
     else
@@ -190,16 +260,23 @@ _strip_nginx_from_compose() {
 
 # ─── Проверяет, нужен ли nginx.conf пересоздать как минимальный ───
 # Вызывается после удаления компонента Remnawave.
-# Если остались только conf.d-блоки — заменяет nginx.conf на минимальный.
+# Если остались только блоки (Beszel и др.) — заменяет nginx.conf на минимальный.
 nginx_ensure_conf_for_remaining() {
-    if ! is_panel_installed && ! is_node_installed && ! [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
-        # Remnawave удалён, но возможно остались conf.d-блоки
+    if ! is_panel_installed && ! is_node_installed && \
+       ! [ -f "/opt/subscribe-page/docker-compose.yml" ] && \
+       ! [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
+        # Remnawave удалён, проверяем наличие сохранённых блоков или conf.d
         local f has_blocks=false
-        for f in "${DIR_NGINX}conf.d/"*.conf; do
+        for f in "${DIR_NGINX}blocks/"*.block; do
             [ -f "$f" ] && { has_blocks=true; break; }
         done
+        if ! $has_blocks; then
+            for f in "${DIR_NGINX}conf.d/"*.conf; do
+                [ -f "$f" ] && { has_blocks=true; break; }
+            done
+        fi
         if $has_blocks; then
-            nginx_generate_minimal_conf
+            nginx_generate_minimal_conf  # also calls nginx_restore_server_blocks
             nginx_reload
         else
             nginx_teardown
@@ -208,15 +285,20 @@ nginx_ensure_conf_for_remaining() {
 }
 
 # ─── Удаляет сертификаты из /opt/nginx/ssl/ которые больше не используются ───
-# Проверяет ссылки в nginx.conf и conf.d/ — если домен не упоминается, удаляет его.
+# Проверяет ссылки в nginx.conf (включая вставленные server-блоки) — если домен
+# не упоминается, удаляет его.
 nginx_cleanup_unused_certs() {
     [ -d "${DIR_NGINX}ssl" ] || return 0
     local d dn
     for d in "${DIR_NGINX}ssl/"*/; do
         [ -d "$d" ] || continue
         dn=$(basename "$d")
-        # Все ещё используется в nginx.conf?
+        # Используется в nginx.conf (включая вставленные server-блоки)?
         if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q "/ssl/${dn}/" "${DIR_NGINX}nginx.conf"; then
+            continue
+        fi
+        # Используется в blocks/?
+        if grep -rq "/ssl/${dn}/" "${DIR_NGINX}blocks/" 2>/dev/null; then
             continue
         fi
         # Используется в conf.d/?

@@ -136,7 +136,9 @@ generate_docker_compose_full() {
         network_exists=true
     fi
 
-    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
+    # ─── Панель (/opt/remnawave/docker-compose.yml) ───
+    mkdir -p "/opt/remnawave"
+    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_PANEL'
 services:
   remnawave-db:
     image: postgres:18.1
@@ -233,95 +235,42 @@ services:
         max-size: '30m'
         max-file: '5'
 
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    network_mode: host
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-COMPOSE_HEAD
+COMPOSE_PANEL
 
-    # Монтируем сертификаты для каждого домена
-    for cert in "$panel_cert_domain" "$sub_cert_domain" "$node_cert_domain"; do
-        cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_CERT
-      - /etc/letsencrypt/live/$cert/fullchain.pem:/etc/nginx/ssl/$cert/fullchain.pem:ro
-      - /etc/letsencrypt/live/$cert/privkey.pem:/etc/nginx/ssl/$cert/privkey.pem:ro
-COMPOSE_CERT
-    done
+    if [ "$network_exists" = true ]; then
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXT'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    external: true
 
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-COMPOSE_TAIL
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_COMMAND'
-    command: >
-      sh -c '
-        rm -f /dev/shm/nginx.sock &&
-        CONF=/etc/nginx/nginx.conf &&
-        if ! nginx -t -c "$$CONF" 2>/dev/null; then
-          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
-          CONF=/tmp/nginx_nosub.conf &&
-          touch /dev/shm/.sub_disabled;
-        else
-          rm -f /dev/shm/.sub_disabled;
-        fi &&
-        exec nginx -c "$$CONF" -g "daemon off;"
-      '
-COMPOSE_COMMAND
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
-    healthcheck:
-      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      - remnawave
-      - remnawave-subscription-page
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
+COMPOSE_NETWORK_EXT
+    else
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+    external: false
 
-  remnawave-subscription-page:
-    image: remnawave/subscription-page:latest
-    container_name: remnawave-subscription-page
-    hostname: remnawave-subscription-page
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    depends_on:
-      remnawave:
-        condition: service_healthy
-    environment:
-      - REMNAWAVE_PANEL_URL=http://remnawave:3000
-      - APP_PORT=3010
-      - REMNAWAVE_API_TOKEN
-    ports:
-      - '127.0.0.1:3010:3010'
-    networks:
-      - remnawave-network
-    healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
+COMPOSE_NETWORK_NEW
+    fi
 
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
+volumes:
+  remnawave-db-data:
+    driver: local
+    external: false
+    name: remnawave-db-data
+COMPOSE_VOLUMES
+
+    # ─── Нода (/opt/remnanode/docker-compose.yml) ───
+    mkdir -p "/opt/remnanode"
+    cat > /opt/remnanode/docker-compose.yml <<'NODE_COMPOSE'
+services:
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
@@ -348,41 +297,54 @@ COMPOSE_COMMAND
       options:
         max-size: '30m'
         max-file: '5'
+NODE_COMPOSE
 
-COMPOSE_TAIL
+    # ─── Страница подписки (/opt/subscribe-page/docker-compose.yml) ───
+    mkdir -p "/opt/subscribe-page"
+    cat > /opt/subscribe-page/docker-compose.yml <<'SUBPAGE_COMPOSE'
+services:
+  remnawave-subscription-page:
+    image: remnawave/subscription-page:latest
+    container_name: remnawave-subscription-page
+    hostname: remnawave-subscription-page
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    env_file:
+      - .env
+    environment:
+      - REMNAWAVE_PANEL_URL=http://remnawave:3000
+      - APP_PORT=3010
+    ports:
+      - '127.0.0.1:3010:3010'
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
 
-    if [ "$network_exists" = true ]; then
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXTERNAL'
 networks:
   remnawave-network:
     name: remnawave-network
     external: true
+SUBPAGE_COMPOSE
 
-COMPOSE_NETWORK_EXTERNAL
-    else
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
-networks:
-  remnawave-network:
-    name: remnawave-network
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/16
-    external: false
-
-COMPOSE_NETWORK_NEW
+    if [ ! -f /opt/subscribe-page/.env ]; then
+        echo "REMNAWAVE_API_TOKEN=" > /opt/subscribe-page/.env
+        chmod 600 /opt/subscribe-page/.env 2>/dev/null
     fi
 
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
-volumes:
-  remnawave-db-data:
-    driver: local
-    external: false
-    name: remnawave-db-data
-COMPOSE_VOLUMES
-
     ensure_nginx
-    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
 }
 
 # ─── Docker-Compose: Только Панель ───
@@ -396,7 +358,9 @@ generate_docker_compose_panel() {
         network_exists=true
     fi
 
-    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
+    # ─── Панель (/opt/remnawave/docker-compose.yml) ───
+    mkdir -p "/opt/remnawave"
+    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_PANEL'
 services:
   remnawave-db:
     image: postgres:18.1
@@ -493,63 +457,39 @@ services:
         max-size: '30m'
         max-file: '5'
 
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-COMPOSE_HEAD
+COMPOSE_PANEL
 
-    # Монтируем сертификаты для каждого домена
-    for cert in "$panel_cert_domain" "$sub_cert_domain"; do
-        cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_CERT
-      - /etc/letsencrypt/live/$cert/fullchain.pem:/etc/nginx/ssl/$cert/fullchain.pem:ro
-      - /etc/letsencrypt/live/$cert/privkey.pem:/etc/nginx/ssl/$cert/privkey.pem:ro
-COMPOSE_CERT
-    done
+    if [ "$network_exists" = true ]; then
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXT'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    external: true
 
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-COMPOSE_TAIL
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_COMMAND'
-    command: >
-      sh -c '
-        rm -f /dev/shm/nginx.sock &&
-        CONF=/etc/nginx/nginx.conf &&
-        if ! nginx -t -c "$$CONF" 2>/dev/null; then
-          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
-          CONF=/tmp/nginx_nosub.conf &&
-          touch /dev/shm/.sub_disabled;
-        else
-          rm -f /dev/shm/.sub_disabled;
-        fi &&
-        exec nginx -c "$$CONF" -g "daemon off;"
-      '
-COMPOSE_COMMAND
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
-    network_mode: host
-    healthcheck:
-      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      - remnawave
-      - remnawave-subscription-page
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
+COMPOSE_NETWORK_EXT
+    else
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    driver: bridge
+    external: false
 
+COMPOSE_NETWORK_NEW
+    fi
+
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
+volumes:
+  remnawave-db-data:
+    driver: local
+    external: false
+    name: remnawave-db-data
+COMPOSE_VOLUMES
+
+    # ─── Страница подписки (/opt/subscribe-page/docker-compose.yml) ───
+    mkdir -p "/opt/subscribe-page"
+    cat > /opt/subscribe-page/docker-compose.yml <<'SUBPAGE_COMPOSE'
+services:
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
@@ -559,13 +499,11 @@ COMPOSE_COMMAND
       nofile:
         soft: 1048576
         hard: 1048576
-    depends_on:
-      remnawave:
-        condition: service_healthy
+    env_file:
+      - .env
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
-      - REMNAWAVE_API_TOKEN
     ports:
       - '127.0.0.1:3010:3010'
     networks:
@@ -582,38 +520,18 @@ COMPOSE_COMMAND
         max-size: '30m'
         max-file: '5'
 
-COMPOSE_TAIL
-
-    # Добавляем networks секцию в зависимости от существования сети
-    if [ "$network_exists" = true ]; then
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXTERNAL'
 networks:
   remnawave-network:
     name: remnawave-network
     external: true
+SUBPAGE_COMPOSE
 
-COMPOSE_NETWORK_EXTERNAL
-    else
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
-networks:
-  remnawave-network:
-    name: remnawave-network
-    driver: bridge
-    external: false
-
-COMPOSE_NETWORK_NEW
+    if [ ! -f /opt/subscribe-page/.env ]; then
+        echo "REMNAWAVE_API_TOKEN=" > /opt/subscribe-page/.env
+        chmod 600 /opt/subscribe-page/.env 2>/dev/null
     fi
 
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
-volumes:
-  remnawave-db-data:
-    driver: local
-
     ensure_nginx
-    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
-    external: false
-    name: remnawave-db-data
-COMPOSE_VOLUMES
 }
 
 # ─── Nginx: Главный конфиг — объединённый (заменяет /etc/nginx/nginx.conf) ───
@@ -904,6 +822,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Nginx: Только Панель ───
@@ -1055,6 +974,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Nginx: Только Нода ───
@@ -1191,6 +1111,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Docker-Compose: Только Панель (без страницы подписки) ───
@@ -1483,6 +1404,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Docker-Compose: Панель + Нода (без страницы подписки) ───
@@ -1495,7 +1417,9 @@ generate_docker_compose_panel_with_node() {
         network_exists=true
     fi
 
-    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_HEAD'
+    # ─── Панель (/opt/remnawave/docker-compose.yml) ───
+    mkdir -p "/opt/remnawave"
+    cat > /opt/remnawave/docker-compose.yml <<'COMPOSE_PANEL'
 services:
   remnawave-db:
     image: postgres:18.1
@@ -1592,44 +1516,42 @@ services:
         max-size: '30m'
         max-file: '5'
 
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    network_mode: host
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-COMPOSE_HEAD
+COMPOSE_PANEL
 
-    for cert in "$panel_cert_domain" "$node_cert_domain"; do
-        cat >> /opt/remnawave/docker-compose.yml <<COMPOSE_CERT
-      - /etc/letsencrypt/live/$cert/fullchain.pem:/etc/nginx/ssl/$cert/fullchain.pem:ro
-      - /etc/letsencrypt/live/$cert/privkey.pem:/etc/nginx/ssl/$cert/privkey.pem:ro
-COMPOSE_CERT
-    done
+    if [ "$network_exists" = true ]; then
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXT'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    external: true
 
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_TAIL'
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'kill -0 $(cat /run/nginx.pid) 2>/dev/null']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      - remnawave
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
+COMPOSE_NETWORK_EXT
+    else
+        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
+networks:
+  remnawave-network:
+    name: remnawave-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+    external: false
 
+COMPOSE_NETWORK_NEW
+    fi
+
+    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
+volumes:
+  remnawave-db-data:
+    driver: local
+    external: false
+    name: remnawave-db-data
+COMPOSE_VOLUMES
+
+    # ─── Нода (/opt/remnanode/docker-compose.yml) ───
+    mkdir -p "/opt/remnanode"
+    cat > /opt/remnanode/docker-compose.yml <<'NODE_COMPOSE'
+services:
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
@@ -1656,41 +1578,9 @@ COMPOSE_CERT
       options:
         max-size: '30m'
         max-file: '5'
-
-COMPOSE_TAIL
-
-    if [ "$network_exists" = true ]; then
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_EXTERNAL'
-networks:
-  remnawave-network:
-    name: remnawave-network
-    external: true
-
-COMPOSE_NETWORK_EXTERNAL
-    else
-        cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_NETWORK_NEW'
-networks:
-  remnawave-network:
-    name: remnawave-network
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/16
-    external: false
-
-COMPOSE_NETWORK_NEW
+NODE_COMPOSE
 
     ensure_nginx
-    _strip_nginx_from_compose "/opt/remnawave/docker-compose.yml"
-    fi
-
-    cat >> /opt/remnawave/docker-compose.yml <<'COMPOSE_VOLUMES'
-volumes:
-  remnawave-db-data:
-    driver: local
-    external: false
-    name: remnawave-db-data
-COMPOSE_VOLUMES
 }
 
 # ─── Nginx: Панель + Нода (без страницы подписки) ───
@@ -1898,6 +1788,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Docker-Compose: Только Страница подписки (standalone) ───
@@ -2053,6 +1944,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Nginx: Нода + Страница подписки (unix socket) ───
@@ -2230,6 +2122,7 @@ server {
     include /etc/nginx/conf.d/*.conf;
 } # ─── end http ───
 EOL
+    nginx_restore_server_blocks
 }
 
 # ─── Docker-Compose: Нода + Страница подписки (один сервер, новая установка) ───
@@ -2241,36 +2134,10 @@ generate_docker_compose_node_with_subpage() {
     local certificate=$5
     local target_dir="${6:-/opt/remnanode}"
 
+    # ─── Нода (/opt/remnanode/docker-compose.yml) ───
+    mkdir -p "$target_dir"
     cat > "${target_dir}/docker-compose.yml" <<EOL
 services:
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt/live/${node_cert_domain}/fullchain.pem:/etc/nginx/ssl/${node_cert_domain}/fullchain.pem:ro
-      - /etc/letsencrypt/live/${node_cert_domain}/privkey.pem:/etc/nginx/ssl/${node_cert_domain}/privkey.pem:ro
-      - /etc/letsencrypt/live/${sub_cert_domain}/fullchain.pem:/etc/nginx/ssl/${sub_cert_domain}/fullchain.pem:ro
-      - /etc/letsencrypt/live/${sub_cert_domain}/privkey.pem:/etc/nginx/ssl/${sub_cert_domain}/privkey.pem:ro
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-    network_mode: host
-    depends_on:
-      - remnanode
-      - remnawave-subscription-page
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
-
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
@@ -2297,7 +2164,12 @@ services:
       options:
         max-size: '30m'
         max-file: '5'
+EOL
 
+    # ─── Страница подписки (/opt/subscribe-page/docker-compose.yml) ───
+    mkdir -p "/opt/subscribe-page"
+    cat > /opt/subscribe-page/docker-compose.yml <<EOL
+services:
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
@@ -2327,7 +2199,6 @@ services:
 EOL
 
     ensure_nginx
-    _strip_nginx_from_compose "${target_dir}/docker-compose.yml"
 }
 
 # ═══════════════════════════════════════════════

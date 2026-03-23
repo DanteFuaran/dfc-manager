@@ -71,11 +71,13 @@ install_beszel() {
 
     if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
         print_success "Сертификат для ${BESZEL_DOMAIN} уже существует"
+        echo
         CERT_DOMAIN="$BESZEL_DOMAIN"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
     elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
         print_success "Сертификат для ${base_domain} уже существует"
+        echo
         CERT_DOMAIN="$base_domain"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
@@ -210,10 +212,10 @@ services:
       start_period: 10s
 YAML
         ensure_nginx
-        nginx_add_block "beszel" "$BESZEL_BLOCK"
         if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
             nginx_generate_minimal_conf
         fi
+        nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
     ) &
     show_spinner "Подготовка файлов"
 
@@ -261,8 +263,8 @@ uninstall_beszel() {
     ) &
     show_spinner "Удаление контейнеров Beszel"
 
-    # Удаляем conf.d блок из nginx
-    nginx_remove_block "beszel"
+    # Удаляем server-блок beszel из nginx.conf
+    nginx_remove_server_block "BESZEL"
 
     # Удаляем неиспользуемые сертификаты из /opt/nginx/ssl/
     nginx_cleanup_unused_certs

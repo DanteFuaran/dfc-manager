@@ -25,7 +25,7 @@ installation_subpage() {
         fi
     fi
 
-    if [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
+    if [ -f "/opt/remnasubpage/docker-compose.yml" ] || [ -f "/opt/subscribe-page/docker-compose.yml" ]; then
         has_sub_already=true
     fi
 
@@ -69,8 +69,9 @@ _installation_subpage_on_panel() {
     local target_dir="${DIR_PANEL}"
 
     # Сохраняем бэкап конфигов
-    local backup_compose="" backup_nginx=""
+    local backup_compose="" backup_nginx="" backup_node_compose=""
     backup_compose=$(cat /opt/remnawave/docker-compose.yml 2>/dev/null)
+    backup_node_compose=$(cat /opt/remnanode/docker-compose.yml 2>/dev/null)
     backup_nginx=$(cat ${DIR_NGINX}nginx.conf 2>/dev/null)
 
     _restore_config() {
@@ -196,10 +197,15 @@ _installation_subpage_on_panel() {
     # Остановка сервисов
     (cd /opt/remnawave && docker compose down >/dev/null 2>&1) &
     show_spinner "Остановка сервисов" || true
+    if [ -n "$backup_node_compose" ]; then
+        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) &
+        show_spinner "Остановка ноды" || true
+    fi
+    [ -f "${DIR_SUB}docker-compose.yml" ] && { (cd "${DIR_SUB}" && docker compose down >/dev/null 2>&1) & show_spinner "Остановка страницы подписки" || true; }
 
     # Определяем, есть ли нода (full/panel)
     local has_local_node=false
-    if [ -n "$backup_compose" ] && echo "$backup_compose" | grep -q "remnanode" 2>/dev/null; then
+    if [ -n "$backup_node_compose" ] || ([ -n "$backup_compose" ] && echo "$backup_compose" | grep -q "remnanode" 2>/dev/null); then
         has_local_node=true
     fi
 
@@ -231,20 +237,27 @@ _installation_subpage_on_panel() {
 
     # Восстанавливаем существующие значения .env (SECRET_KEY в compose и API_TOKEN)
     local existing_api_token
-    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${DIR_SUB}.env" 2>/dev/null | head -1)
+    [ -z "$existing_api_token" ] && existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
 
     # Если SECRET_KEY был в старом compose, восстанавливаем его
     if [ "$has_local_node" = true ]; then
         local old_secret_key
-        old_secret_key=$(echo "$backup_compose" | grep -oP 'SECRET_KEY=\K.*' | head -1 | tr -d '"')
+        old_secret_key=$(echo "$backup_node_compose" | grep -oP 'SECRET_KEY=\K.*' | head -1 | tr -d '"')
+        [ -z "$old_secret_key" ] && old_secret_key=$(echo "$backup_compose" | grep -oP 'SECRET_KEY=\K.*' | head -1 | tr -d '"')
         if [ -n "$old_secret_key" ] && [ "$old_secret_key" != "PUBLIC KEY FROM REMNAWAVE-PANEL" ]; then
-            sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=$old_secret_key|" /opt/remnawave/docker-compose.yml
+            sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=$old_secret_key|" /opt/remnanode/docker-compose.yml 2>/dev/null || true
         fi
     fi
 
     # Запуск сервисов
     (cd /opt/remnawave && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск сервисов" || true
+
+    if [ "$has_local_node" = true ]; then
+        (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
+        show_spinner "Запуск ноды" || true
+    fi
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Перезапуск nginx" || true
@@ -261,15 +274,16 @@ _installation_subpage_on_panel() {
     # Создание API токена для subscription-page (если нет)
     if [ -z "$existing_api_token" ] || [ "$existing_api_token" = "\$api_token" ]; then
         print_action "Создание API токена для подписок..."
-        if create_api_token "$domain_url" "$token" "/opt/remnawave"; then
+        if create_api_token "$domain_url" "$token" "${DIR_SUB}"; then
             print_success "API токен создан"
-            (cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1) &
-            show_spinner "Перезапуск subscription-page"
         else
             print_error "Не удалось создать API токен"
             echo -e "${YELLOW}⚠️  Создайте токен вручную: Dashboard → Settings → API Tokens${NC}"
         fi
     fi
+
+    (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск страницы подписки"
 
     clear
     echo
@@ -521,7 +535,7 @@ EOL
 
 # ─── Установка страницы подписки на пустой сервер (standalone) ───
 _installation_subpage_standalone() {
-    local SUBPAGE_DIR="/opt/remnasubpage"
+    local SUBPAGE_DIR="${DIR_SUB%/}"
 
     # Проверяем, это первичная установка?
     local is_fresh_install=false

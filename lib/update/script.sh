@@ -45,8 +45,13 @@ _delete_component_node() {
     echo
 
     # Извлекаем инфо о sub-page до удаления (для перегенерации nginx.conf)
-    local _sub_domain _sub_cert
-    if [ -f "/opt/remnasubpage/docker-compose.yml" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
+    local _sub_domain _sub_cert _sub_dir
+    if [ -f "/opt/subscribe-page/docker-compose.yml" ]; then
+        _sub_dir="/opt/subscribe-page"
+    elif [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
+        _sub_dir="/opt/remnasubpage"
+    fi
+    if [ -n "$_sub_dir" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
         _sub_domain=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/server_name/{s/.*server_name\s\+//;s/;.*//;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
         _sub_cert=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/ssl_certificate /{s|.*/ssl/||;s|/.*||;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
     fi
@@ -59,8 +64,8 @@ _delete_component_node() {
     rm -rf /opt/remnanode
 
     # Обновляем nginx: перегенерируем для оставшихся компонентов
-    if [ -f "/opt/remnasubpage/docker-compose.yml" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
-        generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "/opt/remnasubpage"
+    if [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
+        generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "$_sub_dir"
         nginx_reload
     else
         nginx_ensure_conf_for_remaining
@@ -93,11 +98,11 @@ _delete_component_subpage() {
     fi
 
     (
-        cd /opt/remnasubpage 2>/dev/null
-        docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "/opt/remnasubpage" ] && cd "/opt/remnasubpage" && docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "/opt/subscribe-page" ] && cd "/opt/subscribe-page" && docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление страницы подписки"
-    rm -rf /opt/remnasubpage
+    rm -rf /opt/remnasubpage /opt/subscribe-page
 
     # Обновляем nginx: перегенерируем для оставшихся компонентов
     if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
@@ -127,7 +132,7 @@ manage_delete_components() {
         [ -f "/opt/remnanode/docker-compose.yml" ] && {
             del_items+=("🌐  Remnawave (Нода)"); del_actions+=("node")
         }
-        [ -f "/opt/remnasubpage/docker-compose.yml" ] && {
+        ([ -f "/opt/remnasubpage/docker-compose.yml" ] || [ -f "/opt/subscribe-page/docker-compose.yml" ]) && {
             del_items+=("📄  Remnawave (Страница подписки)"); del_actions+=("subpage")
         }
         [ -f "/opt/beszel/docker-compose.yml" ] && {
@@ -320,7 +325,7 @@ remove_script_all() {
         (
             cd /opt/beszel 2>/dev/null
             docker compose down -v --rmi all >/dev/null 2>&1 || true
-            nginx_remove_block "beszel" 2>/dev/null || true
+            nginx_remove_server_block "BESZEL" 2>/dev/null || true
             if nginx_has_users; then
                 nginx_reload
             else
@@ -375,6 +380,7 @@ remove_script_all() {
     (
         [ -d "${DIR_PANEL}" ] && cd "${DIR_PANEL}" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         [ -d "/opt/remnasubpage" ] && cd "/opt/remnasubpage" && docker compose down -v --rmi all >/dev/null 2>&1 || true
+        [ -d "/opt/subscribe-page" ] && cd "/opt/subscribe-page" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         [ -d "${DIR_NODE}" ] && cd "${DIR_NODE}" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         docker system prune -af >/dev/null 2>&1 || true
     ) &
@@ -382,6 +388,7 @@ remove_script_all() {
     nginx_teardown
     rm -rf "${DIR_PANEL}"
     rm -rf "/opt/remnasubpage"
+    rm -rf "/opt/subscribe-page"
     rm -rf "${DIR_NODE}"
     rm -f /usr/local/bin/dfc-manager
     rm -f /usr/local/bin/dfc

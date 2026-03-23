@@ -14,9 +14,10 @@ is_node_installed() {
 }
 
 # Проверяет, установлена ли удалённая страница подписки
-# (standalone в /opt/remnasubpage или добавлена к ноде в /opt/remnanode)
+# (standalone в /opt/remnasubpage, /opt/subscribe-page или добавлена к ноде в /opt/remnanode)
 is_subpage_remote_installed() {
     [ -f "/opt/remnasubpage/docker-compose.yml" ] || \
+        [ -f "/opt/subscribe-page/docker-compose.yml" ] || \
         grep -q 'remnawave-subscription-page' "/opt/remnanode/docker-compose.yml" 2>/dev/null
 }
 
@@ -34,6 +35,10 @@ detect_remnawave_path() {
     fi
     if [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
         echo "/opt/remnasubpage"
+        return 0
+    fi
+    if [ -f "/opt/subscribe-page/docker-compose.yml" ]; then
+        echo "/opt/subscribe-page"
         return 0
     fi
     print_error "Remnawave не найдена. Убедитесь, что панель или нода установлены."

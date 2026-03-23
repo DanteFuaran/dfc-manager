@@ -48,6 +48,7 @@ cleanup_uninstalled() {
     if [ ! -f "${DIR_PANEL}docker-compose.yml" ] && \
        [ ! -f "${DIR_NODE}docker-compose.yml" ] && \
        [ ! -f "/opt/remnasubpage/docker-compose.yml" ] && \
+       [ ! -f "/opt/subscribe-page/docker-compose.yml" ] && \
        ! grep -q 'container_name: remnanode' "${DIR_PANEL}docker-compose.yml" 2>/dev/null; then
         rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
         rm -rf "${DIR_SCRIPT}" 2>/dev/null || true

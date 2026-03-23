@@ -32,7 +32,7 @@ installation_full() {
     echo -e "${GREEN}📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
-    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
+    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" "${DIR_NODE}" "${DIR_SUB}" && cd "${DIR_PANEL}"
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
@@ -64,6 +64,7 @@ installation_full() {
             print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
         fi
     done
+    echo
 
     # Сертификаты
     declare -A domains_to_check
@@ -194,6 +195,8 @@ installation_full() {
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
+    local node_dir="${DIR_NODE}"
+    local sub_dir="${DIR_SUB}"
 
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
@@ -236,10 +239,10 @@ installation_full() {
 
     # 2. Получение публичного ключа → SECRET_KEY для ноды
     print_action "Получение публичного ключа панели..."
-    get_public_key "$domain_url" "$token" "$target_dir"
+    get_public_key "$domain_url" "$token" "$node_dir"
 
     # Проверяем, что SECRET_KEY реально обновлён
-    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$target_dir/docker-compose.yml" 2>/dev/null; then
+    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
         print_error "Не удалось установить публичный ключ"
         echo
         show_continue_prompt || true
@@ -300,7 +303,7 @@ installation_full() {
     fi
 
     # 9. Создание API токена для subscription-page
-    create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
+    create_api_token "$domain_url" "$token" "$sub_dir" >/dev/null 2>&1
 
     print_success "Обновление конфигураций"
 
@@ -315,6 +318,12 @@ installation_full() {
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
     show_spinner "Запуск сервисов" || true
+
+    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск ноды" || true
+
+    (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск страницы подписки" || true
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Перезапуск nginx" || true
@@ -383,7 +392,7 @@ installation_panel_with_node() {
     echo -e "${GREEN}📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
-    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
+    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" "${DIR_NODE}" && cd "${DIR_PANEL}"
 
     if [ "$is_fresh_install" = true ]; then
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
@@ -424,6 +433,7 @@ installation_panel_with_node() {
             print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
         fi
     done
+    echo
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
@@ -535,6 +545,7 @@ installation_panel_with_node() {
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
+    local node_dir="${DIR_NODE}"
 
     if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
@@ -569,9 +580,9 @@ installation_panel_with_node() {
     fi
 
     print_action "Получение публичного ключа панели..."
-    get_public_key "$domain_url" "$token" "$target_dir"
+    get_public_key "$domain_url" "$token" "$node_dir"
 
-    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$target_dir/docker-compose.yml" 2>/dev/null; then
+    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
         print_error "Не удалось установить публичный ключ"
         echo
         show_continue_prompt || true
@@ -638,6 +649,9 @@ installation_panel_with_node() {
         docker compose up -d >/dev/null 2>&1 && sleep 15
     ) &
     show_spinner "Запуск сервисов" || true
+
+    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск ноды" || true
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Перезапуск nginx" || true

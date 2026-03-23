@@ -38,6 +38,7 @@ installation_panel() {
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
+    [ "$with_subpage" = true ] && mkdir -p "${DIR_SUB}"
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
@@ -221,7 +222,11 @@ installation_panel() {
 
     # 2. Создание API токена для subscription-page
     print_action "Создание API токена для страницы подписки..."
-    create_api_token "$domain_url" "$token" "$target_dir"
+    if [ "$with_subpage" = true ]; then
+        create_api_token "$domain_url" "$token" "${DIR_SUB}"
+    else
+        create_api_token "$domain_url" "$token" "$target_dir"
+    fi
 
     if [ "$with_subpage" = true ]; then
         # 3. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
@@ -232,6 +237,9 @@ installation_panel() {
             docker compose up -d >/dev/null 2>&1
         ) &
         show_spinner "Запуск контейнеров" || true
+
+        (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
+        show_spinner "Запуск страницы подписки" || true
 
         (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
         show_spinner "Перезапуск nginx" || true
