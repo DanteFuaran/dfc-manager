@@ -134,7 +134,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
             ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
             ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
         ) &
-        show_spinner "Обновление скрипта"
+        show_spinner "${BLUE}Подготовка скрипта к запуску${NC}"
         if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
             printf "\r\033[K"
             exec /usr/local/bin/dfc-manager
