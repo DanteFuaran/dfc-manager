@@ -174,10 +174,96 @@ YAML
         sleep 2
     done
 
-    # 8. Восстанавливаем first-run состояние — удаляем временного пользователя и возвращаем _@b.b.
-    # Агент уже зарегистрировался и сохранил fingerprint; дальнейшее переподключение
-    # идёт по fingerprint, а не по universal token.
+    # 8. Записываем daemon-скрипт переподключения агента.
+    # Проблема: systems.users имеет cascadeDelete=true — удаление временного пользователя
+    # каскадно удаляет systems + fingerprints + universal_tokens. Агент теряет регистрацию.
+    # Решение: daemon ждёт создания реального аккаунта (firstRun→false), затем напрямую
+    # через SQLite создаёт новый universal token для нового администратора и перезапускает
+    # агент, который автоматически перерегистрируется под новым владельцем.
+    local _PROJ _DB_DIR _DAEMON
+    _PROJ=$(basename "${DIR_BESZEL%/}")
+    _DB_DIR=$(docker volume inspect "${_PROJ}_beszel-data" \
+        --format '{{.Mountpoint}}' 2>/dev/null || echo "/var/lib/docker/volumes/${_PROJ}_beszel-data/_data")
+    _DAEMON="${DIR_BESZEL}.agent-daemon.py"
+    cat > "$_DAEMON" <<PYEOF
+#!/usr/bin/env python3
+"""Beszel agent reconnect daemon.
+
+После _beszel_restore_firstrun (удаления временного пользователя) ждёт,
+пока реальный администратор создаст аккаунт через firstRun UI.
+Затем создаёт universal token в SQLite и перезапускает агент.
+Beszel проверяет universal_tokens по базе данных при каждом подключении агента,
+поэтому прямая запись в SQLite работает без перезапуска хаба.
+"""
+import os, re, random, sqlite3, string, subprocess, sys, time, uuid
+
+DB      = "${_DB_DIR}/data.db"
+COMPOSE = "${DIR_BESZEL_AGENT}docker-compose.yml"
+
+def rand_id(n=15):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=n))
+
+# Ждём до 24 часов пока в таблице users не появится реальный пользователь
+uid = None
+for _ in range(17280):
+    try:
+        with sqlite3.connect(DB, timeout=5) as cx:
+            row = cx.execute("SELECT id FROM users LIMIT 1").fetchone()
+            if row:
+                uid = row[0]
+                break
+    except Exception:
+        pass
+    time.sleep(5)
+
+if uid is None:
+    sys.exit(0)
+
+time.sleep(2)  # даём PocketBase завершить транзакцию
+
+# Создаём universal token для нового администратора напрямую в SQLite
+new_token = str(uuid.uuid4())
+try:
+    with sqlite3.connect(DB, timeout=10) as cx:
+        cx.execute(
+            "INSERT INTO universal_tokens (id, created, user, token) "
+            "VALUES (?, datetime('now'), ?, ?)",
+            (rand_id(), uid, new_token),
+        )
+except Exception:
+    sys.exit(1)
+
+# Обновляем TOKEN в docker-compose агента (KEY остаётся тем же)
+try:
+    with open(COMPOSE) as f:
+        content = f.read()
+    content = re.sub(r'TOKEN:.*', 'TOKEN: "' + new_token + '"', content)
+    with open(COMPOSE, 'w') as f:
+        f.write(content)
+except Exception:
+    sys.exit(1)
+
+# Перезапускаем агент — он подключится с новым токеном и автоматически
+# создаст запись systems под реальным администратором
+subprocess.run(
+    ["docker", "compose", "-f", COMPOSE, "up", "-d"],
+    capture_output=True,
+)
+
+# Удаляем этот скрипт
+try:
+    os.unlink(os.path.abspath(__file__))
+except Exception:
+    pass
+PYEOF
+    chmod 600 "$_DAEMON"
+
+    # 9. Восстанавливаем first-run состояние (каскадно удаляет systems/tokens временного пользователя).
     _beszel_restore_firstrun "$HUB_URL" "$ADMIN_EMAIL" "$ADMIN_PASS" || true
+
+    # 10. Запускаем daemon в фоне, отвязанным от текущего подпроцесса.
+    nohup python3 "$_DAEMON" >/dev/null 2>&1 &
+    disown $! 2>/dev/null || true
 }
 
 is_beszel_installed() {
