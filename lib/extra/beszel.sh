@@ -100,25 +100,18 @@ _beszel_auto_install_agent() {
     local AGENT_PORT="45876"
     local HUB_URL="http://127.0.0.1:8090"
 
-    # 1. Получаем публичный ключ из приватного ключа в volume
-    local KEY_PATH
-    KEY_PATH=$(docker volume inspect beszel_beszel-data --format '{{.Mountpoint}}' 2>/dev/null)/id_ed25519
-    local BESZEL_KEY
-    BESZEL_KEY=$(ssh-keygen -y -f "$KEY_PATH" 2>/dev/null)
-    [ -z "$BESZEL_KEY" ] && return 1
-
-    # 2. Генерируем временные учётные данные
+    # 1. Генерируем временные учётные данные
     local TEMP_EMAIL TEMP_PASS
     TEMP_EMAIL="setup@beszel.local"
     TEMP_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
 
-    # 3. Создаём первого пользователя через first-run API
+    # 2. Создаём первого пользователя через first-run API
     local CREATE_BODY
     CREATE_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
         python3 -c "import json,os; print(json.dumps({'email':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
     _beszel_http POST "${HUB_URL}/api/beszel/create-user" "$CREATE_BODY" >/dev/null 2>&1
 
-    # 4. Авторизуемся как пользователь
+    # 3. Авторизуемся как пользователь
     local AUTH_BODY AUTH_RESP AUTH_TOKEN
     AUTH_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
         python3 -c "import json,os; print(json.dumps({'identity':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
@@ -126,16 +119,21 @@ _beszel_auto_install_agent() {
     AUTH_TOKEN=$(echo "$AUTH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$AUTH_TOKEN" ] && return 1
 
+    # 4. Получаем публичный ключ через API (надёжнее чем читать из volume)
+    local INFO_RESP BESZEL_KEY
+    INFO_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/info" "" "$AUTH_TOKEN")
+    BESZEL_KEY=$(echo "$INFO_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('key',''))" 2>/dev/null)
+    [ -z "$BESZEL_KEY" ] && return 1
+
     # 5. Создаём постоянный universal token
     local TOKEN_RESP UNIVERSAL_TOKEN
     TOKEN_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/universal-token?enable=1&permanent=1" "" "$AUTH_TOKEN")
     UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
-    # 6. Восстанавливаем first-run состояние — удаляем временного пользователя
-    _beszel_restore_firstrun "$HUB_URL" "$TEMP_EMAIL" "$TEMP_PASS" || true
-
-    # 7. Поднимаем агент
+    # 6. Запускаем агент ДО удаления пользователя.
+    # ВАЖНО: токен в universal_tokens CASCADE-удаляется при удалении пользователя.
+    # Агент должен успеть зарегистрироваться в хабе пока токен ещё существует.
     ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
@@ -165,6 +163,21 @@ volumes:
   beszel-agent-data:
 YAML
     cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
+
+    # 7. Ждём регистрации агента в хабе (до 120 сек).
+    # После регистрации агент получает собственный fingerprint и уже не зависит от универсального токена.
+    local i
+    for i in $(seq 1 60); do
+        local cnt
+        cnt=$(_beszel_http GET "${HUB_URL}/api/collections/systems/records?perPage=1" "" "$AUTH_TOKEN" \
+            | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('totalItems',0))" 2>/dev/null)
+        [ "${cnt:-0}" -gt 0 ] && break
+        sleep 2
+    done
+
+    # 8. Восстанавливаем first-run состояние — удаляем временного пользователя (и его токен каскадно).
+    # Агент уже зарегистрирован и использует собственный fingerprint для дальнейших подключений.
+    _beszel_restore_firstrun "$HUB_URL" "$TEMP_EMAIL" "$TEMP_PASS" || true
 }
 
 is_beszel_installed() {
