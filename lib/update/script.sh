@@ -189,20 +189,34 @@ manage_delete_components() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 if ! confirm_action; then continue; fi
                 echo
-                is_panel_installed    && { ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ); rm -rf /opt/remnawave; echo -e "${GREEN}✅${NC} Удаление Remnawave"; }
-                is_node_installed     && { ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ); rm -rf /opt/remnanode; echo -e "${GREEN}✅${NC} Удаление Ноды"; }
-                is_subpage_remote_installed && {
-                    for _d in /opt/subscribe-page /opt/remnasubpage; do
-                        [ -f "${_d}/docker-compose.yml" ] && { ( cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ); rm -rf "$_d"; }
-                    done
-                    echo -e "${GREEN}✅${NC} Удаление Страницы подписки"
-                }
-                is_beszel_installed   && { uninstall_beszel 2>&1 >/dev/null; echo -e "${GREEN}✅${NC} Удаление Beszel"; }
-                [ -f "/opt/beszel-agent/docker-compose.yml" ] && { uninstall_beszel_agent 2>&1 >/dev/null; echo -e "${GREEN}✅${NC} Удаление Beszel Agent"; }
-                _mt_installed         && { _mt_do_uninstall 2>&1 >/dev/null || true; echo -e "${GREEN}✅${NC} Удаление MTProto"; }
-                nginx_teardown 2>/dev/null || true
-                nginx_cleanup_unused_certs 2>/dev/null || true
-                echo -e "${GREEN}✅${NC} Удаление Nginx"
+                if is_panel_installed; then
+                    ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &
+                    show_spinner "Удаление Remnawave..." "Remnawave удалён"
+                fi
+                if is_node_installed; then
+                    ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
+                    show_spinner "Удаление Ноды..." "Нода удалена"
+                fi
+                if is_subpage_remote_installed; then
+                    ( for _d in /opt/subscribe-page /opt/remnasubpage; do
+                        [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf "$_d" 2>/dev/null || true; }
+                      done ) &
+                    show_spinner "Удаление Страницы подписки..." "Страница подписки удалена"
+                fi
+                if is_beszel_installed; then
+                    ( uninstall_beszel >/dev/null 2>&1 || true ) &
+                    show_spinner "Удаление Beszel..." "Beszel удалён"
+                fi
+                if [ -f "/opt/beszel-agent/docker-compose.yml" ]; then
+                    ( uninstall_beszel_agent >/dev/null 2>&1 || true ) &
+                    show_spinner "Удаление Beszel Agent..." "Beszel Agent удалён"
+                fi
+                if _mt_installed; then
+                    ( _mt_do_uninstall >/dev/null 2>&1 || true ) &
+                    show_spinner "Удаление MTProto..." "MTProto удалён"
+                fi
+                ( nginx_teardown 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
+                show_spinner "Удаление Nginx..." "Nginx удалён"
                 echo
                 print_success "Все компоненты удалены"
                 echo
