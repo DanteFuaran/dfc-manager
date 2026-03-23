@@ -99,30 +99,33 @@ PYEOF
 _beszel_auto_install_agent() {
     local AGENT_PORT="45876"
     local HUB_URL="http://127.0.0.1:8090"
+    local CREDS_FILE="${DIR_BESZEL}.admin-credentials"
 
-    # 1. Генерируем временные учётные данные
-    local TEMP_EMAIL TEMP_PASS
-    TEMP_EMAIL="setup@beszel.local"
-    TEMP_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
+    # 1. Генерируем учётные данные администратора Beszel
+    local ADMIN_EMAIL ADMIN_PASS
+    ADMIN_EMAIL="admin@beszel.local"
+    ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
 
     # 2. Создаём первого пользователя через first-run API
     local CREATE_BODY
-    CREATE_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
+    CREATE_BODY=$(_EMAIL="$ADMIN_EMAIL" _PASS="$ADMIN_PASS" \
         python3 -c "import json,os; print(json.dumps({'email':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
     _beszel_http POST "${HUB_URL}/api/beszel/create-user" "$CREATE_BODY" >/dev/null 2>&1
 
     # 3. Авторизуемся как пользователь
     local AUTH_BODY AUTH_RESP AUTH_TOKEN
-    AUTH_BODY=$(_EMAIL="$TEMP_EMAIL" _PASS="$TEMP_PASS" \
+    AUTH_BODY=$(_EMAIL="$ADMIN_EMAIL" _PASS="$ADMIN_PASS" \
         python3 -c "import json,os; print(json.dumps({'identity':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
     AUTH_RESP=$(_beszel_http POST "${HUB_URL}/api/collections/users/auth-with-password" "$AUTH_BODY")
     AUTH_TOKEN=$(echo "$AUTH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$AUTH_TOKEN" ] && return 1
 
-    # 4. Получаем публичный ключ через API (надёжнее чем читать из volume)
-    local INFO_RESP BESZEL_KEY
-    INFO_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/info" "" "$AUTH_TOKEN")
-    BESZEL_KEY=$(echo "$INFO_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('key',''))" 2>/dev/null)
+    # 4. Получаем публичный ключ через /api/beszel/getkey
+    # Примечание: /api/beszel/info не работает в Beszel 0.18+ (возвращает HTML вместо JSON).
+    # /api/beszel/getkey — deprecated alias, но работает корректно.
+    local KEY_RESP BESZEL_KEY
+    KEY_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/getkey" "" "$AUTH_TOKEN")
+    BESZEL_KEY=$(echo "$KEY_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('key',''))" 2>/dev/null)
     [ -z "$BESZEL_KEY" ] && return 1
 
     # 5. Создаём постоянный universal token
@@ -131,9 +134,9 @@ _beszel_auto_install_agent() {
     UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
-    # 6. Запускаем агент ДО удаления пользователя.
-    # ВАЖНО: токен в universal_tokens CASCADE-удаляется при удалении пользователя.
-    # Агент должен успеть зарегистрироваться в хабе пока токен ещё существует.
+    # 6. Запускаем агент.
+    # ВАЖНО: пользователь admin@beszel.local НЕ удаляется — он владелец системы в Beszel.
+    # systems.users имеет cascadeDelete=true: удаление пользователя удалит и систему агента.
     ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
@@ -165,7 +168,6 @@ YAML
     cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
 
     # 7. Ждём регистрации агента в хабе (до 120 сек).
-    # После регистрации агент получает собственный fingerprint и уже не зависит от универсального токена.
     local i
     for i in $(seq 1 60); do
         local cnt
@@ -175,9 +177,11 @@ YAML
         sleep 2
     done
 
-    # 8. Восстанавливаем first-run состояние — удаляем временного пользователя (и его токен каскадно).
-    # Агент уже зарегистрирован и использует собственный fingerprint для дальнейших подключений.
-    _beszel_restore_firstrun "$HUB_URL" "$TEMP_EMAIL" "$TEMP_PASS" || true
+    # 8. Сохраняем учётные данные администратора.
+    # Пользователь admin@beszel.local становится первым администратором Beszel.
+    # Email и пароль можно изменить в Settings → Account.
+    printf 'BESZEL_EMAIL=%s\nBESZEL_PASS=%s\n' "$ADMIN_EMAIL" "$ADMIN_PASS" > "$CREDS_FILE"
+    chmod 600 "$CREDS_FILE"
 }
 
 is_beszel_installed() {
@@ -415,7 +419,9 @@ YAML
     (
         _beszel_wait_api && _beszel_auto_install_agent
     ) &
+    local _agent_pid=$!
     show_spinner "Подключение агента мониторинга"
+    local _agent_rc=$?
 
     # Запускаем/перезапускаем nginx
     (nginx_reload) &
@@ -429,7 +435,18 @@ YAML
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
     echo
-    echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
+    if [ "$_agent_rc" -eq 0 ] && [ -f "${DIR_BESZEL}.admin-credentials" ]; then
+        local _bz_email _bz_pass
+        # shellcheck disable=SC1090
+        _bz_email=$(grep '^BESZEL_EMAIL=' "${DIR_BESZEL}.admin-credentials" | cut -d= -f2)
+        _bz_pass=$(grep '^BESZEL_PASS=' "${DIR_BESZEL}.admin-credentials" | cut -d= -f2)
+        echo -e "${YELLOW}🔐 Учётные данные Beszel:${NC}"
+        echo -e "${WHITE}   Email:    ${_bz_email}${NC}"
+        echo -e "${WHITE}   Пароль:   ${_bz_pass}${NC}"
+        echo -e "${DARKGRAY}   Изменить: Beszel → Settings → Account${NC}"
+    else
+        echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
