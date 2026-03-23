@@ -5,6 +5,116 @@
 DIR_BESZEL="/opt/beszel/"
 DIR_BESZEL_AGENT="/opt/beszel-agent/"
 
+# HTTP-вызов через python3
+# Использование: _beszel_http METHOD url [body] [auth_token]
+_beszel_http() {
+    local method="$1" url="$2" body="${3:-}" token="${4:-}"
+    _BZURL="$url" _BZBODY="$body" _BZMETHOD="$method" _BZTOKEN="$token" \
+    python3 - <<'PYEOF' 2>/dev/null
+import urllib.request, urllib.error, os, sys
+url    = os.environ.get('_BZURL','')
+body   = os.environ.get('_BZBODY','')
+method = os.environ.get('_BZMETHOD','GET')
+token  = os.environ.get('_BZTOKEN','')
+req = urllib.request.Request(url, method=method)
+req.add_header('Content-Type', 'application/json')
+if token:
+    req.add_header('Authorization', token)
+data = body.encode() if body else None
+try:
+    with urllib.request.urlopen(req, data=data, timeout=15) as r:
+        sys.stdout.write(r.read().decode())
+        sys.exit(0)
+except urllib.error.HTTPError as e:
+    sys.stdout.write(e.read().decode())
+    sys.exit(e.code)
+except Exception as e:
+    sys.stderr.write(str(e)+'\n')
+    sys.exit(1)
+PYEOF
+}
+
+# Ждёт, пока Beszel API поднимется (до 60 сек)
+_beszel_wait_api() {
+    local i
+    for i in $(seq 1 30); do
+        if _beszel_http GET "http://127.0.0.1:8090/api/beszel/first-run" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+# Авто-установка агента на локальной машине после запуска хаба.
+# Аргументы: <admin_email> <admin_password>
+_beszel_auto_install_agent() {
+    local ADMIN_EMAIL="$1" ADMIN_PASSWORD="$2"
+    local AGENT_PORT="45876"
+    local HUB_URL="http://127.0.0.1:8090"
+
+    # 1. Получаем публичный ключ из приватного ключа
+    local KEY_PATH
+    KEY_PATH=$(docker volume inspect beszel_beszel-data --format '{{.Mountpoint}}' 2>/dev/null)/id_ed25519
+    local BESZEL_KEY
+    BESZEL_KEY=$(ssh-keygen -y -f "$KEY_PATH" 2>/dev/null)
+    if [ -z "$BESZEL_KEY" ]; then
+        return 1
+    fi
+
+    # 2. Авторизуемся — формируем JSON безопасно через python
+    local AUTH_BODY
+    AUTH_BODY=$(_EMAIL="$ADMIN_EMAIL" _PASS="$ADMIN_PASSWORD" \
+                python3 -c "import json,os; print(json.dumps({'identity':os.environ['_EMAIL'],'password':os.environ['_PASS']}))" 2>/dev/null)
+    local AUTH_RESP
+    AUTH_RESP=$(_beszel_http POST "${HUB_URL}/api/collections/users/auth-with-password" "$AUTH_BODY")
+    local AUTH_TOKEN
+    AUTH_TOKEN=$(echo "$AUTH_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
+    if [ -z "$AUTH_TOKEN" ]; then
+        return 1
+    fi
+
+    # 3. Создаём universal token (постоянный)
+    local TOKEN_RESP
+    TOKEN_RESP=$(_beszel_http GET "${HUB_URL}/api/beszel/universal-token?enable=1&permanent=1" "" "$AUTH_TOKEN")
+    local UNIVERSAL_TOKEN
+    UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
+    if [ -z "$UNIVERSAL_TOKEN" ]; then
+        return 1
+    fi
+
+    # 4. Поднимаем агент
+    ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
+    mkdir -p "${DIR_BESZEL_AGENT}"
+    cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
+services:
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - beszel-agent-data:/var/lib/beszel-agent
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: "${AGENT_PORT}"
+      KEY: "${BESZEL_KEY}"
+      TOKEN: "${UNIVERSAL_TOKEN}"
+      HUB_URL: "${HUB_URL}"
+      SYSTEM_NAME: "Beszel"
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  beszel-agent-data:
+YAML
+    cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
+}
+
 is_beszel_installed() {
     [ -f "${DIR_BESZEL}docker-compose.yml" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "beszel"
 }
@@ -194,6 +304,12 @@ ${REAL_IP_BLOCK}
 NGINX
 )
 
+    # ─── Генерируем учётные данные для первого пользователя ───
+    local BESZEL_ADMIN_EMAIL BESZEL_ADMIN_PASS
+    BESZEL_ADMIN_EMAIL="admin@beszel.local"
+    BESZEL_ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || \
+                        python3 -c "import secrets,string; print(secrets.token_urlsafe(18))")
+
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
         mkdir -p "${DIR_BESZEL}"
@@ -205,6 +321,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8090:8090"
+    environment:
+      USER_EMAIL: "${BESZEL_ADMIN_EMAIL}"
+      USER_PASSWORD: "${BESZEL_ADMIN_PASS}"
     volumes:
       - beszel-data:/beszel_data
       - beszel-socket:/beszel_socket
@@ -233,6 +352,12 @@ YAML
     ) &
     show_spinner "Установка Beszel"
 
+    # ─── Авто-установка агента на этом же сервере ───
+    (
+        _beszel_wait_api && _beszel_auto_install_agent "$BESZEL_ADMIN_EMAIL" "$BESZEL_ADMIN_PASS"
+    ) &
+    show_spinner "Подключение агента мониторинга"
+
     # Запускаем/перезапускаем nginx
     (nginx_reload) &
     show_spinner "Запуск Nginx"
@@ -244,6 +369,10 @@ YAML
     echo
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
+    echo
+    echo -e "${YELLOW}👤 Данные для входа:${NC}"
+    echo -e "${WHITE}Email:    ${BESZEL_ADMIN_EMAIL}${NC}"
+    echo -e "${WHITE}Пароль:   ${BESZEL_ADMIN_PASS}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
