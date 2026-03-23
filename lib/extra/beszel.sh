@@ -99,9 +99,8 @@ PYEOF
 _beszel_auto_install_agent() {
     local AGENT_PORT="45876"
     local HUB_URL="http://127.0.0.1:8090"
-    local CREDS_FILE="${DIR_BESZEL}.admin-credentials"
 
-    # 1. Генерируем учётные данные администратора Beszel
+    # 1. Генерируем временные учётные данные
     local ADMIN_EMAIL ADMIN_PASS
     ADMIN_EMAIL="admin@beszel.local"
     ADMIN_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 20)
@@ -135,8 +134,6 @@ _beszel_auto_install_agent() {
     [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
     # 6. Запускаем агент.
-    # ВАЖНО: пользователь admin@beszel.local НЕ удаляется — он владелец системы в Beszel.
-    # systems.users имеет cascadeDelete=true: удаление пользователя удалит и систему агента.
     ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
@@ -177,11 +174,10 @@ YAML
         sleep 2
     done
 
-    # 8. Сохраняем учётные данные администратора.
-    # Пользователь admin@beszel.local становится первым администратором Beszel.
-    # Email и пароль можно изменить в Settings → Account.
-    printf 'BESZEL_EMAIL=%s\nBESZEL_PASS=%s\n' "$ADMIN_EMAIL" "$ADMIN_PASS" > "$CREDS_FILE"
-    chmod 600 "$CREDS_FILE"
+    # 8. Восстанавливаем first-run состояние — удаляем временного пользователя и возвращаем _@b.b.
+    # Агент уже зарегистрировался и сохранил fingerprint; дальнейшее переподключение
+    # идёт по fingerprint, а не по universal token.
+    _beszel_restore_firstrun "$HUB_URL" "$ADMIN_EMAIL" "$ADMIN_PASS" || true
 }
 
 is_beszel_installed() {
@@ -419,9 +415,7 @@ YAML
     (
         _beszel_wait_api && _beszel_auto_install_agent
     ) &
-    local _agent_pid=$!
     show_spinner "Подключение агента мониторинга"
-    local _agent_rc=$?
 
     # Запускаем/перезапускаем nginx
     (nginx_reload) &
@@ -435,18 +429,7 @@ YAML
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
     echo
-    if [ "$_agent_rc" -eq 0 ] && [ -f "${DIR_BESZEL}.admin-credentials" ]; then
-        local _bz_email _bz_pass
-        # shellcheck disable=SC1090
-        _bz_email=$(grep '^BESZEL_EMAIL=' "${DIR_BESZEL}.admin-credentials" | cut -d= -f2)
-        _bz_pass=$(grep '^BESZEL_PASS=' "${DIR_BESZEL}.admin-credentials" | cut -d= -f2)
-        echo -e "${YELLOW}🔐 Учётные данные Beszel:${NC}"
-        echo -e "${WHITE}   Email:    ${_bz_email}${NC}"
-        echo -e "${WHITE}   Пароль:   ${_bz_pass}${NC}"
-        echo -e "${DARKGRAY}   Изменить: Beszel → Settings → Account${NC}"
-    else
-        echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
-    fi
+    echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
