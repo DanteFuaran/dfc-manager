@@ -837,6 +837,18 @@ install_beszel_agent() {
         echo; show_continue_prompt || return 1; return 1
     fi
 
+    # ─── Устанавливаем Docker, если не установлен ───
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        (
+            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+            sh /tmp/get-docker.sh >/dev/null 2>&1
+            rm -f /tmp/get-docker.sh
+            systemctl start docker >/dev/null 2>&1 || true
+            systemctl enable docker >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Установка Docker"
+    fi
+
     # ─── Создаём файлы и запускаем агент ───
     ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
 
@@ -875,7 +887,14 @@ YAML
     (
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Добавление агента Beszel"
+    if ! show_spinner "Добавление агента Beszel"; then
+        echo
+        print_error "Не удалось запустить агент. Проверьте логи: cd ${DIR_BESZEL_AGENT} && docker compose logs"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 0
+        return 0
+    fi
 
     echo
     print_success "Агент Beszel добавлен"
