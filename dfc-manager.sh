@@ -118,14 +118,11 @@ if [ "${DFC_INSTALLED_RUN:-}" != "1" ]; then
     exec /usr/local/bin/dfc-manager
 fi
 
-# ─── Подготовка к запуску — спиннер показывается всегда ──────────────
-_dfc_do_update=0
-[ "${DFC_AUTO_UPDATED:-}" != "1" ] && _dfc_do_update=1
-export DFC_AUTO_UPDATED=1
-
-_UPDATE_FLAG="/tmp/.dfc_upd_$$"
-(
-    if [ "$_dfc_do_update" = "1" ]; then
+# ─── Подготовка к запуску — спиннер только при первой проверке обновлений ─────
+if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
+    export DFC_AUTO_UPDATED=1
+    _UPDATE_FLAG="/tmp/.dfc_upd_$$"
+    (
         _api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
         _remote_sha=$(curl -sL --max-time 5 -H "Cache-Control: no-cache" \
             "https://api.github.com/repos/${_api_repo}/commits/${SCRIPT_BRANCH}" 2>/dev/null \
@@ -140,16 +137,14 @@ _UPDATE_FLAG="/tmp/.dfc_upd_$$"
             touch "$_UPDATE_FLAG"
         fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || true
-    else
-        sleep 0.5
-    fi
-) &
-show_spinner_prepare "Подготовка скрипта к запуску"
+    ) &
+    show_spinner_prepare "Подготовка скрипта к запуску"
 
-if [ -f "$_UPDATE_FLAG" ]; then
-    rm -f "$_UPDATE_FLAG"
-    printf "\r\033[K"
-    exec /usr/local/bin/dfc-manager
+    if [ -f "$_UPDATE_FLAG" ]; then
+        rm -f "$_UPDATE_FLAG"
+        exec /usr/local/bin/dfc-manager
+    fi
+    unset _UPDATE_FLAG
 fi
 
 main_menu
