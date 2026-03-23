@@ -160,6 +160,10 @@ manage_delete_components() {
         fi
 
         del_items+=("──────────────────────────────────────"); del_actions+=("sep")
+        if [ ${#del_actions[@]} -gt 1 ]; then
+            del_items+=("🗑️  Удалить всё"); del_actions+=("delete_all")
+            del_items+=("──────────────────────────────────────"); del_actions+=("sep")
+        fi
         del_items+=("⬅️   Назад"); del_actions+=("back")
 
         show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
@@ -174,6 +178,35 @@ manage_delete_components() {
             beszel)       uninstall_beszel ;;
             beszel_agent) uninstall_beszel_agent ;;
             mtproto)      _mt_do_uninstall || true ;;
+            delete_all)
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${RED}         🗑️  Удаление всех компонентов${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+                echo -e "${RED}⚠️  Будут удалены ВСЕ установленные компоненты и все данные.${NC}"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                if ! confirm_action; then continue; fi
+                echo
+                is_panel_installed    && { ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ) & show_spinner "Удаление Панели"; rm -rf /opt/remnawave; }
+                is_node_installed     && { ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ) & show_spinner "Удаление Ноды"; rm -rf /opt/remnanode; }
+                is_subpage_remote_installed && {
+                    for _d in /opt/subscribe-page /opt/remnasubpage; do
+                        [ -f "${_d}/docker-compose.yml" ] && { ( cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true ) & show_spinner "Удаление Страницы подписки"; rm -rf "$_d"; }
+                    done
+                }
+                is_beszel_installed   && { uninstall_beszel; }
+                [ -f "/opt/beszel-agent/docker-compose.yml" ] && { uninstall_beszel_agent; }
+                _mt_installed         && { _mt_do_uninstall || true; }
+                nginx_teardown 2>/dev/null || true
+                nginx_cleanup_unused_certs 2>/dev/null || true
+                echo
+                print_success "Все компоненты удалены"
+                echo
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                show_continue_prompt || true
+                ;;
             back)         return ;;
             sep)          continue ;;
         esac

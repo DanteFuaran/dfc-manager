@@ -10,9 +10,19 @@ main_menu() {
         local menu_title="      🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
 
         local -a items=() actions=()
-        items+=("📦  Remnawave (Сервис)");         actions+=("remnawave")
-        items+=("📊  Beszel (Мониторинг)");         actions+=("beszel")
-        items+=("📡  MTProto (Прокси)");            actions+=("mtproto")
+        local _rw_label="📦  Remnawave" _bz_label="📊  Beszel" _mt_label="📡  MTProto"
+        { is_panel_installed || is_node_installed || is_subpage_remote_installed; } \
+            && _rw_label="📦  Remnawave ${GREEN}(установлено)${NC}" \
+            || _rw_label="📦  Remnawave ${DARKGRAY}(сервис)${NC}"
+        is_beszel_installed \
+            && _bz_label="📊  Beszel ${GREEN}(установлено)${NC}" \
+            || _bz_label="📊  Beszel ${DARKGRAY}(мониторинг)${NC}"
+        _mt_installed \
+            && _mt_label="📡  MTProto ${GREEN}(установлено)${NC}" \
+            || _mt_label="📡  MTProto ${DARKGRAY}(прокси)${NC}"
+        items+=("$_rw_label");                     actions+=("remnawave")
+        items+=("$_bz_label");                     actions+=("beszel")
+        items+=("$_mt_label");                      actions+=("mtproto")
         items+=("──────────────────────────────────────"); actions+=("sep")
         items+=("🧩  Дополнительные программы");   actions+=("extra")
         items+=("🧪  Тестирование сервера");         actions+=("testing")
@@ -46,19 +56,23 @@ main_menu() {
                     fi
 
                     local install_status=""
-                    if [ "$has_panel" = true ] && [ "$has_node" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель и Нода${NC}"
+                    if [ "$has_panel" = true ] && [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
+                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Панель | Подписка | Нода${NC}"
+                    elif [ "$has_panel" = true ] && [ "$has_node" = true ]; then
+                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель | Нода${NC}"
+                    elif [ "$has_panel" = true ] && [ "$has_subpage" = true ]; then
+                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Панель | Подписка${NC}"
                     elif [ "$has_panel" = true ]; then
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель${NC}"
                     elif [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода и Страница подписки${NC}"
+                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Нода | Подписка${NC}"
                     elif [ "$has_node" = true ]; then
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода${NC}"
                     elif [ "$has_subpage" = true ]; then
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Страница подписки${NC}"
                     fi
 
-                    local rw_title="    📦 Remnawave (Сервис)${install_status}"
+                    local rw_title="   📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()
                     rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
                     if [ "$is_installed" = true ]; then
@@ -113,8 +127,8 @@ main_menu() {
                                         while true; do
                                             tput civis 2>/dev/null || true
                                             show_arrow_menu "📄  Установка страницы подписки" \
-                                                "✔️   Да, установить на этот сервер" \
-                                                "❌  Нет, установлю на отдельный сервер" \
+                                                "✔️   Установить на этот сервер (рекомендуется)" \
+                                                "❌  Установлю на отдельный сервер" \
                                                 "──────────────────────────────────────" \
                                                 "⬅️   Назад"
                                             local sub_choice=$?
@@ -123,8 +137,8 @@ main_menu() {
                                             [[ $sub_choice -eq 1 ]] && with_subpage=false
 
                                             show_arrow_menu "🌐  Установка ноды" \
-                                                "✔️   Да, установить на этот сервер" \
-                                                "❌  Нет, установлю на отдельный сервер" \
+                                                "✔️   Установить на этот сервер" \
+                                                "❌  Установлю на отдельный сервер (рекомендуется)" \
                                                 "──────────────────────────────────────" \
                                                 "⬅️   Назад"
                                             local node_choice=$?

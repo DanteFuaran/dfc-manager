@@ -4,7 +4,7 @@
 
 print_action()  { :; }
 print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
-print_success() { printf "${GREEN}✅${NC} %b\n" "$1"; }
+print_success() { printf "${GREEN}✅ %b${NC}\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
 
 # Сбрасывает буферизованный ввод (например, клавиши, нажатые во время спиннеров)
