@@ -236,6 +236,7 @@ reading() {
     local var_name="$2"
     local input
     echo
+    tput cnorm 2>/dev/null
     read -e -p "$(echo -e "${BLUE}➜${NC}  ${YELLOW}$prompt${NC} \033[32m")" input
     echo -en "\033[0m"
     printf -v "$var_name" '%s' "$input"
@@ -248,6 +249,7 @@ reading_inline() {
     local char
     local _rl_stty
     _rl_stty=$(stty -g 2>/dev/null || echo "")
+    tput cnorm 2>/dev/null
     echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} \033[32m"
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then

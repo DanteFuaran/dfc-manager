@@ -29,7 +29,7 @@ installation_full() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + НОДЫ${NC}"
+    echo -e "${GREEN}   📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -375,7 +375,7 @@ installation_panel_with_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + НОДЫ${NC}"
+    echo -e "${GREEN}   📦 Установка панели + Подписки + Ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
