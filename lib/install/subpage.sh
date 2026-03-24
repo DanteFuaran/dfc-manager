@@ -724,8 +724,10 @@ _installation_subpage_standalone() {
     done  # loop2
     done  # loop1
 
+    echo
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
+        echo
     fi
 
     if [ "$needs_certs" = true ]; then
@@ -757,7 +759,6 @@ _installation_subpage_standalone() {
     nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
 
     # Генерация конфигов
-    echo
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
@@ -772,18 +773,18 @@ _installation_subpage_standalone() {
     show_spinner "Настройка файрвола" || true
 
     echo
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск Nginx" || true
+
     (
         cd "${SUBPAGE_DIR}"
         docker compose up -d >/dev/null 2>&1
     ) &
-    if ! show_spinner "Запуск сервисов"; then
+    if ! show_spinner "Настройка сервисов"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
     fi
-
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск Nginx" || true
 
     echo
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
@@ -806,11 +807,11 @@ _installation_subpage_standalone() {
         clear
         tput civis 2>/dev/null
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+        echo -e " ${GREEN}🎉 Страница подписки подключена!${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
-        echo -e "${WHITE}Панель:${NC}       $PANEL_URL"
+        echo -e "${WHITE}Подписка:${NC}  https://$SUB_DOMAIN"
+        echo -e "${WHITE}Панель:${NC}    $PANEL_URL"
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
@@ -829,6 +830,5 @@ _installation_subpage_standalone() {
         echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
         echo -e "${WHITE}  cd ${SUBPAGE_DIR} && docker compose restart${NC}"
     fi
-    echo
     show_continue_prompt || return 1
 }
