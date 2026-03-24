@@ -299,10 +299,17 @@ _change_panel_url_remote() {
     local new_url="https://${new_domain}"
 
     echo
+    reading_inline "API токен (Enter чтобы пропустить):" new_api_token "sk-..."
+    echo
+
+    echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${WHITE}Текущий адрес:${NC} ${YELLOW}${current_url}${NC}"
     echo -e "${WHITE}Новый адрес:${NC}   ${GREEN}${new_url}${NC}"
+    if [ -n "$new_api_token" ]; then
+        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -316,10 +323,13 @@ _change_panel_url_remote() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # Обновляем REMNAWAVE_PANEL_URL во всех найденных compose файлах
+    # Обновляем REMNAWAVE_PANEL_URL и при необходимости REMNAWAVE_API_TOKEN
     local i
     for i in "${!compose_files[@]}"; do
         sed -i "s|REMNAWAVE_PANEL_URL=.*|REMNAWAVE_PANEL_URL=${new_url}|g" "${compose_files[$i]}"
+        if [ -n "$new_api_token" ]; then
+            sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=${new_api_token}|g" "${compose_files[$i]}"
+        fi
     done
     (sleep 0.3) &
     show_spinner "Обновление конфигов"
@@ -359,19 +369,108 @@ change_sub_domain() {
 
 # ─── Страница подписки на этом сервере ───
 _change_sub_domain_local() {
-    # Проверяем, установлена ли уже sub-page локально
-    local _has_local_sub=false
+    # Проверяем, установлена ли sub-page в составе панели
     if grep -q 'remnawave-subscription-page' /opt/remnawave/docker-compose.yml 2>/dev/null; then
-        _has_local_sub=true
+        _change_sub_domain_local_existing
+        return
     fi
 
-    if [ "$_has_local_sub" = true ]; then
-        # Sub-page уже установлена — меняем домен
-        _change_sub_domain_local_existing
+    # Проверяем standalone-варианты
+    local _sp_dir=""
+    local _d
+    for _d in "/opt/subscribe-page" "/opt/remnasubpage"; do
+        if [ -f "$_d/docker-compose.yml" ] && grep -q 'remnawave-subscription-page' "$_d/docker-compose.yml" 2>/dev/null; then
+            _sp_dir="$_d"
+            break
+        fi
+    done
+
+    if [ -n "$_sp_dir" ]; then
+        _change_sub_domain_standalone "$_sp_dir"
     else
-        # Sub-page не установлена — запускаем установку
         _installation_subpage_on_panel
     fi
+}
+
+# ─── Смена домена standalone страницы подписки ───
+_change_sub_domain_standalone() {
+    local subpage_dir="$1"
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    # Извлекаем текущий домен из nginx.conf
+    local current_sub_domain
+    current_sub_domain=$(grep -oP 'server_name\s+\K\S+(?=;)' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
+
+    # Извлекаем panel_url и api_token из docker-compose
+    local panel_url api_token
+    panel_url=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${subpage_dir}/docker-compose.yml" 2>/dev/null | head -1)
+    api_token=$(grep -oP 'REMNAWAVE_API_TOKEN=\K\S+' "${subpage_dir}/docker-compose.yml" 2>/dev/null | head -1)
+
+    local new_domain
+    if ! prompt_domain_with_retry "Введите новый домен страницы подписки:" new_domain; then
+        return 0
+    fi
+
+    new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
+
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain:-не определён}${NC}"
+    echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    if ! confirm_action; then
+        return 0
+    fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    local new_cert_domain=""
+    if ! obtain_cert_for_domain "$new_domain" "$subpage_dir" "$current_sub_domain" new_cert_domain; then
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return 1
+    fi
+
+    nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
+
+    (
+        generate_docker_compose_subpage "$new_cert_domain" "$panel_url" "$api_token" "$subpage_dir"
+        generate_nginx_conf_subpage "$new_domain" "$new_cert_domain" "$subpage_dir"
+    ) &
+    show_spinner "Подготовка файлов"
+
+    (
+        cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+    ) &
+    show_spinner "Обновление конфигурации"
+
+    (
+        cd "$subpage_dir"
+        docker compose down >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner "Перезапуск сервисов"
+
+    nginx_cleanup_unused_certs
+
+    echo
+    print_success "Домен страницы подписки изменён на ${new_domain}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
 }
 
 # ─── Смена домена локальной страницы подписки ───
