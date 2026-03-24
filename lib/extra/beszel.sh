@@ -452,7 +452,13 @@ install_beszel() {
         LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
         REAL_IP_BLOCK=$'\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;'
     else
-        LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+        if [ "${_is_ip_mode:-false}" = true ]; then
+            # При IP-режиме ставим default_server — браузер не шлёт SNI для IP (RFC 6066)
+            # и без default_server nginx применяет ssl_reject_handshake из catch-all блока
+            LISTEN_BLOCK="    listen 443 ssl default_server;\n    listen [::]:443 ssl default_server;"
+        else
+            LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+        fi
         REAL_IP_BLOCK=""
     fi
 
@@ -532,6 +538,17 @@ YAML
         ensure_nginx
         if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
             nginx_generate_minimal_conf
+        fi
+        # При IP-режиме удаляем блок ssl_reject_handshake default_server,
+        # иначе nginx не примет два default_server на одном порту
+        if [ "${_is_ip_mode:-false}" = true ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
+            sed -i '/^server {/{
+                /ssl_reject_handshake on/{
+                    N; /}/d
+                }
+            }' "${DIR_NGINX}nginx.conf" 2>/dev/null || true
+            # Убираем блок целиком с помощью perl (более надёжно для многострочного блока)
+            perl -i -0777 -pe 's/\nserver \{\n\s+listen 443 ssl default_server;\n\s+server_name _;\n\s+ssl_reject_handshake on;\n\}\n//g' "${DIR_NGINX}nginx.conf" 2>/dev/null || true
         fi
         nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
     ) &
