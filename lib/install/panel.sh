@@ -48,7 +48,6 @@ installation_panel() {
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-
     local SUB_DOMAIN=""
     if [ "$with_subpage" = true ]; then
         prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
@@ -61,6 +60,7 @@ installation_panel() {
                 print_error "Введите корректный домен"
             fi
         done
+        echo
     fi
 
     # Автогенерация учётных данных администратора
