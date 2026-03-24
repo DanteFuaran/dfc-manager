@@ -811,34 +811,7 @@ change_node_domain() {
 }
 
 manage_domains() {
-    local panel_dir
-    if ! panel_dir=$(detect_remnawave_path); then
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   🌐 РЕДАКТИРОВАНИЕ ДОМЕНОВ${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
-        return 1
-    fi
-
-    local current_panel
-    current_panel=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
-    local current_sub
-    current_sub=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
-    if [ -z "$current_sub" ]; then
-        current_sub=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sed -n '2p')
-    fi
-    local current_node
-    current_node=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | grep -v '^_$' | sed -n '3p')
-
-    local _menu_title="🌐  Редактирование доменов\\n\\n  ${WHITE}Домен панели:${NC}   ${YELLOW}${current_panel:-не задан}${NC}\\n  ${WHITE}Домен подписки:${NC} ${YELLOW}${current_sub:-не задан}${NC}"
-    if [ -n "$current_node" ]; then
-        _menu_title+="\\n  ${WHITE}Домен ноды:${NC}     ${YELLOW}${current_node}${NC}"
-    fi
-
-    show_arrow_menu "$_menu_title" \
+    show_arrow_menu "🌐  Редактирование доменов" \
         "🌐  Сменить домен панели" \
         "🌐  Сменить домен страницы подписки" \
         "🌐  Сменить домен ноды" \
