@@ -126,22 +126,20 @@ obtain_cert_for_domain() {
 change_panel_domain() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 СМЕНА ДОМЕНА ПАНЕЛИ${NC}"
+    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     local panel_dir
     if ! panel_dir=$(detect_remnawave_path); then
         echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
         return 1
     fi
 
     local current_domain
     current_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | head -1)
-    echo -e "${WHITE}Текущий домен панели:${NC} ${YELLOW}${current_domain}${NC}"
-    echo
 
     local new_domain
     if ! prompt_domain_with_retry "Введите новый домен панели:" new_domain; then
@@ -150,10 +148,13 @@ change_panel_domain() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
+    echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_domain}${NC}"
     echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if ! confirm_action; then
         print_error "Операция отменена"
@@ -161,19 +162,35 @@ change_panel_domain() {
         return 0
     fi
 
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-
+    # ─── Получение сертификата (до clear, чтобы видеть прогресс certbot) ───
     local new_cert_domain=""
     if ! obtain_cert_for_domain "$new_domain" "$panel_dir" "$current_domain" new_cert_domain; then
         echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
         return 1
     fi
+
+    # ─── Clear и новый экран прогресса ───
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    print_success "Получение SSL-сертификата для ${new_domain}"
+    echo
 
     # Копируем новый сертификат в /opt/nginx/ssl/
     nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
 
+    # Останавливаем панель
+    (
+        cd "$panel_dir"
+        docker compose down >/dev/null 2>&1
+    ) &
+    show_spinner "Остановка работы панели"
+
+    # Обновление конфигов
     local old_cert_domain
     old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
 
@@ -188,43 +205,37 @@ change_panel_domain() {
         fi
     fi
     sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
-    
+
+    if [ -f "${panel_dir}/.env" ]; then
+        sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=${new_domain}|" "${panel_dir}/.env"
+    fi
     (sleep 0.3) &
-    show_spinner "Обновление nginx.conf"
+    show_spinner "Обновление конфигов"
 
-    (
-        if [ -f "${panel_dir}/.env" ]; then
-            sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=${new_domain}|" "${panel_dir}/.env"
-        fi
-    ) &
-    show_spinner "Обновление .env"
-
-    (
-        cd "$panel_dir"
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск сервисов"
-
+    # Обновление cookie доступа
     local OLD_COOKIE_NAME OLD_COOKIE_VALUE NEW_COOKIE_NAME NEW_COOKIE_VALUE
     if get_cookie_from_nginx; then
         OLD_COOKIE_NAME="$COOKIE_NAME"
         OLD_COOKIE_VALUE="$COOKIE_VALUE"
-        
+
         NEW_COOKIE_NAME=$(generate_cookie_key)
         NEW_COOKIE_VALUE=$(generate_cookie_key)
-        
+
         sed -i "s|~\*${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}|~*${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}|g" "${DIR_NGINX}nginx.conf"
         sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${DIR_NGINX}nginx.conf"
         sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${DIR_NGINX}nginx.conf"
         sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${DIR_NGINX}nginx.conf"
-        
-        (
-            cd "$panel_dir"
-            cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
-        ) &
-        show_spinner "Обновление cookie доступа"
     fi
+    (sleep 0.3) &
+    show_spinner "Обновление доступов"
+
+    # Перезапуск сервисов
+    (
+        cd "$panel_dir"
+        docker compose up -d >/dev/null 2>&1
+        cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+    ) &
+    show_spinner "Перезапуск сервисов"
 
     nginx_cleanup_unused_certs
 
@@ -233,13 +244,26 @@ change_panel_domain() {
 
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo -e "${GREEN}🔗 Ссылка на панель:${NC}"
+    echo
+    echo -e "${GREEN}🔗 Ссылка для первого входа в панель:${NC}"
     if [ -n "$NEW_COOKIE_NAME" ] && [ -n "$NEW_COOKIE_VALUE" ]; then
         echo -e "${WHITE}https://${new_domain}/auth/login?${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}${NC}"
     else
         get_cookie_from_nginx
         echo -e "${WHITE}https://${new_domain}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     fi
+
+    # Предупреждение для удалённой страницы подписки
+    local _sub_domain
+    _sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
+    if [ -n "$_sub_domain" ] && ! grep -q 'remnawave-subscription-page' "${panel_dir}/docker-compose.yml" 2>/dev/null; then
+        echo
+        echo -e "${YELLOW}⚠️  Страница подписки на удалённом сервере${NC}"
+        echo -e "${WHITE}Обновите REMNAWAVE_PANEL_URL на сервере подписки:${NC}"
+        echo -e "${DARKGRAY}https://${new_domain}${NC}"
+    fi
+
+    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
