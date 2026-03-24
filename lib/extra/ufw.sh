@@ -86,7 +86,7 @@ manage_ufw() {
                         state="Закрыт${is_v6}"
                         state_color="${RED}"
                     elif [ -z "$source" ] || [ "$source" = "Anywhere" ] || [ "$source" = "anywhere" ]; then
-                        state="Открыто${is_v6}"
+                        state="Всем${is_v6}"
                         state_color="${GREEN}"
                     else
                         # Конкретный IP — source содержит адрес
