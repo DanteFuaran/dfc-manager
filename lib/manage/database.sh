@@ -247,12 +247,26 @@ _db_partial_restore() {
     # Удаляем временную базу
     docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
 
-    # Запускаем панель
+    # Запускаем панель и ждём готовности API
     (
         cd "$panel_dir"
         docker compose up -d >/dev/null 2>&1
+        _w=0
+        while [ $_w -lt 120 ]; do
+            curl -s -f --max-time 5 "http://127.0.0.1:3000/api/auth/status" \
+                --header 'X-Forwarded-For: 127.0.0.1' \
+                --header 'X-Forwarded-Proto: https' > /dev/null 2>&1 && break
+            sleep 2
+            _w=$((_w + 2))
+        done
     ) &
     show_spinner "Запуск панели"
+
+    # Перезапуск мониторинга (если установлен)
+    if [ -f "${DIR_BESZEL}docker-compose.yml" ]; then
+        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1) &
+        show_spinner "Перезапуск мониторинга"
+    fi
 
     echo
     print_success "Данные успешно восстановлены!"
@@ -566,7 +580,7 @@ db_restore() {
         cd "$panel_dir"
         docker compose up -d remnawave >/dev/null 2>&1
         _w=0
-        while [ $_w -lt 60 ]; do
+        while [ $_w -lt 120 ]; do
             curl -s -f --max-time 5 "http://127.0.0.1:3000/api/auth/status" \
                 --header 'X-Forwarded-For: 127.0.0.1' \
                 --header 'X-Forwarded-Proto: https' > /dev/null 2>&1 && { touch "$_api_ready"; break; }
@@ -643,6 +657,12 @@ db_restore() {
             (
                 cd "$_sub_page_dir"
                 docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+                _w=0
+                while [ $_w -lt 60 ]; do
+                    docker inspect --format='{{.State.Health.Status}}' remnawave-subscription-page 2>/dev/null | grep -q 'healthy' && break
+                    sleep 2
+                    _w=$((_w + 2))
+                done
             ) &
             show_spinner "Перезапуск страницы подписки"
         else
@@ -652,7 +672,17 @@ db_restore() {
                 _cur_sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
                 if [ "$_cur_sub_dom" != "$_saved_sub_domain" ]; then
                     sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_saved_sub_domain|" "$panel_dir/.env"
-                    (cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1) &
+                    (
+                        cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1
+                        _w=0
+                        while [ $_w -lt 60 ]; do
+                            curl -s -f --max-time 5 "http://127.0.0.1:3000/api/auth/status" \
+                                --header 'X-Forwarded-For: 127.0.0.1' \
+                                --header 'X-Forwarded-Proto: https' > /dev/null 2>&1 && break
+                            sleep 2
+                            _w=$((_w + 2))
+                        done
+                    ) &
                     show_spinner "Обновление SUB_PUBLIC_DOMAIN"
                 fi
             fi
@@ -660,6 +690,12 @@ db_restore() {
     else
         print_error "Не удалось зарегистрировать администратора"
         echo -e "${YELLOW}Создайте администратора вручную через панель${NC}"
+    fi
+
+    # Перезапуск мониторинга (если установлен)
+    if [ -f "${DIR_BESZEL}docker-compose.yml" ]; then
+        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1) &
+        show_spinner "Перезапуск мониторинга"
     fi
 
     echo
