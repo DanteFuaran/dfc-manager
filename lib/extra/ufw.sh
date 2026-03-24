@@ -55,11 +55,23 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                printf "  ${DARKGRAY}%-5s      %-16s    %-16s       %s${NC}\n" "№" "Порт" "Состояние" "Комментарий"
+                printf "  ${DARKGRAY}%-5s   %-10s   %-6s   %-16s   %s${NC}\n" "№" "Порт" "Тип" "Состояние" "Комментарий"
                 while IFS= read -r line; do
-                    local idx port state comment state_color
+                    local idx port_full port_num proto state comment state_color
                     idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
-                    port=$(echo "$line" | sed 's/^\[\s*[0-9]*\]\s*//' | awk '{print $1}')
+                    port_full=$(echo "$line" | sed 's/^\[\s*[0-9]*\]\s*//' | awk '{print $1}')
+
+                    # Разбиваем порт на номер и протокол
+                    port_num=$(echo "$port_full" | cut -d'/' -f1)
+                    local proto_raw
+                    proto_raw=$(echo "$port_full" | grep -oP '(?<=/)\w+$')
+                    if [ "$proto_raw" = "tcp" ]; then
+                        proto="TCP"
+                    elif [ "$proto_raw" = "udp" ]; then
+                        proto="UDP"
+                    else
+                        proto="ALL"
+                    fi
 
                     # Источник: если последнее поле "(v6)" — берём предпоследнее, иначе последнее
                     local source
@@ -67,7 +79,7 @@ manage_ufw() {
 
                     # Определяем ipv6
                     local is_v6=""
-                    echo "$line" | grep -q '(v6)' && { port="$port (v6)"; is_v6=" (v6)"; }
+                    echo "$line" | grep -q '(v6)' && is_v6=" (v6)"
 
                     # Определяем состояние
                     if echo "$line" | grep -qiP 'DENY|REJECT'; then
@@ -83,7 +95,7 @@ manage_ufw() {
                     fi
 
                     comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
-                    printf "${WHITE}%-5s   %-16s  ${state_color}%-16s${NC}   ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
+                    printf "${WHITE}%-5s   %-10s   %-6s   ${state_color}%-16s${NC}   ${DARKGRAY}%s${NC}\n" "$idx" "$port_num" "$proto" "$state" "$comment"
                 done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
