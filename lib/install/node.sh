@@ -267,7 +267,6 @@ installation_node_local() {
         else
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
-        echo
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
@@ -584,7 +583,6 @@ installation_node_remote() {
             setup_cloudflare_credentials || return
         fi
 
-        echo
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
@@ -806,7 +804,6 @@ installation_node_with_existing_subpage() {
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
-        echo
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
