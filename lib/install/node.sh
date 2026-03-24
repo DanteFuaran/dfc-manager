@@ -96,6 +96,7 @@ installation_node_connect() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
 
     # ─── Запрашиваем домен и имя ноды ───
     local SELFSTEAL_DOMAIN entity_name
@@ -218,19 +219,13 @@ installation_node_connect() {
     clear
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "   ${GREEN}🎉 Нода зарегистрирована в панели${NC}"
+    echo -e "  ${GREEN}🎉 Нода зарегистрирована в панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}Нода:${NC}    $SELFSTEAL_DOMAIN"
-    echo -e "${WHITE}Имя:${NC}    $entity_name"
-    echo
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${GREEN}✅ Нода зарегистрирована в панели${NC}"
-    echo -e "${GREEN}✅ Хост добавлен${NC}"
-    echo
     if [ -n "$pubkey" ]; then
-        echo -e "${YELLOW}⚠️  SECRET_KEY для установки ноды на удалённом сервере:${NC}"
+        echo -e "${YELLOW}⚠️  Секретный ключ для установки ноды на удалённом сервере:${NC}"
+        echo
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${WHITE}${pubkey}${NC}"
         echo
