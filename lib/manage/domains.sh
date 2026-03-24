@@ -265,7 +265,6 @@ _change_panel_url_remote() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}   🌐 Смена адреса панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     # Находим все docker-compose файлы с REMNAWAVE_PANEL_URL
     local -a compose_files=()

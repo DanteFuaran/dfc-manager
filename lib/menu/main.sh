@@ -91,7 +91,6 @@ main_menu() {
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("💾  База данных");              rw_actions+=("database")
                         rw_items+=("🔓  Доступ к панели");          rw_actions+=("access")
-                        rw_items+=("🎨  Сменить сайт-заглушку");    rw_actions+=("template")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("🔄  Обновить панель/ноду");     rw_actions+=("update_components")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
@@ -177,7 +176,6 @@ main_menu() {
                         logs)              manage_logs ;;
                         database)          manage_database ;;
                         access)            manage_panel_access ;;
-                        template)          manage_random_template ;;
                         update_components) manage_update ;;
                         back) break ;;
                         sep)  continue ;;

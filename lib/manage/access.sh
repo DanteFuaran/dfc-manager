@@ -28,26 +28,23 @@ manage_panel_access() {
         _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf 2>/dev/null | head -1)
 
         show_arrow_menu "🔓  Доступ к панели" \
-            "$_toggle_label" \
-            "🔗  Показать cookie-ссылку" \
-            "──────────────────────────────────────" \
+            "🌐  Изменить домены" \
             "🔐  Сбросить суперадмина" \
             "🍪  Сменить cookie доступа" \
-            "🌐  Редактировать домены" \
+            "🔗  Показать cookie-ссылку" \
+            "🎨  Сменить сайт-заглушку" \
+            "──────────────────────────────────────" \
+            "$_toggle_label" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 
         case $choice in
-            0)
-                if [ "$_current_port" = "8443" ]; then
-                    switch_panel_port 443 || break
-                else
-                    switch_panel_port 8443 || break
-                fi
-                ;;
-            1)
+            0) manage_domains ;;
+            1) change_credentials || break ;;
+            2) regenerate_cookies || break ;;
+            3)
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "   ${GREEN}🔗  Cookie-ссылка для входа в панель${NC}"
@@ -71,13 +68,18 @@ manage_panel_access() {
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt
-                ;; # Всегда возвращаемся в меню "Доступ к панели"
-            2) ;;
-            3) change_credentials || break ;;
-            4) regenerate_cookies || break ;;
-            5) manage_domains ;;
-            6) ;;
-            7) return ;;
+                ;;
+            4) manage_random_template ;;
+            5) ;;
+            6)
+                if [ "$_current_port" = "8443" ]; then
+                    switch_panel_port 443 || break
+                else
+                    switch_panel_port 8443 || break
+                fi
+                ;;
+            7) ;;
+            8) return ;;
         esac
     done
 }
