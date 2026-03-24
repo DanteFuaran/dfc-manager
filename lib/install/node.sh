@@ -699,7 +699,7 @@ installation_node_remote() {
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
 
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (SECRET_KEY) из панели и нажмите Enter дважды:${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (Секретный ключ) из панели и нажмите Enter дважды:${NC}"
     local CERTIFICATE=""
     while IFS= read -r line; do
         if [ -z "$line" ] && [ -n "$CERTIFICATE" ]; then
@@ -921,7 +921,7 @@ installation_node_with_existing_subpage() {
     done
 
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (SECRET_KEY) из панели и нажмите Enter дважды:${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (Секретный ключ) из панели и нажмите Enter дважды:${NC}"
     local CERTIFICATE=""
     while IFS= read -r line; do
         if [ -z "$line" ] && [ -n "$CERTIFICATE" ]; then
@@ -1011,7 +1011,7 @@ installation_node_with_existing_subpage() {
             "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" \
             "$NODE_INSTALL_DIR"
     ) &
-    show_spinner "Подготовка конфигурации" || true
+    show_spinner "Подготовка файлов" || true
 
     # Настройка файрвола
     (
@@ -1022,8 +1022,12 @@ installation_node_with_existing_subpage() {
     show_spinner "Настройка файрвола" || true
 
     randomhtml
+    echo
 
     # Запуск контейнеров
+    (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск страницы подписки" || true
+
     (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
     if ! show_spinner "Запуск ноды"; then
         print_error "Не удалось запустить контейнеры"
@@ -1031,27 +1035,36 @@ installation_node_with_existing_subpage() {
         return
     fi
 
-    (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск страницы подписки" || true
-
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
-
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
+    # Проверка здоровья
+    local health_ok=true
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+        health_ok=false
+    elif [ ! -S /dev/shm/nginx.sock ]; then
+        health_ok=false
+    fi
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
+        health_ok=false
+    fi
+
     clear
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "   ${GREEN}🎉 НОДА И СТРАНИЦА ПОДПИСКИ УСТАНОВЛЕНЫ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}Нода (selfsteal):${NC}  $SELFSTEAL_DOMAIN"
-    echo -e "${WHITE}Подписка:${NC}          https://$SUB_DOMAIN"
-    echo -e "${WHITE}Панель:${NC}            $PANEL_URL"
-    echo
-    echo -e "${YELLOW}⚠️  Добавьте ноду в панели через API:${NC}"
-    echo -e "${WHITE}   IP сервера:  $(hostname -I | awk '{print $1}')${NC}"
-    echo -e "${WHITE}   Порт ноды:   2222${NC}"
+    if [ "$health_ok" = true ]; then
+        echo -e "${GREEN}Нода успешно подключена!${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Нода установлена, но не подключилась к панели${NC}"
+        echo
+        echo -e "${YELLOW}Диагностика:${NC}"
+        echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
+        echo -e "${WHITE}  docker logs remnanode${NC}"
+        echo -e "${WHITE}  ls -la /dev/shm/nginx.sock${NC}"
+        echo -e "${WHITE}  cd ${NODE_INSTALL_DIR} && docker compose restart${NC}"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
