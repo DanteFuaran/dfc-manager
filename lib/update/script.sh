@@ -184,7 +184,7 @@ manage_delete_components() {
                 echo -e "${RED}     🗑️  Удаление всех компонентов${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "${RED}   ⚠️  Удалить все установленные компоненты${NC}"
+                echo -e "${RED}⚠️  Удалить все установленные компоненты${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 if ! confirm_action; then continue; fi

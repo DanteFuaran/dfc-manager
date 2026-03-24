@@ -726,7 +726,6 @@ _installation_subpage_standalone() {
     echo
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
-        echo
     fi
 
     if [ "$needs_certs" = true ]; then
