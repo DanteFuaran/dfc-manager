@@ -118,12 +118,15 @@ _installation_subpage_on_panel() {
 
     # Запрашиваем домен подписки
     local SUB_DOMAIN
+    local cert_choice
+    while true; do
     prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
 
     # Сертификат для sub_domain
     local CERT_METHOD="$AUTO_CERT_METHOD"
     local LETSENCRYPT_EMAIL=""
 
+    unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
@@ -136,11 +139,11 @@ _installation_subpage_on_panel() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
-                local cert_choice=$?
+                cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
                     1) CERT_METHOD=1 ;;
-                    *) return ;;
+                    *) continue ;;
                 esac
                 setup_cloudflare_credentials || return
             fi
@@ -164,6 +167,8 @@ _installation_subpage_on_panel() {
         print_success "Сертификат для $SUB_DOMAIN уже существует"
         echo
     fi
+    break
+    done
 
     local SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -334,6 +339,9 @@ _installation_subpage_on_node() {
 
     # Запрашиваем URL панели
     local PANEL_URL=""
+    local cert_choice
+    while true; do
+    PANEL_URL=""
     while true; do
         reading "Домен панели (например panel.example.com):" PANEL_URL
         # Убираем протокол если введён
@@ -367,6 +375,7 @@ _installation_subpage_on_node() {
     local LETSENCRYPT_EMAIL=""
     CERT_METHOD=$(detect_cert_method "$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)" 2>/dev/null || echo "2")
 
+    unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
@@ -379,11 +388,11 @@ _installation_subpage_on_node() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
-                local cert_choice=$?
+                cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
                     1) CERT_METHOD=1 ;;
-                    *) return ;;
+                    *) continue ;;
                 esac
                 setup_cloudflare_credentials || return
             fi
@@ -406,6 +415,8 @@ _installation_subpage_on_node() {
         print_success "Сертификат для $SUB_DOMAIN уже существует"
         echo
     fi
+    break
+    done
 
     local SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -556,6 +567,9 @@ _installation_subpage_standalone() {
 
     # Запрашиваем URL панели
     local PANEL_URL=""
+    local cert_choice
+    while true; do
+    PANEL_URL=""
     while true; do
         reading "Домен панели (например panel.example.com):" PANEL_URL
         # Убираем протокол если введён
@@ -585,6 +599,7 @@ _installation_subpage_standalone() {
     done
 
     # Сертификаты
+    unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
@@ -597,14 +612,12 @@ _installation_subpage_standalone() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
-        local cert_choice=$?
-        [[ $cert_choice -eq 255 ]] && return
+        cert_choice=$?
+        [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]] && continue
 
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
         esac
 
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -620,6 +633,8 @@ _installation_subpage_standalone() {
         echo
         print_success "Сертификат для $SUB_DOMAIN уже существует"
     fi
+    break
+    done
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages

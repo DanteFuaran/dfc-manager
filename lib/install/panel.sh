@@ -45,6 +45,8 @@ installation_panel() {
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
     fi
 
+    local cert_choice
+    while true; do
     prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     local SUB_DOMAIN=""
@@ -67,6 +69,7 @@ installation_panel() {
     SUPERADMIN_USERNAME=$(generate_admin_username)
     SUPERADMIN_PASSWORD=$(generate_admin_password)
 
+    unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
     if [ "$with_subpage" = true ]; then
@@ -82,14 +85,12 @@ installation_panel() {
             "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
-        local cert_choice=$?
-        [[ $cert_choice -eq 255 ]] && return
+        cert_choice=$?
+        [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]] && continue
 
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
         esac
 
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -108,6 +109,8 @@ installation_panel() {
         done
         echo
     fi
+    break
+    done
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
