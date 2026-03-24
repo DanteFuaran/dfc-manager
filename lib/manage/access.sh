@@ -28,11 +28,12 @@ manage_panel_access() {
         _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf 2>/dev/null | head -1)
 
         show_arrow_menu "🔓  Доступ к панели" \
-            "🌐  Изменить домены" \
             "🔐  Сбросить суперадмина" \
+            "🌐  Сменить домены" \
             "🍪  Сменить cookie доступа" \
-            "🔗  Показать cookie-ссылку" \
             "🎨  Сменить сайт-заглушку" \
+            "──────────────────────────────────────" \
+            "🔗  Показать ссылку входа" \
             "──────────────────────────────────────" \
             "$_toggle_label" \
             "──────────────────────────────────────" \
@@ -41,10 +42,12 @@ manage_panel_access() {
         [[ $choice -eq 255 ]] && return
 
         case $choice in
-            0) manage_domains ;;
-            1) change_credentials || break ;;
+            0) change_credentials || break ;;
+            1) manage_domains ;;
             2) regenerate_cookies || break ;;
-            3)
+            3) manage_random_template ;;
+            4) ;;
+            5)
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "   ${GREEN}🔗  Cookie-ссылка для входа в панель${NC}"
@@ -69,17 +72,16 @@ manage_panel_access() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt
                 ;;
-            4) manage_random_template ;;
-            5) ;;
-            6)
+            6) ;;
+            7)
                 if [ "$_current_port" = "8443" ]; then
                     switch_panel_port 443 || break
                 else
                     switch_panel_port 8443 || break
                 fi
                 ;;
-            7) ;;
-            8) return ;;
+            8) ;;
+            9) return ;;
         esac
     done
 }
