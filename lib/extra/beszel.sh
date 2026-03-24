@@ -819,7 +819,21 @@ uninstall_beszel() {
     show_spinner "Удаление контейнеров Beszel"
 
     # Удаляем server-блок beszel из nginx.conf
+    # Если был IP-режим (default_server), восстанавливаем catch-all ssl_reject_handshake
+    local _beszel_was_ip_default=false
+    if [ -f "${DIR_NGINX}nginx.conf" ] && \
+       grep -A5 '# BEGIN_BESZEL_BLOCK' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -q 'default_server'; then
+        _beszel_was_ip_default=true
+    fi
+
     nginx_remove_server_block "BESZEL"
+
+    if [ "$_beszel_was_ip_default" = true ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
+        # Восстанавливаем защитный catch-all блок, который был удалён при IP-установке
+        if ! grep -q 'ssl_reject_handshake' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+            sed -i 's|} # ─── end http ───|server {\n    listen 443 ssl default_server;\n    server_name _;\n    ssl_reject_handshake on;\n}\n} # ─── end http ───|' "${DIR_NGINX}nginx.conf"
+        fi
+    fi
 
     # Удаляем неиспользуемые сертификаты из /opt/nginx/ssl/
     nginx_cleanup_unused_certs
