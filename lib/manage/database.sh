@@ -616,6 +616,22 @@ db_restore() {
                     docker compose up -d remnawave-subscription-page >/dev/null 2>&1
                 ) &
                 show_spinner "Перезапуск страницы подписки"
+            else
+                # Страницы подписки нет — проверяем SUB_PUBLIC_DOMAIN
+                local _sub_dom _front_dom
+                _sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+                _front_dom=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+                if [ -n "$_sub_dom" ] && [ -n "$_front_dom" ] && [ "$_sub_dom" != "$_front_dom" ]; then
+                    local nginx_conf="${DIR_NGINX}nginx.conf"
+                    if ! grep -qF "server_name $_sub_dom" "$nginx_conf" 2>/dev/null; then
+                        sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_front_dom|" "$panel_dir/.env"
+                        (cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1) &
+                        show_spinner "Обновление SUB_PUBLIC_DOMAIN"
+                        echo
+                        print_warning "SUB_PUBLIC_DOMAIN изменён на $_front_dom"
+                        echo -e "  ${DIM}Страница подписки не найдена на этом сервере.${NC}"
+                    fi
+                fi
             fi
         fi
     else
