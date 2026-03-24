@@ -92,7 +92,7 @@ installation_node() {
 installation_node_local() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 ДОБАВЛЕНИЕ НОДЫ НА СЕРВЕР ПАНЕЛИ${NC}"
+    echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Проверяем пакеты
@@ -181,12 +181,6 @@ installation_node_local() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    print_success "Панель: $panel_domain"
-    if [ -n "$sub_domain" ]; then
-        print_success "Подписка: $sub_domain$([ \"$has_local_sub\" = false ] && echo ' (удалённая)')"
-    fi
-    print_success "Метод сертификатов: $([ "$AUTO_CERT_METHOD" = "1" ] && echo "Cloudflare DNS-01" || echo "ACME HTTP-01")"
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
     # ─── Запрашиваем selfsteal домен ───
 
     local SELFSTEAL_DOMAIN
@@ -540,7 +534,7 @@ installation_node_remote() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 УСТАНОВКА ТОЛЬКО НОДЫ${NC}"
+    echo -e "${GREEN}       📦 Установка только ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${NODE_INSTALL_DIR}" && cd "${NODE_INSTALL_DIR}"
