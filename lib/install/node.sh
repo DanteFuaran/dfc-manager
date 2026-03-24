@@ -181,30 +181,27 @@ installation_node_local() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    # ─── Запрашиваем selfsteal домен ───
-
-    local SELFSTEAL_DOMAIN
-    prompt_domain_with_retry "Домен selfsteal ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
-
-    # ─── Запрашиваем имя ноды ───
-    local entity_name
+    # ─── Запрашиваем selfsteal домен и имя ноды ───
+    local SELFSTEAL_DOMAIN entity_name
     while true; do
-        reading_inline "Введите имя для ноды (например, Germany):" entity_name
-        local _rc_en=$?
-        if [[ $_rc_en -eq 2 ]]; then
-            echo -e "${YELLOW}Установка отменена${NC}"
-            return
-        fi
-        if [[ -z "$entity_name" ]]; then continue; fi
-        if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
-            if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                break
-            else
-                print_error "Название должно быть от 3 до 20 символов"
+        prompt_domain_with_retry "Введите домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
+        while true; do
+            reading_inline "Введите имя для ноды (например, Germany):" entity_name
+            local _rc_en=$?
+            if [[ $_rc_en -eq 2 ]]; then
+                break  # Esc → назад к вводу домена
             fi
-        else
-            print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
-        fi
+            if [[ -z "$entity_name" ]]; then continue; fi
+            if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
+                    break 2  # всё введено — выходим из обоих циклов
+                else
+                    print_error "Название должно быть от 3 до 20 символов"
+                fi
+            else
+                print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
+            fi
+        done
     done
 
     # ─── Авторизация в панели (до изменения конфигов) ───
