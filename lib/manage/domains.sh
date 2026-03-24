@@ -157,12 +157,16 @@ change_panel_domain() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if ! confirm_action; then
-        print_error "Операция отменена"
-        sleep 2
         return 0
     fi
 
-    # ─── Получение сертификата (до clear, чтобы видеть прогресс certbot) ───
+    # ─── Прогресс ───
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
     local new_cert_domain=""
     if ! obtain_cert_for_domain "$new_domain" "$panel_dir" "$current_domain" new_cert_domain; then
         echo
@@ -171,19 +175,17 @@ change_panel_domain() {
         return 1
     fi
 
-    # ─── Clear и новый экран прогресса ───
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    print_success "Получение SSL-сертификата для ${new_domain}"
-    echo
-
     # Копируем новый сертификат в /opt/nginx/ssl/
     nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
 
-    # Останавливаем панель
+    local old_cert_domain
+    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
+
+    local boundary
+    boundary=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
+    echo
+
+    # Остановка панели
     (
         cd "$panel_dir"
         docker compose down >/dev/null 2>&1
@@ -191,25 +193,19 @@ change_panel_domain() {
     show_spinner "Остановка работы панели"
 
     # Обновление конфигов
-    local old_cert_domain
-    old_cert_domain=$(grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' "${DIR_NGINX}nginx.conf" | head -1)
-
-    local boundary
-    boundary=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
-
-    if [ -n "$old_cert_domain" ] && [ "$old_cert_domain" != "$new_cert_domain" ]; then
-        if [ -n "$boundary" ]; then
-            sed -i "1,${boundary}s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
-        else
-            sed -i "s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+    (
+        if [ -n "$old_cert_domain" ] && [ "$old_cert_domain" != "$new_cert_domain" ]; then
+            if [ -n "$boundary" ]; then
+                sed -i "1,${boundary}s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            else
+                sed -i "s|/etc/nginx/ssl/${old_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            fi
         fi
-    fi
-    sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
-
-    if [ -f "${panel_dir}/.env" ]; then
-        sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=${new_domain}|" "${panel_dir}/.env"
-    fi
-    (sleep 0.3) &
+        sed -i "s|server_name ${current_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
+        if [ -f "${panel_dir}/.env" ]; then
+            sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=${new_domain}|" "${panel_dir}/.env"
+        fi
+    ) &
     show_spinner "Обновление конфигов"
 
     # Обновление cookie доступа
@@ -217,23 +213,22 @@ change_panel_domain() {
     if get_cookie_from_nginx; then
         OLD_COOKIE_NAME="$COOKIE_NAME"
         OLD_COOKIE_VALUE="$COOKIE_VALUE"
-
         NEW_COOKIE_NAME=$(generate_cookie_key)
         NEW_COOKIE_VALUE=$(generate_cookie_key)
-
-        sed -i "s|~\*${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}|~*${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}|g" "${DIR_NGINX}nginx.conf"
-        sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${DIR_NGINX}nginx.conf"
-        sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${DIR_NGINX}nginx.conf"
-        sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${DIR_NGINX}nginx.conf"
+        (
+            sed -i "s|~\*${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}|~*${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}|g" "${DIR_NGINX}nginx.conf"
+            sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${DIR_NGINX}nginx.conf"
+            sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${DIR_NGINX}nginx.conf"
+            sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${DIR_NGINX}nginx.conf"
+        ) &
+        show_spinner "Обновление доступов"
     fi
-    (sleep 0.3) &
-    show_spinner "Обновление доступов"
 
     # Перезапуск сервисов
     (
         cd "$panel_dir"
         docker compose up -d >/dev/null 2>&1
-        cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+        cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
     ) &
     show_spinner "Перезапуск сервисов"
 
@@ -253,14 +248,13 @@ change_panel_domain() {
         echo -e "${WHITE}https://${new_domain}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     fi
 
-    # Предупреждение для удалённой страницы подписки
-    local _sub_domain
-    _sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
-    if [ -n "$_sub_domain" ] && ! grep -q 'remnawave-subscription-page' "${panel_dir}/docker-compose.yml" 2>/dev/null; then
+    # Предупреждение о удалённой странице подписки
+    if is_subpage_remote_installed || \
+       grep -q 'REMNAWAVE_PANEL_URL=.*https\?://' /opt/subscribe-page/docker-compose.yml 2>/dev/null || \
+       grep -q 'REMNAWAVE_PANEL_URL=.*https\?://' /opt/remnasubpage/docker-compose.yml 2>/dev/null; then
         echo
-        echo -e "${YELLOW}⚠️  Страница подписки на удалённом сервере${NC}"
-        echo -e "${WHITE}Обновите REMNAWAVE_PANEL_URL на сервере подписки:${NC}"
-        echo -e "${DARKGRAY}https://${new_domain}${NC}"
+        echo -e "${YELLOW}⚠️  Если страница подписки установлена на удалённом сервере,${NC}"
+        echo -e "${YELLOW}   обновите REMNAWAVE_PANEL_URL на https://${new_domain}${NC}"
     fi
 
     echo
