@@ -56,7 +56,7 @@ manage_ufw() {
                 echo -e "${GREEN}     📋 ОТКРЫТЫЕ ПОРТЫ (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                ufw status numbered 2>/dev/null | tail -n +4
+                ufw status numbered 2>/dev/null | grep '^\['
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
