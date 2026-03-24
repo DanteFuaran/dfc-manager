@@ -55,7 +55,7 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                printf "${DARKGRAY}%-5s   %-16s       %-16s      %s${NC}\n" "№" "Порт" "Состояние" "Комментарий"
+                printf "   ${DARKGRAY}%-5s        %-16s       %-16s      %s${NC}\n" "№" "Порт" "Состояние" "Комментарий"
                 while IFS= read -r line; do
                     local idx port state comment state_color
                     idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
@@ -83,7 +83,7 @@ manage_ufw() {
                     fi
 
                     comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
-                    printf "${WHITE}%-5s   %-16s       ${state_color}%-16s${NC}      ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
+                    printf "   ${WHITE}%-5s        %-16s       ${state_color}%-16s${NC}      ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
                 done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
