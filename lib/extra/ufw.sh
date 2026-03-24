@@ -55,7 +55,7 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                printf "  ${DARKGRAY}%-5s      %-16s    %-16s   %s${NC}\n" "№" "Порт" "Состояние" "Комментарий"
+                printf "  ${DARKGRAY}%-5s      %-16s    %-16s       %s${NC}\n" "№" "Порт" "Состояние" "Комментарий"
                 while IFS= read -r line; do
                     local idx port state comment state_color
                     idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
