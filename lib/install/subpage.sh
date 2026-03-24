@@ -398,6 +398,7 @@ _installation_subpage_on_node() {
     if [[ $? -eq 2 ]]; then
         tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
         tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка домена подписки
         break
     fi
 
@@ -658,6 +659,7 @@ _installation_subpage_standalone() {
     if [[ $? -eq 2 ]]; then
         tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
         tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка домена подписки
         break
     fi
 
