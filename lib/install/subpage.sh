@@ -296,15 +296,14 @@ _installation_subpage_on_panel() {
     show_spinner "Запуск страницы подписки"
 
     clear
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "   ${GREEN}🎉 СТРАНИЦА ПОДПИСКИ ДОБАВЛЕНА${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
     echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
     echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
@@ -560,21 +559,19 @@ EOL
 
     if [ "$health_ok" = true ]; then
         clear
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "   ${GREEN}🎉 СТРАНИЦА ПОДПИСКИ УСТАНОВЛЕНА${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
         echo -e "${WHITE}Панель:${NC}       $PANEL_URL"
         echo
-        echo -e "${DARKGRAY}Страница подписки добавлена к существующей ноде.${NC}"
-        echo -e "${DARKGRAY}Домен подписки доступен через тот же порт, что и нода.${NC}"
+        echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
         echo
-        echo -e "${YELLOW}⚠️  Не забудьте обновить SUB_PUBLIC_DOMAIN в настройках панели:${NC}"
-        echo -e "${WHITE}   $SUB_DOMAIN${NC}"
+        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
+        echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -802,9 +799,8 @@ _installation_subpage_standalone() {
     if [ "$health_ok" = true ]; then
         clear
         tput civis 2>/dev/null
-        echo
         echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "                ${GREEN}🎉 СТРАНИЦА ПОДПИСКИ УСТАНОВЛЕНА!${NC}"
+        echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
         echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
@@ -814,9 +810,6 @@ _installation_subpage_standalone() {
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
         echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
-        echo
-        echo -e "${YELLOW}⚠️  Не забудьте обновить SUB_PUBLIC_DOMAIN в настройках панели:${NC}"
-        echo -e "${WHITE}   $SUB_DOMAIN${NC}"
         echo
         echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     else
