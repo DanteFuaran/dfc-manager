@@ -35,16 +35,7 @@ manage_ufw() {
             # Разделитель (index 1) или Назад (index 2)
             [ "$choice" -ge 1 ] && return 0
         else
-            local _ufw_status_text
-            local _ufw_st
-            _ufw_st=$(ufw status 2>/dev/null | head -1)
-            if echo "$_ufw_st" | grep -q "active"; then
-                _ufw_status_text="\n${NC}${GREEN}✅ UFW активен${NC}"
-            else
-                _ufw_status_text="\n${NC}${YELLOW}⚠️  UFW не активен${NC}"
-            fi
-
-            show_arrow_menu "🔥  Firewall (UFW)${_ufw_status_text}" \
+            show_arrow_menu "🔥  Firewall (UFW)" \
                 "📋  Показать открытые порты" \
                 "➕  Открыть порт" \
                 "➖  Удалить правило" \
@@ -74,7 +65,7 @@ manage_ufw() {
                 # Открыть порт
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}        ➕ ОТКРЫТЬ ПОРТ${NC}"
+                echo -e "${GREEN}        ➕ Открытие порта${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
 
@@ -110,12 +101,9 @@ manage_ufw() {
                 (
                     "${cmd_args[@]}" >/dev/null 2>&1
                 ) &
-                show_spinner "Открытие порта $ufw_port"
+                wait $!
 
-                print_success "Порт $ufw_port открыт"
-                [ -n "$ufw_proto" ] && echo -e "  ${DARKGRAY}Протокол: ${WHITE}${ufw_proto}${NC}"
-                [ -n "$ufw_ip" ] && echo -e "  ${DARKGRAY}Для IP: ${WHITE}${ufw_ip}${NC}"
-                [ -n "$ufw_comment" ] && echo -e "  ${DARKGRAY}Комментарий: ${WHITE}${ufw_comment}${NC}"
+                echo -e " ${GREEN}✅  Порт ${ufw_port} открыт${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1

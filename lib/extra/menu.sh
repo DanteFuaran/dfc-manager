@@ -5,16 +5,16 @@ manage_extra_settings() {
     while true; do
         tput civis 2>/dev/null || true
         clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   🧩  ДОПОЛНИТЕЛЬНЫЕ ПРОГРАММЫ${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
+
+        local _ufw_st _warp_st _f2b_st
+        command -v ufw >/dev/null 2>&1 && _ufw_st="${GREEN}(установлен)${NC}" || _ufw_st="${DARKGRAY}(не установлен)${NC}"
+        ip link show warp 2>/dev/null | grep -q "warp" && _warp_st="${GREEN}(установлен)${NC}" || _warp_st="${DARKGRAY}(не установлен)${NC}"
+        command -v fail2ban-client >/dev/null 2>&1 && _f2b_st="${GREEN}(установлен)${NC}" || _f2b_st="${DARKGRAY}(не установлен)${NC}"
 
         show_arrow_menu "🧩  Дополнительные программы" \
-            "🔥  Firewall (UFW)" \
-            "🌐  WARP" \
-            "🛡️   Fail2ban" \
-            "📝  Logrotate" \
+            "🔥  UFW - Firewall      ${_ufw_st}" \
+            "🌐  WARP - Cloudflare   ${_warp_st}" \
+            "🛡️   Fail2ban - Defence  ${_f2b_st}" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
@@ -24,9 +24,8 @@ manage_extra_settings() {
             0) manage_ufw || break ;;
             1) manage_warp || break ;;
             2) manage_fail2ban || break ;;
-            3) manage_logrotate || break ;;
-            4) continue ;;
-            5) return ;;
+            3) continue ;;
+            4) return ;;
         esac
     done
 }
