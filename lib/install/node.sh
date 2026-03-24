@@ -744,11 +744,8 @@ installation_node_with_existing_subpage() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 УСТАНОВКА НОДЫ${NC}"
+    echo -e "${GREEN}   📦 Установка ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${DARKGRAY}Обнаружена страница подписки на этом сервере.${NC}"
-    echo -e "${DARKGRAY}Нода будет установлена в отдельную директорию ${NODE_INSTALL_DIR}.${NC}"
     echo
 
     # Извлекаем данные из существующей установки subpage
@@ -766,11 +763,6 @@ installation_node_with_existing_subpage() {
         show_continue_prompt || return 1
         return
     fi
-
-    echo -e "${GREEN}✅${NC} Страница подписки: $SUB_DOMAIN"
-    echo -e "${GREEN}✅${NC} URL панели:         $PANEL_URL"
-    echo -e "${GREEN}✅${NC} API токен:           ${API_TOKEN:0:8}..."
-    echo
 
     # Запрашиваем параметры ноды
     local SELFSTEAL_DOMAIN
