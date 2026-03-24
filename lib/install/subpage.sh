@@ -304,7 +304,7 @@ _installation_subpage_on_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📄 УСТАНОВКА СТРАНИЦЫ ПОДПИСКИ${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
@@ -349,6 +349,10 @@ _installation_subpage_on_node() {
         fi
     done
 
+    # Запрашиваем домен подписки
+    local SUB_DOMAIN
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
+
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
@@ -358,10 +362,6 @@ _installation_subpage_on_node() {
             break
         fi
     done
-
-    # Запрашиваем домен подписки
-    local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
 
     # Определяем метод сертификатов
     local CERT_METHOD
@@ -545,7 +545,7 @@ _installation_subpage_standalone() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📄 УСТАНОВКА СТРАНИЦЫ ПОДПИСКИ${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -573,6 +573,10 @@ _installation_subpage_standalone() {
         fi
     done
 
+    # Запрашиваем домен подписки
+    local SUB_DOMAIN
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return; }
+
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
@@ -582,10 +586,6 @@ _installation_subpage_standalone() {
             break
         fi
     done
-
-    # Запрашиваем домен подписки
-    local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return; }
 
     # Сертификаты
     declare -A domains_to_check
