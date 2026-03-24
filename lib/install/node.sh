@@ -305,8 +305,9 @@ installation_node_local() {
     # Извлекаем cookie
     local COOKIE_NAME COOKIE_VALUE
     if ! get_cookie_from_nginx; then
-        print_error "Не удалось извлечь cookie из nginx.conf"
+        print_error "Не удалось получить cookie"
         echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
         return
     fi

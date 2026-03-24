@@ -109,15 +109,16 @@ main_menu() {
                                 tput civis 2>/dev/null || true
                                 local -a inst_items=() inst_actions=()
                                 if ! is_panel_installed; then
-                                    inst_items+=("🖥️   Панель управления Remnawave"); inst_actions+=("panel_wizard")
+                                    inst_items+=("🖥️   Установить панель Remnawave"); inst_actions+=("panel_wizard")
+                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 else
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
                                 fi
                                 if ! is_subpage_remote_installed; then
-                                    inst_items+=("📄  Установить страницу подписки на сервер"); inst_actions+=("subpage")
+                                    inst_items+=("📄  Установить страницу подписки"); inst_actions+=("subpage")
                                 fi
                                 if ! is_node_installed; then
-                                    inst_items+=("🌐  Установить ноду на сервер");               inst_actions+=("node")
+                                    inst_items+=("🌐  Установить ноду");               inst_actions+=("node")
                                 fi
                                 inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 inst_items+=("⬅️   Назад"); inst_actions+=("back")
@@ -163,7 +164,7 @@ main_menu() {
                                         done
                                         ;;
                                     subpage)    installation_subpage ;;
-                                    node)       installation_node_local ;;
+                                    node)       installation_node ;;
                                     add_node)   installation_node_connect ;;
                                     *) break ;;
                                 esac
