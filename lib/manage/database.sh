@@ -609,15 +609,23 @@ db_restore() {
                      VALUES ('$token_uuid', '$api_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
             fi
 
-            # Перезапуск subscription-page (если на этом сервере)
-            if grep -q 'remnawave-subscription-page' "$panel_dir/docker-compose.yml" 2>/dev/null; then
+            # Перезапуск subscription-page (ищем во всех возможных местах)
+            local _sub_page_dir=""
+            for _dir in "/opt/remnawave" "/opt/remnanode" "/opt/remnasubpage" "/opt/subscribe-page"; do
+                if grep -q 'remnawave-subscription-page' "$_dir/docker-compose.yml" 2>/dev/null; then
+                    _sub_page_dir="$_dir"
+                    break
+                fi
+            done
+
+            if [ -n "$_sub_page_dir" ]; then
                 (
-                    cd "$panel_dir"
+                    cd "$_sub_page_dir"
                     docker compose up -d remnawave-subscription-page >/dev/null 2>&1
                 ) &
                 show_spinner "Перезапуск страницы подписки"
             else
-                # Страницы подписки нет — проверяем SUB_PUBLIC_DOMAIN
+                # Страницы подписки нет на этом сервере — проверяем SUB_PUBLIC_DOMAIN
                 local _sub_dom _front_dom
                 _sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
                 _front_dom=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
