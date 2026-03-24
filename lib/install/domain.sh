@@ -51,19 +51,19 @@ resolve_domain_ip() {
 
     # 1. dig (bind-utils)
     if command -v dig &>/dev/null; then
-        ip=$(dig +short "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        ip=$(dig +short +time=3 +tries=1 "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 
     # 2. nslookup
     if command -v nslookup &>/dev/null; then
-        ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address:/{print $2}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        ip=$(timeout 3 nslookup "$domain" 2>/dev/null | awk '/^Address:/{print $2}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 
     # 3. host
     if command -v host &>/dev/null; then
-        ip=$(host -t A "$domain" 2>/dev/null | awk '/has address/{print $NF}' | head -1)
+        ip=$(timeout 3 host -t A "$domain" 2>/dev/null | awk '/has address/{print $NF}' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 

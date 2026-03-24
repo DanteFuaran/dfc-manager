@@ -744,7 +744,7 @@ installation_node_with_existing_subpage() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📦 Установка ноды${NC}"
+    echo -e "${GREEN}          📦 Установка ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Извлекаем данные из существующей установки subpage
