@@ -778,14 +778,44 @@ change_agent_hub_url() {
         echo; show_continue_prompt || return 1; return 1
     fi
 
-    (
-        sed -i "s|HUB_URL: \"[^\"]*\"|HUB_URL: \"${NEW_HUB_URL}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
-        cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
-    ) &
-    show_spinner "Обновление адреса хаба"
+    # Нормализуем URL
+    if [[ "$NEW_HUB_URL" != http://* ]] && [[ "$NEW_HUB_URL" != https://* ]]; then
+        NEW_HUB_URL="https://${NEW_HUB_URL}"
+    fi
 
     echo
-    print_success "Адрес хаба обновлён"
+
+    local CURRENT_KEY CURRENT_TOKEN
+    CURRENT_KEY=$(grep 'KEY:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
+    CURRENT_TOKEN=$(grep 'TOKEN:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
+
+    # ─── Новый ключ ───
+    local NEW_KEY
+    reading_inline "Новый публичный ключ (Enter оставить без изменений):" NEW_KEY
+    [[ $? -eq 2 ]] && return 1
+    [ -z "$NEW_KEY" ] && NEW_KEY="$CURRENT_KEY"
+
+    echo
+
+    # ─── Новый токен ───
+    local NEW_TOKEN
+    reading_inline "Новый токен (Enter оставить без изменений):" NEW_TOKEN
+    [[ $? -eq 2 ]] && return 1
+    [ -z "$NEW_TOKEN" ] && NEW_TOKEN="$CURRENT_TOKEN"
+
+    echo
+    echo
+
+    (
+        sed -i "s|HUB_URL: \"[^\"]*\"|HUB_URL: \"${NEW_HUB_URL}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
+        sed -i "s|KEY: \"[^\"]*\"|KEY: \"${NEW_KEY}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
+        sed -i "s|TOKEN: \"[^\"]*\"|TOKEN: \"${NEW_TOKEN}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
+        cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
+    ) &
+    show_spinner "Обновление настроек агента"
+
+    echo
+    print_success "Настройки агента обновлены"
     echo
     echo -e "${YELLOW}🔗 Новый адрес хаба:${NC}"
     echo -e "${WHITE}${NEW_HUB_URL}${NC}"
