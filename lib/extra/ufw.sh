@@ -53,10 +53,24 @@ manage_ufw() {
                 # Показать открытые порты
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}     📋 ОТКРЫТЫЕ ПОРТЫ (UFW)${NC}"
+                echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
-                ufw status numbered 2>/dev/null | grep '^\['
+                printf "  ${DARKGRAY}%-24s %-22s %s${NC}\n" "Порт" "Состояние" "Описание"
+                while IFS= read -r line; do
+                    local idx port state comment
+                    idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
+                    port=$(echo "$line" | sed 's/^\[\s*[0-9]*\]\s*//' | awk '{print $1}')
+                    # Определяем ipv6
+                    if echo "$line" | grep -q '(v6)'; then
+                        port="$port (v6)"
+                        state="Открыт для всех(v6)"
+                    else
+                        state="Открыт для всех"
+                    fi
+                    comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
+                    [ -n "$comment" ] && comment="Описание: $comment" || comment=""
+                    printf "  ${WHITE}%-6s %-20s ${GREEN}%-22s${NC} ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
+                done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
