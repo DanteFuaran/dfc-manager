@@ -322,14 +322,19 @@ db_restore() {
         cp "$custom_dump_path" "$backup_dir/"
     fi
 
-    # Собираем список бэкапов (.tar.gz и .sql.gz)
+    # Собираем список бэкапов (.tar.gz и .sql.gz), исключая технические файлы
     local backup_files=()
     local menu_items=()
     while IFS= read -r file; do
-        backup_files+=("$file")
         local fname fsize display_label
         fname=$(basename "$file")
+        # Пропускаем технические файлы страховочных бэкапов
+        if [[ "$fname" =~ ^pre_ ]]; then
+            continue
+        fi
+        backup_files+=("$file")
         fsize=$(du -h "$file" | cut -f1)
+        # Формат: Remnawave_2026-03-24_16-48.tar.gz
         if [[ "$fname" =~ ^([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})-([0-9]{2})\.(tar\.gz|sql\.gz|sql)$ ]]; then
             local pname pyear pmon pday phour pmin
             pname="${BASH_REMATCH[1]}"
@@ -339,6 +344,17 @@ db_restore() {
             phour="${BASH_REMATCH[5]}"
             pmin="${BASH_REMATCH[6]}"
             display_label="${pname} | ${pday}.${pmon}.${pyear} | ${phour}:${pmin} | ${fsize}"
+        # Формат: backup_remnawave_23.03.26_18-39-48.sql.gz
+        elif [[ "$fname" =~ ^backup_([A-Za-z]+)_([0-9]{2})\.([0-9]{2})\.([0-9]{2})_([0-9]{2})-([0-9]{2})-([0-9]{2})\.(tar\.gz|sql\.gz|sql)$ ]]; then
+            local pname pday pmon pyear phour pmin psec
+            pname="${BASH_REMATCH[1]^}"      # заглавная первая буква
+            pday="${BASH_REMATCH[2]}"
+            pmon="${BASH_REMATCH[3]}"
+            pyear="20${BASH_REMATCH[4]}"
+            phour="${BASH_REMATCH[5]}"
+            pmin="${BASH_REMATCH[6]}"
+            psec="${BASH_REMATCH[7]}"
+            display_label="${pname} | ${pday}.${pmon}.${pyear} | ${phour}:${pmin}:${psec} | ${fsize}"
         else
             display_label="${fname} (${fsize})"
         fi
