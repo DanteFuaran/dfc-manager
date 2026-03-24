@@ -136,6 +136,131 @@ db_backup() {
     show_continue_prompt || return 1
 }
 
+# ═══════════════════════════════════════════════
+# ЧАСТИЧНОЕ ВОССТАНОВЛЕНИЕ ИЗ БЭКАПА
+# ═══════════════════════════════════════════════
+
+_get_restore_tables() {
+    case "$1" in
+        users)           echo "users user_traffic user_subscription_request_history hwid_user_devices" ;;
+        profiles)        echo "config_profiles config_profile_inbounds config_profile_inbounds_to_nodes config_profile_snippets" ;;
+        templates)       echo "subscription_templates" ;;
+        nodes)           echo "nodes hosts hosts_to_nodes nodes_traffic_usage_history nodes_usage_history nodes_user_usage_history" ;;
+        billing)         echo "infra_providers infra_billing_nodes infra_billing_history" ;;
+        internal_squads) echo "internal_squads internal_squad_members internal_squad_inbounds internal_squad_host_exclusions" ;;
+        external_squads) echo "external_squads external_squads_templates" ;;
+        settings)        echo "remnawave_settings subscription_settings subscription_page_config keygen" ;;
+    esac
+}
+
+_db_partial_restore() {
+    local dump_file="$1"
+    local restore_label="$2"
+    local table_group="$3"
+    local panel_dir="$4"
+    local selected_name="$5"
+
+    local tables
+    tables=$(_get_restore_tables "$table_group")
+
+    # Build table flags for pg_dump
+    local table_flags=""
+    for t in $tables; do
+        table_flags="$table_flags --table=$t"
+    done
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   📥 ЧАСТИЧНОЕ ВОССТАНОВЛЕНИЕ${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}"
+    echo -e "${WHITE}Режим:${NC} ${YELLOW}${restore_label}${NC}"
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
+    echo -e "${WHITE}Данные из бэкапа будут ДОБАВЛЕНЫ к текущим.${NC}"
+    echo -e "${WHITE}Существующие записи не будут изменены.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    if ! confirm_action; then
+        print_error "Операция отменена"
+        sleep 2
+        return 0
+    fi
+
+    echo
+
+    # Создаём временную базу данных
+    (
+        docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
+        docker exec remnawave-db psql -U postgres -c "CREATE DATABASE _rw_restore_tmp;" >/dev/null 2>&1
+    ) &
+    show_spinner "Подготовка временной базы"
+
+    # Загружаем дамп во временную базу
+    (
+        if [[ "$dump_file" == *.gz ]]; then
+            zcat "$dump_file"
+        else
+            cat "$dump_file"
+        fi | grep -v '^DROP DATABASE' | \
+            grep -v '^CREATE DATABASE' | \
+            grep -v '^ALTER DATABASE' | \
+            grep -v -E "^ALTER ROLE .* PASSWORD " | \
+            sed 's/\\connect postgres/\\connect _rw_restore_tmp/g' | \
+            docker exec -i remnawave-db psql -U postgres >/dev/null 2>&1
+    ) &
+    show_spinner "Загрузка бэкапа во временную базу"
+
+    # Страховочный бэкап текущей БД
+    local safety_backup="${panel_dir}/backups/pre_partial_$(date +%Y-%m-%d_%H-%M).sql.gz"
+    mkdir -p "${panel_dir}/backups"
+    docker exec remnawave-db pg_dumpall -c -U postgres 2>/dev/null | gzip -9 > "$safety_backup"
+    [ ! -s "$safety_backup" ] && rm -f "$safety_backup" 2>/dev/null
+
+    # Останавливаем панель
+    (
+        cd "$panel_dir"
+        if grep -q 'remnawave-subscription-page' docker-compose.yml 2>/dev/null; then
+            docker compose stop remnawave remnawave-subscription-page >/dev/null 2>&1
+        else
+            docker compose stop remnawave >/dev/null 2>&1
+        fi
+    ) &
+    show_spinner "Остановка панели"
+
+    # Извлекаем данные из временной БД и применяем к основной с ON CONFLICT DO NOTHING
+    (
+        {
+            echo "SET session_replication_role = 'replica';"
+            docker exec remnawave-db pg_dump -U postgres -d _rw_restore_tmp \
+                --data-only --column-inserts $table_flags 2>/dev/null | \
+                sed '/^INSERT INTO /s/);$/) ON CONFLICT DO NOTHING;/'
+            echo "SET session_replication_role = 'origin';"
+        } | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
+    ) &
+    show_spinner "Восстановление данных"
+
+    # Удаляем временную базу
+    docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
+
+    # Запускаем панель
+    (
+        cd "$panel_dir"
+        docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner "Запуск панели"
+
+    echo
+    print_success "Данные успешно восстановлены!"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
 db_restore() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -280,19 +405,42 @@ db_restore() {
     # Выбор типа восстановления
     echo
     show_arrow_menu "📥  Тип восстановления" \
-        "📦  Полное восстановление — заменить все данные" \
-        "👤  Только пользователи — сохранить настройки панели" \
+        "📦  Полное восстановление" \
+        "──────────────────────────────────────" \
+        "👤  Восстановить Пользователей" \
+        "📄  Восстановить Профили Xray" \
+        "📋  Восстановить Шаблоны Xray JSON" \
+        "🌐  Восстановить Ноды и Хосты" \
+        "💰  Восстановить Данные биллинга" \
+        "👥  Восстановить Внутренние сквады" \
+        "🌍  Восстановить Внешние сквады" \
+        "⚙️   Восстановить Настройки" \
         "──────────────────────────────────────" \
         "❌  Отмена"
     local restore_choice=$?
 
-    if [ $restore_choice -ge 2 ] || [ $restore_choice -eq 255 ]; then
+    if [ $restore_choice -eq 255 ] || [ $restore_choice -ge 10 ]; then
         rm -rf "$tmp_extract" 2>/dev/null
         return 0
     fi
 
-    local restore_type="full"
-    [ $restore_choice -eq 1 ] && restore_type="users_only"
+    # Частичное восстановление
+    if [ $restore_choice -ge 2 ]; then
+        local _partial_group="" _partial_label=""
+        case $restore_choice in
+            2) _partial_group="users";           _partial_label="Пользователи" ;;
+            3) _partial_group="profiles";        _partial_label="Профили Xray" ;;
+            4) _partial_group="templates";       _partial_label="Шаблоны Xray JSON" ;;
+            5) _partial_group="nodes";           _partial_label="Ноды и Хосты" ;;
+            6) _partial_group="billing";         _partial_label="Данные биллинга" ;;
+            7) _partial_group="internal_squads"; _partial_label="Внутренние сквады" ;;
+            8) _partial_group="external_squads"; _partial_label="Внешние сквады" ;;
+            9) _partial_group="settings";        _partial_label="Настройки" ;;
+        esac
+        _db_partial_restore "$dump_to_restore" "$_partial_label" "$_partial_group" "$panel_dir" "$selected_name"
+        rm -rf "$tmp_extract" 2>/dev/null
+        return
+    fi
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -300,22 +448,13 @@ db_restore() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}"
-    if [ "$restore_type" = "users_only" ]; then
-        echo -e "${WHITE}Режим:${NC} ${YELLOW}Только пользователи${NC}"
-    else
-        echo -e "${WHITE}Режим:${NC} ${YELLOW}Полное восстановление${NC}"
-    fi
+    echo -e "${WHITE}Режим:${NC} ${YELLOW}Полное восстановление${NC}"
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
-    if [ "$restore_type" = "users_only" ]; then
-        echo -e "${WHITE}Пользователи будут заменены из бекапа.${NC}"
-        echo -e "${WHITE}Настройки панели и администратор сохранятся.${NC}"
-    else
-        echo -e "${WHITE}Все текущие данные панели будут потеряны.${NC}"
-        echo -e "${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}"
-    fi
+    echo -e "${WHITE}Все текущие данные панели будут потеряны.${NC}"
+    echo -e "${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -327,28 +466,6 @@ db_restore() {
     fi
 
     echo
-
-    # Для "только пользователи" — сохраняем данные администратора и API токенов
-    local admin_backup_file=""
-    local referral_backup_file=""
-    if [ "$restore_type" = "users_only" ]; then
-        admin_backup_file="/tmp/_rw_admin_save_$$.sql"
-        (
-            docker exec remnawave-db pg_dump -U postgres -d postgres \
-                --data-only --table=admin --table=api_tokens 2>/dev/null > "$admin_backup_file"
-        ) &
-        show_spinner "Сохранение данных администратора"
-
-        # Сохраняем реферальные данные из базы бота
-        if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
-            referral_backup_file="/tmp/_rw_referral_save_$$.sql"
-            (
-                docker exec remnasale-db pg_dump -U remnasale -d remnasale \
-                    --data-only --table=referrals --table=referral_rewards 2>/dev/null > "$referral_backup_file"
-            ) &
-            show_spinner "Сохранение реферальных данных"
-        fi
-    fi
 
     # Останавливаем панель (и страницу подписки, если она в compose)
     (
@@ -408,127 +525,90 @@ db_restore() {
         fi
     fi
 
-    if [ "$restore_type" = "users_only" ]; then
-        # Восстанавливаем сохранённого администратора и API токены
-        (
-            docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE; TRUNCATE TABLE api_tokens CASCADE;" >/dev/null 2>&1
-            if [ -s "$admin_backup_file" ]; then
-                cat "$admin_backup_file" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
-            fi
-        ) &
-        show_spinner "Восстановление администратора"
-        rm -f "$admin_backup_file" 2>/dev/null
+    # Полное восстановление — стандартный процесс
 
-        # Восстанавливаем реферальные данные в базу бота
-        if [ -n "$referral_backup_file" ] && [ -s "$referral_backup_file" ]; then
-            if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
-                (
-                    docker exec remnasale-db psql -U remnasale -d remnasale -c "TRUNCATE TABLE referral_rewards CASCADE; TRUNCATE TABLE referrals CASCADE;" >/dev/null 2>&1
-                    cat "$referral_backup_file" | docker exec -i remnasale-db psql -U remnasale -d remnasale >/dev/null 2>&1
-                ) &
-                show_spinner "Восстановление реферальных данных"
-            fi
-            rm -f "$referral_backup_file" 2>/dev/null
+    # Очищаем таблицу admin для перевода панели в режим регистрации
+    (
+        docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
+    ) &
+    show_spinner "Подготовка к регистрации"
+    echo
+
+    # Запускаем панель (без subscription-page, т.к. токен ещё не обновлён)
+    (
+        cd "$panel_dir"
+        docker compose up -d remnawave >/dev/null 2>&1
+    ) &
+    show_spinner "Запуск панели"
+
+    # Ожидание готовности API (тихо)
+    local domain_url="127.0.0.1:3000"
+    local _api_wait=0
+    while [ $_api_wait -lt 60 ]; do
+        if curl -s -f --max-time 5 "http://$domain_url/api/auth/status" \
+            --header 'X-Forwarded-For: 127.0.0.1' \
+            --header 'X-Forwarded-Proto: https' > /dev/null 2>&1; then
+            break
         fi
+        sleep 2
+        _api_wait=$((_api_wait + 2))
+    done
 
-        # Запускаем панель
-        (
-            cd "$panel_dir"
-            docker compose up -d remnawave >/dev/null 2>&1
-            if grep -q 'remnawave-subscription-page' docker-compose.yml 2>/dev/null; then
-                docker compose up -d remnawave-subscription-page >/dev/null 2>&1
-            fi
-        ) &
-        show_spinner "Запуск панели"
-
+    if [ $_api_wait -ge 60 ]; then
+        print_error "API не отвечает после восстановления"
+        echo -e "${YELLOW}Запустите панель вручную и создайте администратора${NC}"
         echo
-        print_success "Пользователи успешно загружены!"
-    else
-        # Полное восстановление — стандартный процесс
-
-        # Очищаем таблицу admin для перевода панели в режим регистрации
-        (
-            docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
-        ) &
-        show_spinner "Подготовка к регистрации"
-        echo
-
-        # Запускаем панель (без subscription-page, т.к. токен ещё не обновлён)
-        (
-            cd "$panel_dir"
-            docker compose up -d remnawave >/dev/null 2>&1
-        ) &
-        show_spinner "Запуск панели"
-
-        # Ожидание готовности API (тихо)
-        local domain_url="127.0.0.1:3000"
-        local _api_wait=0
-        while [ $_api_wait -lt 60 ]; do
-            if curl -s -f --max-time 5 "http://$domain_url/api/auth/status" \
-                --header 'X-Forwarded-For: 127.0.0.1' \
-                --header 'X-Forwarded-Proto: https' > /dev/null 2>&1; then
-                break
-            fi
-            sleep 2
-            _api_wait=$((_api_wait + 2))
-        done
-
-        if [ $_api_wait -ge 60 ]; then
-            print_error "API не отвечает после восстановления"
-            echo -e "${YELLOW}Запустите панель вручную и создайте администратора${NC}"
-            echo
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            show_continue_prompt || return 1
-            return
-        fi
-
-        # Регистрация нового администратора и создание API токена (тихо)
-        local SUPERADMIN_USERNAME SUPERADMIN_PASSWORD
-        SUPERADMIN_USERNAME=$(generate_admin_username)
-        SUPERADMIN_PASSWORD=$(generate_admin_password)
-
-        local token
-        token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
-
-        if [ -n "$token" ]; then
-            # Создание API токена для страницы подписки
-            # Если токен с таким именем уже есть — переименовываем старый
-            docker exec remnawave-db psql -U postgres -d postgres -c \
-                "UPDATE api_tokens SET token_name = token_name || '_old' WHERE token_name = 'subscription-page';" >/dev/null 2>&1 || true
-
-            if create_api_token "$domain_url" "$token" "$panel_dir" 2>/dev/null; then
-                local api_token
-                api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-
-                # Сброс администратора (CASCADE удалит и API токены)
-                docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
-
-                # Восстанавливаем API токен напрямую в базу
-                if [ -n "$api_token" ]; then
-                    local token_uuid
-                    token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
-                    docker exec remnawave-db psql -U postgres -d postgres -c \
-                        "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
-                         VALUES ('$token_uuid', '$api_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
-                fi
-
-                # Перезапуск subscription-page (если на этом сервере)
-                if grep -q 'remnawave-subscription-page' "$panel_dir/docker-compose.yml" 2>/dev/null; then
-                    (
-                        cd "$panel_dir"
-                        docker compose up -d remnawave-subscription-page >/dev/null 2>&1
-                    ) &
-                    show_spinner "Перезапуск страницы подписки"
-                fi
-            fi
-        else
-            print_error "Не удалось зарегистрировать администратора"
-            echo -e "${YELLOW}Создайте администратора вручную через панель${NC}"
-        fi
-
-        echo
-        print_success "База данных успешно загружена!"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return
     fi
+
+    # Регистрация нового администратора и создание API токена (тихо)
+    local SUPERADMIN_USERNAME SUPERADMIN_PASSWORD
+    SUPERADMIN_USERNAME=$(generate_admin_username)
+    SUPERADMIN_PASSWORD=$(generate_admin_password)
+
+    local token
+    token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
+
+    if [ -n "$token" ]; then
+        # Создание API токена для страницы подписки
+        # Если токен с таким именем уже есть — переименовываем старый
+        docker exec remnawave-db psql -U postgres -d postgres -c \
+            "UPDATE api_tokens SET token_name = token_name || '_old' WHERE token_name = 'subscription-page';" >/dev/null 2>&1 || true
+
+        if create_api_token "$domain_url" "$token" "$panel_dir" 2>/dev/null; then
+            local api_token
+            api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+
+            # Сброс администратора (CASCADE удалит и API токены)
+            docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
+
+            # Восстанавливаем API токен напрямую в базу
+            if [ -n "$api_token" ]; then
+                local token_uuid
+                token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
+                docker exec remnawave-db psql -U postgres -d postgres -c \
+                    "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
+                     VALUES ('$token_uuid', '$api_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
+            fi
+
+            # Перезапуск subscription-page (если на этом сервере)
+            if grep -q 'remnawave-subscription-page' "$panel_dir/docker-compose.yml" 2>/dev/null; then
+                (
+                    cd "$panel_dir"
+                    docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+                ) &
+                show_spinner "Перезапуск страницы подписки"
+            fi
+        fi
+    else
+        print_error "Не удалось зарегистрировать администратора"
+        echo -e "${YELLOW}Создайте администратора вручную через панель${NC}"
+    fi
+
+    echo
+    print_success "База данных успешно загружена!"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
