@@ -292,11 +292,8 @@ _change_panel_url_remote() {
     local current_url
     current_url=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${compose_files[0]}" 2>/dev/null | head -1)
 
-    echo -e "${WHITE}Текущий адрес панели:${NC} ${YELLOW}${current_url:-не задан}${NC}"
-    echo
-
     local new_domain
-    if ! prompt_domain_with_retry "Введите новый домен панели:" new_domain; then
+    if ! prompt_domain_with_retry "Введите новый домен панели:" new_domain false true; then
         return 0
     fi
 
