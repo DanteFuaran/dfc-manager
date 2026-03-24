@@ -113,12 +113,13 @@ main_menu() {
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 else
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
+                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
                                 if ! is_subpage_remote_installed; then
-                                    inst_items+=("📄  Страница подписки"); inst_actions+=("subpage")
+                                    inst_items+=("📄  Установить страницу подписки на сервер"); inst_actions+=("subpage")
                                 fi
                                 if ! is_node_installed; then
-                                    inst_items+=("🌐  Нода");               inst_actions+=("node")
+                                    inst_items+=("🌐  Установить ноду на сервер");               inst_actions+=("node")
                                 fi
                                 inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 inst_items+=("⬅️   Назад"); inst_actions+=("back")
@@ -165,7 +166,7 @@ main_menu() {
                                         ;;
                                     subpage)    installation_subpage ;;
                                     node)       installation_node  || break ;;
-                                    add_node)   installation_node_local || break ;;
+                                    add_node)   installation_node_local ;;
                                     *) break ;;
                                 esac
                             done ;;
