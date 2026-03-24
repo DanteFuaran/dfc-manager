@@ -113,6 +113,7 @@ main_menu() {
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 else
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
+                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
                                 if ! is_subpage_remote_installed; then
                                     inst_items+=("📄  Установить Страницу подписки"); inst_actions+=("subpage")
