@@ -278,20 +278,22 @@ manage_beszel() {
     local -a items=()
     local -a actions=()
 
-    if ! is_beszel_installed; then
-        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
-    else
-        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
-    fi
-
     if ! is_beszel_agent_installed; then
         items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
     elif ! is_beszel_installed; then
         # Агент есть, хаба нет — меняем адрес хаба у агента
         items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
     fi
-    # Если и хаб, и агент установлены — пункт для домена уже добавлен выше,
-    # отдельного пункта для агента не нужно (домен хаба покрывает это).
+
+    if [ ${#items[@]} -gt 0 ]; then
+        items+=("──────────────────────────────────────"); actions+=("sep")
+    fi
+
+    if ! is_beszel_installed; then
+        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
+    else
+        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
+    fi
 
     items+=("──────────────────────────────────────"); actions+=("sep")
     items+=("⬅️   Назад");                             actions+=("back")
