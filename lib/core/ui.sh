@@ -7,6 +7,18 @@ print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
 print_success() { printf "${GREEN}✅ %b${NC}\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
 
+# Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
+# Использование: center "текст" "$COLOR"
+center() {
+    local text="$1"
+    local color="${2:-}"
+    local width=38
+    local text_len=${#text}
+    local padding=$(( (width - text_len) / 2 ))
+    [ $padding -lt 0 ] && padding=0
+    printf "%*s${color}%s${NC}\n" $((padding + text_len)) "$text"
+}
+
 # Сбрасывает буферизованный ввод (например, клавиши, нажатые во время спиннеров)
 _flush_stdin() {
     local _dummy

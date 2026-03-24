@@ -1054,13 +1054,13 @@ installation_node_with_existing_subpage() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "   ${GREEN}🎉 НОДА И СТРАНИЦА ПОДПИСКИ УСТАНОВЛЕНЫ${NC}"
+    echo -e "${BLUE}$(center "🎉 Нода и страница подписки установлены" "$GREEN")${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if [ "$health_ok" = true ]; then
-        echo -e "${GREEN}Нода успешно подключена!${NC}"
+        echo -e "$(center "Нода успешно подключена!" "$GREEN")"
     else
-        echo -e "${YELLOW}⚠️  Нода установлена, но не подключилась к панели${NC}"
+        echo -e "$(center "⚠️  Нода установлена, но не подключилась к панели" "$YELLOW")"
     fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
