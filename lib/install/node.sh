@@ -189,7 +189,12 @@ installation_node_local() {
             reading_inline "Введите имя для ноды (например, Germany):" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                break  # Esc → назад к вводу домена
+                # Esc → очищаем экран, перерисовываем заголовок, назад к вводу домена
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
             if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
