@@ -229,11 +229,18 @@ change_panel_domain() {
         show_spinner "Обновление доступов"
     fi
 
-    # Перезапуск сервисов
+    # Перезапуск сервисов и ожидание доступности
     (
         cd "$panel_dir"
         docker compose up -d >/dev/null 2>&1
         cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+        # Ждём доступности сайта
+        local _w=0
+        while [ $_w -lt 60 ]; do
+            curl -s -f -o /dev/null --max-time 5 "https://${new_domain}" 2>/dev/null && break
+            sleep 2
+            _w=$((_w + 2))
+        done
     ) &
     show_spinner "Перезапуск сервисов"
 
@@ -298,8 +305,7 @@ _change_panel_url_remote() {
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
     local new_url="https://${new_domain}"
 
-    echo
-    reading_inline "API токен (Enter чтобы пропустить):" new_api_token "sk-..."
+    reading_inline "API токен (Enter оставить без изменений):" new_api_token "sk-..."
     echo
 
     echo
@@ -334,12 +340,19 @@ _change_panel_url_remote() {
     (sleep 0.3) &
     show_spinner "Обновление конфигов"
 
-    # Перезапускаем контейнеры
+    # Перезапускаем контейнеры и ждём доступности
     (
         for i in "${!compose_dirs[@]}"; do
             cd "${compose_dirs[$i]}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1
         done
         cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+        # Ждём доступности сайта
+        local _w=0
+        while [ $_w -lt 60 ]; do
+            curl -s -f -o /dev/null --max-time 5 "${new_url}" 2>/dev/null && break
+            sleep 2
+            _w=$((_w + 2))
+        done
     ) &
     show_spinner "Перезапуск сервисов"
 
