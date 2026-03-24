@@ -184,10 +184,11 @@ manage_delete_components() {
                 echo -e "${RED}     🗑️  Удаление всех компонентов${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "${RED}⚠️  Удалить все установленные компоненты и данные${NC}"
+                echo -e "${RED}   ⚠️  Удалить все установленные компоненты и данные${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 if ! confirm_action; then continue; fi
+                echo
                 echo
                 if is_panel_installed; then
                     ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &

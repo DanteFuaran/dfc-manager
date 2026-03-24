@@ -34,7 +34,7 @@ installation_panel() {
     if [ "$with_subpage" = true ]; then
         echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
     else
-        echo -e "${GREEN}   📦 УСТАНОВКА ТОЛЬКО ПАНЕЛИ${NC}"
+        echo -e "${GREEN}  📦 Установка отдельной панели${NC}"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -51,9 +51,6 @@ installation_panel() {
     if [ "$with_subpage" = true ]; then
         prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
     else
-        echo
-        echo -e "${DARKGRAY}Укажите домен страницы подписки, которая будет${NC}"
-        echo -e "${DARKGRAY}установлена на удалённом сервере (для генерации ссылок подписки).${NC}"
         while true; do
             reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN
             if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
@@ -262,9 +259,8 @@ installation_panel() {
 
     clear
     tput civis 2>/dev/null
-    echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "                   ${GREEN}🎉 ПАНЕЛЬ УСТАНОВЛЕНА!${NC}"
+    echo -e "              ${GREEN}🎉 Панель успешно установлена!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для первого входа в панель:${NC}"
@@ -275,8 +271,12 @@ installation_panel() {
         api_token_display=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
         echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
         echo
+        echo -e "${WHITE}Теперь запустите процесс установки страницы подписки на сервере,${NC}"
+        echo -e "${WHITE}где будет расположена страница подписки.${NC}"
+        echo
         echo -e "${YELLOW}📄 Для установки страницы подписки на удалённом сервере:${NC}"
         echo -e "${WHITE}URL панели:${NC}   https://$PANEL_DOMAIN"
+        echo
         if [ -n "$api_token_display" ]; then
             echo -e "${WHITE}API токен:${NC}    $api_token_display"
         fi

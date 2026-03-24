@@ -77,7 +77,7 @@ main_menu() {
                         install_status="\n${DARKGRAY}    Установлено: ${GREEN}Страница подписки${NC}"
                     fi
 
-                    local rw_title="   📦 Remnawave (Сервис)${install_status}"
+                    local rw_title="📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()
                     rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
                     if [ "$is_installed" = true ]; then
