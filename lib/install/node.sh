@@ -184,7 +184,7 @@ installation_node_local() {
     # ─── Запрашиваем selfsteal домен ───
 
     local SELFSTEAL_DOMAIN
-    prompt_domain_with_retry "Домен selfsteal ноды (например node.example.com):" SELFSTEAL_DOMAIN true || return
+    prompt_domain_with_retry "Домен selfsteal ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
 
     # ─── Запрашиваем имя ноды ───
     local entity_name
