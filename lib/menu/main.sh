@@ -163,7 +163,7 @@ main_menu() {
                                             break
                                         done
                                         ;;
-                                    subpage)    installation_subpage || break ;;
+                                    subpage)    installation_subpage ;;
                                     node)       installation_node  || break ;;
                                     add_node)   installation_node_local || break ;;
                                     *) break ;;

@@ -347,7 +347,9 @@ _installation_subpage_on_node() {
     echo
     PANEL_URL=""
     while true; do
-        reading "Домен панели (например panel.example.com):" PANEL_URL
+        echo
+        reading_inline "Домен панели (например panel.example.com):" PANEL_URL
+        [[ $? -eq 2 ]] && return 1
         # Убираем протокол если введён
         PANEL_URL="${PANEL_URL#https://}"
         PANEL_URL="${PANEL_URL#http://}"
@@ -363,7 +365,7 @@ _installation_subpage_on_node() {
 
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return 1
 
     # Запрашиваем API токен
     local API_TOKEN=""
@@ -573,7 +575,9 @@ _installation_subpage_standalone() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     PANEL_URL=""
     while true; do
-        reading "Домен панели (например panel.example.com):" PANEL_URL
+        echo
+        reading_inline "Домен панели (например panel.example.com):" PANEL_URL
+        [[ $? -eq 2 ]] && { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return 1; }
         # Убираем протокол если введён
         PANEL_URL="${PANEL_URL#https://}"
         PANEL_URL="${PANEL_URL#http://}"
@@ -589,7 +593,7 @@ _installation_subpage_standalone() {
 
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return 1; }
 
     # Запрашиваем API токен
     local API_TOKEN=""
