@@ -194,6 +194,7 @@ installation_node_local() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
                 break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
