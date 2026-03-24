@@ -242,7 +242,6 @@ installation_node_local() {
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
 
     if check_if_certificates_needed domains_to_check; then
-        echo
 
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
