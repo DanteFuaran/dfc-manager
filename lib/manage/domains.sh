@@ -494,7 +494,7 @@ _change_sub_domain_remote() {
     fi
 
     local new_domain
-    if ! prompt_domain_with_retry "Домен страницы подписки на удалённом сервере:" new_domain; then
+    if ! prompt_domain_with_retry "Домен страницы подписки на удалённом сервере:" new_domain false true; then
         return 0
     fi
 
