@@ -615,8 +615,16 @@ db_restore() {
 
         # Восстанавливаем API токен напрямую в базу
         if [ -n "$_use_token" ]; then
+            # Извлекаем uuid из JWT-токена (панель ищет токен по uuid из JWT)
             local token_uuid
-            token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
+            token_uuid=$(echo "$_use_token" | cut -d'.' -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | grep -oP '"uuid"\s*:\s*"\K[^"]+' 2>/dev/null)
+            if [ -z "$token_uuid" ]; then
+                token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null)
+            fi
+
+            # Удаляем старые subscription-page токены и вставляем сохранённый
+            docker exec remnawave-db psql -U postgres -d postgres -c \
+                "DELETE FROM api_tokens WHERE token_name = 'subscription-page';" >/dev/null 2>&1
             docker exec remnawave-db psql -U postgres -d postgres -c \
                 "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
                  VALUES ('$token_uuid', '$_use_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
