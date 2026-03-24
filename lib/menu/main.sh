@@ -62,19 +62,19 @@ main_menu() {
 
                     local install_status=""
                     if [ "$has_panel" = true ] && [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Панель | Подписка | Нода${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Подписка | Нода${NC}"
                     elif [ "$has_panel" = true ] && [ "$has_node" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель | Нода${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Нода${NC}"
                     elif [ "$has_panel" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Панель | Подписка${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Подписка${NC}"
                     elif [ "$has_panel" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Панель${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель${NC}"
                     elif [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}   Установлено: ${GREEN}Нода | Подписка${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Нода | Подписка${NC}"
                     elif [ "$has_node" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Нода${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Нода${NC}"
                     elif [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}    Установлено: ${GREEN}Страница подписки${NC}"
+                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Страница подписки${NC}"
                     fi
 
                     local rw_title="📦 Remnawave (Сервис)${install_status}"
