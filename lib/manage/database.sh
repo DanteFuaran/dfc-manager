@@ -498,6 +498,10 @@ db_restore() {
     local _saved_api_token=""
     _saved_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
 
+    # Сохраняем текущий SUB_PUBLIC_DOMAIN (для случая когда sub-page на удалённом сервере)
+    local _saved_sub_domain=""
+    _saved_sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+
     # Делаем страховочный бэкап текущей БД перед восстановлением (тихо)
     local safety_backup="${panel_dir}/backups/pre_restore_$(date +%Y-%m-%d_%H-%M).sql.gz"
     mkdir -p "${panel_dir}/backups"
@@ -634,19 +638,14 @@ db_restore() {
             ) &
             show_spinner "Перезапуск страницы подписки"
         else
-            # Страницы подписки нет на этом сервере — проверяем SUB_PUBLIC_DOMAIN
-            local _sub_dom _front_dom
-            _sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-            _front_dom=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-            if [ -n "$_sub_dom" ] && [ -n "$_front_dom" ] && [ "$_sub_dom" != "$_front_dom" ]; then
-                local nginx_conf="${DIR_NGINX}nginx.conf"
-                if ! grep -qF "server_name $_sub_dom" "$nginx_conf" 2>/dev/null; then
-                    sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_front_dom|" "$panel_dir/.env"
+            # Страницы подписки нет на этом сервере — восстанавливаем SUB_PUBLIC_DOMAIN
+            if [ -n "$_saved_sub_domain" ]; then
+                local _cur_sub_dom
+                _cur_sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+                if [ "$_cur_sub_dom" != "$_saved_sub_domain" ]; then
+                    sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_saved_sub_domain|" "$panel_dir/.env"
                     (cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1) &
                     show_spinner "Обновление SUB_PUBLIC_DOMAIN"
-                    echo
-                    print_warning "SUB_PUBLIC_DOMAIN изменён на $_front_dom"
-                    echo -e "  ${DIM}Страница подписки не найдена на этом сервере.${NC}"
                 fi
             fi
         fi

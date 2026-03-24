@@ -52,15 +52,17 @@ installation_panel() {
     if [ "$with_subpage" = true ]; then
         prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
     else
+        echo
         while true; do
-            reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN
+            reading_inline "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN
+            local _rc=$?
+            [ $_rc -eq 2 ] && { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
             if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
                 break
             else
                 print_error "Введите корректный домен"
             fi
         done
-        echo
     fi
 
     # Автогенерация учётных данных администратора
