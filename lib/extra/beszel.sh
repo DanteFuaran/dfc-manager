@@ -433,8 +433,22 @@ install_beszel() {
         REAL_IP_BLOCK=""
     fi
 
+    local BESZEL_HTTP_BLOCK=""
+    if [[ "$LISTEN_BLOCK" != *"unix:"* ]]; then
+        BESZEL_HTTP_BLOCK=$(cat <<NGINX
+server {
+    server_name ${BESZEL_DOMAIN};
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+NGINX
+)
+    fi
+
     local BESZEL_BLOCK
     BESZEL_BLOCK=$(cat <<NGINX
+${BESZEL_HTTP_BLOCK}
 server {
     server_name ${BESZEL_DOMAIN};
 $(echo -e "$LISTEN_BLOCK")
@@ -460,6 +474,12 @@ ${REAL_IP_BLOCK}
 }
 NGINX
 )
+
+    # ─── Открываем порты в UFW если активен ───
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+        ufw allow 443/tcp >/dev/null 2>&1 || true
+    fi
 
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
