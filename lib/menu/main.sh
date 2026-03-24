@@ -110,10 +110,8 @@ main_menu() {
                                 local -a inst_items=() inst_actions=()
                                 if ! is_panel_installed; then
                                     inst_items+=("🖥️   Панель управления Remnawave"); inst_actions+=("panel_wizard")
-                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 else
                                     inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
-                                    inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
                                 if ! is_subpage_remote_installed; then
                                     inst_items+=("📄  Установить страницу подписки на сервер"); inst_actions+=("subpage")

@@ -296,14 +296,14 @@ _installation_subpage_on_panel() {
     show_spinner "Запуск страницы подписки"
 
     clear
-    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
-    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
     echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
     echo
-    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
@@ -403,13 +403,15 @@ _installation_subpage_on_node() {
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
-    reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    if [[ $? -eq 2 ]]; then
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка домена подписки
-        break
-    fi
+    echo -e "${BLUE}➜${NC}  ${YELLOW}API токен панели (Настройки Remnawave) и нажмите Enter дважды:${NC}"
+    while IFS= read -r line; do
+        if [ -z "$line" ] && [ -n "$API_TOKEN" ]; then
+            break
+        fi
+        if [ -n "$line" ]; then
+            API_TOKEN="$API_TOKEN$line"
+        fi
+    done
 
     # Определяем метод сертификатов
     local CERT_METHOD
@@ -559,19 +561,19 @@ EOL
 
     if [ "$health_ok" = true ]; then
         clear
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
         echo -e "${WHITE}Панель:${NC}       $PANEL_URL"
         echo
-        echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
         echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
         echo
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -669,13 +671,15 @@ _installation_subpage_standalone() {
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
-    reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    if [[ $? -eq 2 ]]; then
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
-        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка домена подписки
-        break
-    fi
+    echo -e "${BLUE}➜${NC}  ${YELLOW}API токен панели (Настройки Remnawave) и нажмите Enter дважды:${NC}"
+    while IFS= read -r line; do
+        if [ -z "$line" ] && [ -n "$API_TOKEN" ]; then
+            break
+        fi
+        if [ -n "$line" ]; then
+            API_TOKEN="$API_TOKEN$line"
+        fi
+    done
 
     # Сертификаты
     unset domains_to_check
@@ -753,6 +757,7 @@ _installation_subpage_standalone() {
     nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
 
     # Генерация конфигов
+    echo
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
@@ -778,8 +783,9 @@ _installation_subpage_standalone() {
     fi
 
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
+    show_spinner "Запуск Nginx" || true
 
+    echo
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
 
     # Проверка здоровья
@@ -799,19 +805,19 @@ _installation_subpage_standalone() {
     if [ "$health_ok" = true ]; then
         clear
         tput civis 2>/dev/null
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "                ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
         echo -e "${WHITE}Панель:${NC}       $PANEL_URL"
         echo
-        echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
         echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
         echo
-        echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
