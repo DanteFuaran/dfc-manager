@@ -336,7 +336,7 @@ _installation_subpage_on_node() {
     # Запрашиваем URL панели
     local PANEL_URL=""
     local cert_choice
-    while true; do
+    while true; do  # loop1: панель домен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
@@ -385,15 +385,17 @@ _installation_subpage_on_node() {
         fi
     done
 
+    while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return 1
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
 
+    while true; do  # loop3: API токен
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
     reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    [[ $? -eq 2 ]] && continue
+    [[ $? -eq 2 ]] && break
 
     # Определяем метод сертификатов
     local CERT_METHOD
@@ -442,8 +444,11 @@ _installation_subpage_on_node() {
         print_success "Сертификат для $SUB_DOMAIN уже существует"
         echo
     fi
-    break
-    done
+    break 3  # все промпты пройдены — выход из всех циклов
+    done  # loop3
+
+    done  # loop2
+    done  # loop1
 
     local SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -590,7 +595,7 @@ _installation_subpage_standalone() {
     # Запрашиваем URL панели
     local PANEL_URL=""
     local cert_choice
-    while true; do
+    while true; do  # loop1: панель домен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
@@ -636,15 +641,17 @@ _installation_subpage_standalone() {
         fi
     done
 
+    while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return 1; }
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
 
+    while true; do  # loop3: API токен
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
     reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    [[ $? -eq 2 ]] && continue
+    [[ $? -eq 2 ]] && break
 
     # Сертификаты
     unset domains_to_check
@@ -683,8 +690,11 @@ _installation_subpage_standalone() {
         echo
         print_success "Сертификат для $SUB_DOMAIN уже существует"
     fi
-    break
-    done
+    break 3  # все промпты пройдены — выход из всех циклов
+    done  # loop3
+
+    done  # loop2
+    done  # loop1
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
