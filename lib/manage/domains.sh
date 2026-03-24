@@ -134,7 +134,6 @@ change_panel_domain() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}      🌐 Смена домена панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     local panel_dir
     if ! panel_dir=$(detect_remnawave_path); then
