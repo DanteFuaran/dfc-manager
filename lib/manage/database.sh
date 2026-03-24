@@ -494,6 +494,10 @@ db_restore() {
     ) &
     show_spinner "Остановка панели"
 
+    # Сохраняем текущий API токен (чтобы не сломать удалённую sub-page при восстановлении)
+    local _saved_api_token=""
+    _saved_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+
     # Делаем страховочный бэкап текущей БД перед восстановлением (тихо)
     local safety_backup="${panel_dir}/backups/pre_restore_$(date +%Y-%m-%d_%H-%M).sql.gz"
     mkdir -p "${panel_dir}/backups"
@@ -550,27 +554,26 @@ db_restore() {
     show_spinner "Подготовка к регистрации"
     echo
 
-    # Запускаем панель (без subscription-page, т.к. токен ещё не обновлён)
+    # Запускаем панель и ожидаем готовность API
+    local domain_url="127.0.0.1:3000"
+    local _api_ready="/tmp/.api_ready_$$"
+    rm -f "$_api_ready"
     (
         cd "$panel_dir"
         docker compose up -d remnawave >/dev/null 2>&1
+        _w=0
+        while [ $_w -lt 60 ]; do
+            curl -s -f --max-time 5 "http://127.0.0.1:3000/api/auth/status" \
+                --header 'X-Forwarded-For: 127.0.0.1' \
+                --header 'X-Forwarded-Proto: https' > /dev/null 2>&1 && { touch "$_api_ready"; break; }
+            sleep 2
+            _w=$((_w + 2))
+        done
     ) &
     show_spinner "Запуск панели"
 
-    # Ожидание готовности API (тихо)
-    local domain_url="127.0.0.1:3000"
-    local _api_wait=0
-    while [ $_api_wait -lt 60 ]; do
-        if curl -s -f --max-time 5 "http://$domain_url/api/auth/status" \
-            --header 'X-Forwarded-For: 127.0.0.1' \
-            --header 'X-Forwarded-Proto: https' > /dev/null 2>&1; then
-            break
-        fi
-        sleep 2
-        _api_wait=$((_api_wait + 2))
-    done
-
-    if [ $_api_wait -ge 60 ]; then
+    if [ ! -f "$_api_ready" ]; then
+        rm -f "$_api_ready"
         print_error "API не отвечает после восстановления"
         echo -e "${YELLOW}Запустите панель вручную и создайте администратора${NC}"
         echo
@@ -578,6 +581,7 @@ db_restore() {
         show_continue_prompt || return 1
         return
     fi
+    rm -f "$_api_ready"
 
     # Регистрация нового администратора и создание API токена (тихо)
     local SUPERADMIN_USERNAME SUPERADMIN_PASSWORD
@@ -588,57 +592,61 @@ db_restore() {
     token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
 
     if [ -n "$token" ]; then
-        # Создание API токена для страницы подписки
-        # Если токен с таким именем уже есть — переименовываем старый
-        docker exec remnawave-db psql -U postgres -d postgres -c \
-            "UPDATE api_tokens SET token_name = token_name || '_old' WHERE token_name = 'subscription-page';" >/dev/null 2>&1 || true
-
-        if create_api_token "$domain_url" "$token" "$panel_dir" 2>/dev/null; then
-            local api_token
-            api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-
-            # Сброс администратора (CASCADE удалит и API токены)
-            docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
-
-            # Восстанавливаем API токен напрямую в базу
-            if [ -n "$api_token" ]; then
-                local token_uuid
-                token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
-                docker exec remnawave-db psql -U postgres -d postgres -c \
-                    "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
-                     VALUES ('$token_uuid', '$api_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
+        # Определяем API токен: сохранённый (для удалённой sub-page) или новый
+        local _use_token=""
+        if [ -n "$_saved_api_token" ]; then
+            # Используем сохранённый токен (чтобы не сломать удалённую sub-page)
+            _use_token="$_saved_api_token"
+        else
+            # Токена не было — создаём новый через API
+            docker exec remnawave-db psql -U postgres -d postgres -c \
+                "UPDATE api_tokens SET token_name = token_name || '_old' WHERE token_name = 'subscription-page';" >/dev/null 2>&1 || true
+            if create_api_token "$domain_url" "$token" "$panel_dir" 2>/dev/null; then
+                _use_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
             fi
+        fi
 
-            # Перезапуск subscription-page (ищем во всех возможных местах)
-            local _sub_page_dir="" _dir
-            for _dir in "/opt/remnawave" "/opt/remnanode" "/opt/remnasubpage" "/opt/subscribe-page"; do
-                if grep -q 'remnawave-subscription-page' "$_dir/docker-compose.yml" 2>/dev/null; then
-                    _sub_page_dir="$_dir"
-                    break
-                fi
-            done
+        # Сброс администратора (CASCADE удалит и API токены)
+        docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
 
-            if [ -n "$_sub_page_dir" ]; then
-                (
-                    cd "$_sub_page_dir"
-                    docker compose up -d remnawave-subscription-page >/dev/null 2>&1
-                ) &
-                show_spinner "Перезапуск страницы подписки"
-            else
-                # Страницы подписки нет на этом сервере — проверяем SUB_PUBLIC_DOMAIN
-                local _sub_dom _front_dom
-                _sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-                _front_dom=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
-                if [ -n "$_sub_dom" ] && [ -n "$_front_dom" ] && [ "$_sub_dom" != "$_front_dom" ]; then
-                    local nginx_conf="${DIR_NGINX}nginx.conf"
-                    if ! grep -qF "server_name $_sub_dom" "$nginx_conf" 2>/dev/null; then
-                        sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_front_dom|" "$panel_dir/.env"
-                        (cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1) &
-                        show_spinner "Обновление SUB_PUBLIC_DOMAIN"
-                        echo
-                        print_warning "SUB_PUBLIC_DOMAIN изменён на $_front_dom"
-                        echo -e "  ${DIM}Страница подписки не найдена на этом сервере.${NC}"
-                    fi
+        # Восстанавливаем API токен напрямую в базу
+        if [ -n "$_use_token" ]; then
+            local token_uuid
+            token_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "$(openssl rand -hex 16 | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')")
+            docker exec remnawave-db psql -U postgres -d postgres -c \
+                "INSERT INTO api_tokens (uuid, token, token_name, created_at, updated_at) 
+                 VALUES ('$token_uuid', '$_use_token', 'subscription-page', NOW(), NOW());" >/dev/null 2>&1
+        fi
+
+        # Перезапуск subscription-page (ищем во всех возможных местах)
+        local _sub_page_dir="" _dir
+        for _dir in "/opt/remnawave" "/opt/remnanode" "/opt/remnasubpage" "/opt/subscribe-page"; do
+            if grep -q 'remnawave-subscription-page' "$_dir/docker-compose.yml" 2>/dev/null; then
+                _sub_page_dir="$_dir"
+                break
+            fi
+        done
+
+        if [ -n "$_sub_page_dir" ]; then
+            (
+                cd "$_sub_page_dir"
+                docker compose up -d remnawave-subscription-page >/dev/null 2>&1
+            ) &
+            show_spinner "Перезапуск страницы подписки"
+        else
+            # Страницы подписки нет на этом сервере — проверяем SUB_PUBLIC_DOMAIN
+            local _sub_dom _front_dom
+            _sub_dom=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+            _front_dom=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' "$panel_dir/.env" 2>/dev/null | head -1)
+            if [ -n "$_sub_dom" ] && [ -n "$_front_dom" ] && [ "$_sub_dom" != "$_front_dom" ]; then
+                local nginx_conf="${DIR_NGINX}nginx.conf"
+                if ! grep -qF "server_name $_sub_dom" "$nginx_conf" 2>/dev/null; then
+                    sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_front_dom|" "$panel_dir/.env"
+                    (cd "$panel_dir" && docker compose up -d remnawave >/dev/null 2>&1) &
+                    show_spinner "Обновление SUB_PUBLIC_DOMAIN"
+                    echo
+                    print_warning "SUB_PUBLIC_DOMAIN изменён на $_front_dom"
+                    echo -e "  ${DIM}Страница подписки не найдена на этом сервере.${NC}"
                 fi
             fi
         fi
@@ -649,8 +657,6 @@ db_restore() {
 
     echo
     print_success "База данных успешно загружена!"
-
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
