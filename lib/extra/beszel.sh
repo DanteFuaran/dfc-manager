@@ -773,7 +773,7 @@ change_agent_hub_url() {
     echo
 
     local NEW_HUB_URL
-    reading_inline "Новый адрес хаба (например https://monitor.example.com):" NEW_HUB_URL
+    reading_inline "Новый домен/ip хаба (например example.com):" NEW_HUB_URL
     [[ $? -eq 2 ]] && return 1
     if [ -z "$NEW_HUB_URL" ]; then
         print_error "Адрес не может быть пустым"
@@ -814,10 +814,8 @@ change_agent_hub_url() {
         sed -i "s|TOKEN: \"[^\"]*\"|TOKEN: \"${NEW_TOKEN}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
     ) &
-    show_spinner "Обновление настроек агента"
+    show_spinner "Настройки агента обновлены"
 
-    echo
-    print_success "Настройки агента обновлены"
     echo
     echo -e "${YELLOW}🔗 Новый адрес хаба:${NC}"
     echo -e "${WHITE}${NEW_HUB_URL}${NC}"
