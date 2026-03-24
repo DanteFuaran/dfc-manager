@@ -79,23 +79,23 @@ main_menu() {
 
                     local rw_title="📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()
-                    rw_items+=("📦   Установить компоненты");  rw_actions+=("install")
+                    rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
                     if [ "$is_installed" = true ]; then
-                        rw_items+=("🔄   Переустановить");      rw_actions+=("reinstall")
+                        rw_items+=("🔄  Переустановить");      rw_actions+=("reinstall")
                     fi
                     rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     if [ "$is_installed" = true ]; then
-                        rw_items+=("▶️   Запустить сервисы");       rw_actions+=("start")
-                        rw_items+=("⏹️   Остановить сервисы");      rw_actions+=("stop")
-                        rw_items+=("📋   Просмотр логов");          rw_actions+=("logs")
+                        rw_items+=("▶️  Запустить сервисы");       rw_actions+=("start")
+                        rw_items+=("⏹️  Остановить сервисы");      rw_actions+=("stop")
+                        rw_items+=("📋  Просмотр логов");          rw_actions+=("logs")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
-                        rw_items+=("💾   Управление базой данных"); rw_actions+=("database")
-                        rw_items+=("🔓   Настройки");               rw_actions+=("access")
+                        rw_items+=("💾  Управление базой данных"); rw_actions+=("database")
+                        rw_items+=("🔓  Настройки");               rw_actions+=("access")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
-                        rw_items+=("🔄   Обновить панель/ноду");    rw_actions+=("update_components")
+                        rw_items+=("🔄  Обновить панель/ноду");    rw_actions+=("update_components")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     fi
-                    rw_items+=("⬅️   Назад"); rw_actions+=("back")
+                    rw_items+=("⬅️  Назад"); rw_actions+=("back")
 
                     show_arrow_menu "$rw_title" "${rw_items[@]}"
                     local rw_choice=$?
