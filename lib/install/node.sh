@@ -962,6 +962,7 @@ installation_node_with_existing_subpage() {
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        echo
     fi
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
@@ -1030,13 +1031,14 @@ installation_node_with_existing_subpage() {
     show_spinner "Запуск страницы подписки" || true
 
     (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Запуск ноды"; then
+    if ! show_spinner "Подключение ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
     fi
+    echo
 
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
     # Проверка здоровья
@@ -1059,12 +1061,6 @@ installation_node_with_existing_subpage() {
         echo -e "${GREEN}Нода успешно подключена!${NC}"
     else
         echo -e "${YELLOW}⚠️  Нода установлена, но не подключилась к панели${NC}"
-        echo
-        echo -e "${YELLOW}Диагностика:${NC}"
-        echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
-        echo -e "${WHITE}  docker logs remnanode${NC}"
-        echo -e "${WHITE}  ls -la /dev/shm/nginx.sock${NC}"
-        echo -e "${WHITE}  cd ${NODE_INSTALL_DIR} && docker compose restart${NC}"
     fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
