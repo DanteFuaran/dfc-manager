@@ -391,6 +391,16 @@ _installation_subpage_on_node() {
     prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
+    echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
+    echo
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели (например panel.example.com):${NC} ${GREEN}${PANEL_URL#https://}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки (например sub.example.com):${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
@@ -652,6 +662,13 @@ _installation_subpage_standalone() {
     prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели (например panel.example.com):${NC} ${GREEN}${PANEL_URL#https://}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки (например sub.example.com):${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
