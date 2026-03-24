@@ -55,15 +55,15 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                printf "  ${DARKGRAY}%-6s     %-20s %-18s  %s${NC}\n" "" "Порт" "Состояние" "Описание"
+                printf "  ${DARKGRAY}%-6s     %-15s %-18s  %s${NC}\n" "" "Порт" "Состояние" "Описание"
                 while IFS= read -r line; do
                     local idx port state comment state_color
                     idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
                     port=$(echo "$line" | sed 's/^\[\s*[0-9]*\]\s*//' | awk '{print $1}')
 
-                    # Источник — последнее значимое поле (после ALLOW IN / DENY IN)
+                    # Источник: если последнее поле "(v6)" — берём предпоследнее, иначе последнее
                     local source
-                    source=$(echo "$line" | awk '{print $NF}' | tr -d '(v6)' | xargs)
+                    source=$(echo "$line" | awk '{ if ($NF == "(v6)") print $(NF-1); else print $NF }')
 
                     # Определяем ipv6
                     local is_v6=""
@@ -83,7 +83,7 @@ manage_ufw() {
                     fi
 
                     comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
-                    printf "  ${WHITE}%-6s     %-20s ${state_color}%-18s${NC}  ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
+                    printf "  ${WHITE}%-6s     %-15s ${state_color}%-18s${NC}  ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
                 done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
