@@ -15,7 +15,7 @@ main_menu() {
         local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
 
         local -a items=() actions=()
-        local _rw_label="📦  Remnawave - Панель " _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "
+        local _rw_label="📦  Remnawave - Панель  " _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "
         { is_panel_installed || is_node_installed || is_subpage_remote_installed; } \
             && _rw_label="${_rw_label} ${GREEN}(установлено)${NC}" \
             || _rw_label="${_rw_label} ${DARKGRAY}(не установлено)${NC}"
