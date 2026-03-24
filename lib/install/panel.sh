@@ -93,7 +93,9 @@ installation_panel() {
             1) CERT_METHOD=1 ;;
         esac
 
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        echo
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && continue
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then

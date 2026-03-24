@@ -151,7 +151,9 @@ _installation_subpage_on_panel() {
 
         LETSENCRYPT_EMAIL=$(grep -r "email" /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
         if [ -z "$LETSENCRYPT_EMAIL" ]; then
-            reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+            echo
+            reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+            [[ $? -eq 2 ]] && continue
         else
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
@@ -400,7 +402,9 @@ _installation_subpage_on_node() {
 
         LETSENCRYPT_EMAIL=$(grep -r "email" /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
         if [ -z "$LETSENCRYPT_EMAIL" ]; then
-            reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+            echo
+            reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+            [[ $? -eq 2 ]] && continue
         else
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
@@ -620,7 +624,9 @@ _installation_subpage_standalone() {
             1) CERT_METHOD=1 ;;
         esac
 
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        echo
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && continue
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
