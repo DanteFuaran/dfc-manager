@@ -218,8 +218,12 @@ manage_delete_components() {
                 fi
                 ( nginx_teardown 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
                 show_spinner "Удаление Nginx" "Nginx удалён"
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "       ${RED}🗑️  Удаление завершено${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                print_success "Все компоненты удалены"
+                echo -e "     ${GREEN}✅ Все компоненты были удалены${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || true
