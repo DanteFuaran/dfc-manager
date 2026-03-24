@@ -344,7 +344,7 @@ _change_panel_url_remote() {
 change_sub_domain() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 СМЕНА ДОМЕНА СТРАНИЦЫ ПОДПИСКИ${NC}"
+    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -361,8 +361,6 @@ change_sub_domain() {
     if [ -z "$current_sub_domain" ]; then
         current_sub_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sed -n '2p')
     fi
-    echo -e "${WHITE}Текущий домен подписки:${NC} ${YELLOW}${current_sub_domain}${NC}"
-    echo
 
     local new_domain
     if ! prompt_domain_with_retry "Введите новый домен страницы подписки:" new_domain; then
@@ -372,8 +370,12 @@ change_sub_domain() {
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
     echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
     echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain}${NC}"
     echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if ! confirm_action; then
         print_error "Операция отменена"
@@ -381,17 +383,20 @@ change_sub_domain() {
         return 0
     fi
 
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     local new_cert_domain=""
     if ! obtain_cert_for_domain "$new_domain" "$panel_dir" "$current_sub_domain" new_cert_domain; then
         echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
         return 1
     fi
 
-    local old_sub_cert_domain
     # Копируем новый сертификат в /opt/nginx/ssl/
     nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
 
@@ -402,24 +407,25 @@ change_sub_domain() {
     start_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
     end_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '3p' | cut -d: -f1)
 
-    if [ -n "$old_sub_cert_domain" ] && [ "$old_sub_cert_domain" != "$new_cert_domain" ]; then
-        if [ -n "$start_line" ] && [ -n "$end_line" ]; then
-            sed -i "${start_line},${end_line}s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
-        elif [ -n "$start_line" ]; then
-            sed -i "${start_line},\$s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
-        fi
-    fi
-    sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
-    
-    (sleep 0.3) &
-    show_spinner "Обновление nginx.conf"
-
     (
+        if [ -n "$old_sub_cert_domain" ] && [ "$old_sub_cert_domain" != "$new_cert_domain" ]; then
+            if [ -n "$start_line" ] && [ -n "$end_line" ]; then
+                sed -i "${start_line},${end_line}s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            elif [ -n "$start_line" ]; then
+                sed -i "${start_line},\$s|/etc/nginx/ssl/${old_sub_cert_domain}/|/etc/nginx/ssl/${new_cert_domain}/|g" "${DIR_NGINX}nginx.conf"
+            fi
+        fi
+        sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
         if [ -f "${panel_dir}/.env" ]; then
             sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=${new_domain}|" "${panel_dir}/.env"
         fi
     ) &
-    show_spinner "Обновление .env"
+    show_spinner "Подготовка файлов"
+
+    (
+        cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+    ) &
+    show_spinner "Обновление конфигурации"
 
     (
         cd "$panel_dir"
@@ -433,8 +439,8 @@ change_sub_domain() {
     echo
     print_success "Домен страницы подписки изменён на ${new_domain}"
     echo
-    read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
 }
 
 change_node_domain() {
