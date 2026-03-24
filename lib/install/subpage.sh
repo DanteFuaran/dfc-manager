@@ -346,8 +346,10 @@ _installation_subpage_on_node() {
     echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
     echo
     PANEL_URL=""
+    local _first_panel=true
     while true; do
-        echo
+        [ "$_first_panel" = true ] && echo
+        _first_panel=false
         reading_inline "Домен панели (например panel.example.com):" PANEL_URL
         [[ $? -eq 2 ]] && return 1
         # Убираем протокол если введён
@@ -594,8 +596,10 @@ _installation_subpage_standalone() {
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     PANEL_URL=""
+    local _first_panel=true
     while true; do
-        echo
+        [ "$_first_panel" = true ] && echo
+        _first_panel=false
         reading_inline "Домен панели (например panel.example.com):" PANEL_URL
         [[ $? -eq 2 ]] && { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return 1; }
         # Убираем протокол если введён
