@@ -355,7 +355,6 @@ _installation_subpage_on_node() {
 
     # Запрашиваем API токен
     local API_TOKEN=""
-    echo
     while true; do
         reading "API токен панели (Настройки Remnawave):" API_TOKEN
         if [ -n "$API_TOKEN" ]; then
@@ -547,7 +546,6 @@ _installation_subpage_standalone() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     mkdir -p "${SUBPAGE_DIR}" && cd "${SUBPAGE_DIR}"
 
@@ -575,11 +573,10 @@ _installation_subpage_standalone() {
 
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return; }
 
     # Запрашиваем API токен
     local API_TOKEN=""
-    echo
     while true; do
         reading "API токен панели (Настройки Remnawave):" API_TOKEN
         if [ -n "$API_TOKEN" ]; then
