@@ -157,7 +157,16 @@ show_arrow_menu() {
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         if [[ "$title" == *\\* ]]; then
-            echo -e "${GREEN}$title${NC}"
+            local _first="${title%%\\n*}"
+            local _rest="${title#*\\n}"
+            local _clean
+            _clean=$(echo -e "$_first" | sed 's/\x1b\[[0-9;]*m//g')
+            local _vlen=${#_clean}
+            local _pad=$(( (38 - _vlen) / 2 ))
+            [ $_pad -lt 0 ] && _pad=0
+            printf "%${_pad}s" ""
+            echo -e "${GREEN}${_first}${NC}"
+            echo -e "${_rest}"
         else
             local _clean
             _clean=$(echo -e "$title" | sed 's/\x1b\[[0-9;]*m//g')
