@@ -360,6 +360,26 @@ _installation_subpage_on_node() {
             break
         else
             print_error "Введите корректный домен, например: panel.example.com"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+            tput civis 2>/dev/null || true
+            local _pk
+            while true; do
+                read -s -n 1 _pk
+                if [[ "$_pk" == $'\x1b' ]]; then
+                    tput cnorm 2>/dev/null || true
+                    echo
+                    return 1
+                elif [[ "$_pk" == "" ]]; then
+                    tput cnorm 2>/dev/null || true
+                    for ((l=0; l<5; l++)); do
+                        tput cuu1 2>/dev/null
+                        tput el 2>/dev/null
+                    done
+                    break
+                fi
+            done
         fi
     done
 
@@ -588,6 +608,27 @@ _installation_subpage_standalone() {
             break
         else
             print_error "Введите корректный домен, например: panel.example.com"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+            tput civis 2>/dev/null || true
+            local _pk
+            while true; do
+                read -s -n 1 _pk
+                if [[ "$_pk" == $'\x1b' ]]; then
+                    tput cnorm 2>/dev/null || true
+                    echo
+                    [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null
+                    return 1
+                elif [[ "$_pk" == "" ]]; then
+                    tput cnorm 2>/dev/null || true
+                    for ((l=0; l<5; l++)); do
+                        tput cuu1 2>/dev/null
+                        tput el 2>/dev/null
+                    done
+                    break
+                fi
+            done
         fi
     done
 
