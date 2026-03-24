@@ -184,7 +184,7 @@ manage_delete_components() {
                 echo -e "${RED}     🗑️  Удаление всех компонентов${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "${RED}   ⚠️  Удалить все установленные компоненты и данные${NC}"
+                echo -e "${RED}   ⚠️  Удалить все установленные компоненты${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 if ! confirm_action; then continue; fi
@@ -201,7 +201,7 @@ manage_delete_components() {
                 if is_subpage_remote_installed; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
                         [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf "$_d" 2>/dev/null || true; }
-                      done ) &
+                      done; exit 0 ) &
                     show_spinner "Удаление Страницы подписки" "Страница подписки удалена"
                 fi
                 if is_beszel_installed; then

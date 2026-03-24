@@ -585,7 +585,6 @@ EOL
         echo -e "${WHITE}  docker logs remnawave-nginx${NC}"
         echo -e "${WHITE}  cd ${NODE_DIR} && docker compose restart${NC}"
     fi
-    echo
     show_continue_prompt || return 1
 }
 
