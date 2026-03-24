@@ -149,10 +149,10 @@ manage_delete_components() {
         if [ ${#del_actions[@]} -eq 0 ]; then
             clear
             echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${RED}        🗑️   Удаление компонентов${NC}"
+            echo -e "${RED}   🗑️   Удаление компонентов${NC}"
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             echo
-            echo -e "    🔍  Компоненты не установлены"
+            echo -e "  🔍  Компоненты не установлены"
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             show_continue_prompt || true
@@ -223,7 +223,7 @@ manage_delete_components() {
                 echo -e "       ${RED}🗑️  Удаление завершено${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "     ${GREEN}✅ Все компоненты были удалены${NC}"
+                echo -e "  ${GREEN}✅ Все компоненты были удалены${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || true
