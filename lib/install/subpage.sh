@@ -395,7 +395,11 @@ _installation_subpage_on_node() {
     local API_TOKEN=""
     echo
     reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    [[ $? -eq 2 ]] && break
+    if [[ $? -eq 2 ]]; then
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
+        break
+    fi
 
     # Определяем метод сертификатов
     local CERT_METHOD
@@ -651,7 +655,11 @@ _installation_subpage_standalone() {
     local API_TOKEN=""
     echo
     reading_inline "API токен панели (Настройки Remnawave):" API_TOKEN
-    [[ $? -eq 2 ]] && break
+    if [[ $? -eq 2 ]]; then
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # строка API токена
+        tput cuu1 2>/dev/null; tput el 2>/dev/null  # пустая строка echo
+        break
+    fi
 
     # Сертификаты
     unset domains_to_check
