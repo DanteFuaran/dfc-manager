@@ -748,8 +748,7 @@ installation_node_with_existing_subpage() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${DARKGRAY}Обнаружена страница подписки на этом сервере.${NC}"
-    echo -e "${DARKGRAY}Нода будет установлена совместно со страницей подписки.${NC}"
-    echo -e "${DARKGRAY}Директория ${SUBPAGE_DIR} будет перенесена в ${NODE_INSTALL_DIR}.${NC}"
+    echo -e "${DARKGRAY}Нода будет установлена в отдельную директорию ${NODE_INSTALL_DIR}.${NC}"
     echo
 
     # Извлекаем данные из существующей установки subpage
@@ -874,9 +873,6 @@ installation_node_with_existing_subpage() {
     ) &
     show_spinner "Подготовка конфигурации" || true
 
-    # Удаляем старую директорию subpage
-    rm -rf "${SUBPAGE_DIR}"
-
     # Настройка файрвола
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
@@ -889,11 +885,14 @@ installation_node_with_existing_subpage() {
 
     # Запуск контейнеров
     (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Запуск контейнеров"; then
+    if ! show_spinner "Запуск ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
     fi
+
+    (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск страницы подписки" || true
 
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
