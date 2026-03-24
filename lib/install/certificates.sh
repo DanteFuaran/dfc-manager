@@ -188,8 +188,15 @@ get_cert_acme() {
     local _pre_hook='ufw allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true; sleep 2'
     local _post_hook='ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true'
     local cron_rule="0 3 * * * certbot renew --quiet --pre-hook '${_pre_hook}' --post-hook '${_post_hook}' --deploy-hook '${_deploy_hook}' 2>/dev/null"
-    if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
-        (crontab -l 2>/dev/null; echo "$cron_rule") | crontab -
+    local existing_cron
+    existing_cron=$(crontab -l 2>/dev/null)
+    if echo "$existing_cron" | grep -q "certbot renew"; then
+        # Если cron уже есть, но без pre-hook (например от Cloudflare) — обновляем его
+        if ! echo "$existing_cron" | grep -q "pre-hook"; then
+            echo "$existing_cron" | grep -v "certbot renew" | { cat; echo "$cron_rule"; } | crontab -
+        fi
+    else
+        (echo "$existing_cron"; echo "$cron_rule") | crontab -
     fi
 }
 
