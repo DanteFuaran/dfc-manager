@@ -124,6 +124,12 @@ obtain_cert_for_domain() {
 }
 
 change_panel_domain() {
+    # Если панель не установлена — предлагаем обновить адрес панели на удалённом сервере
+    if ! is_panel_installed; then
+        _change_panel_url_remote
+        return $?
+    fi
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}      🌐 Смена домена панели${NC}"
@@ -248,14 +254,92 @@ change_panel_domain() {
         echo -e "${WHITE}https://${new_domain}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     fi
 
-    # Предупреждение о удалённой странице подписки
-    if is_subpage_remote_installed || \
-       grep -q 'REMNAWAVE_PANEL_URL=.*https\?://' /opt/subscribe-page/docker-compose.yml 2>/dev/null || \
-       grep -q 'REMNAWAVE_PANEL_URL=.*https\?://' /opt/remnasubpage/docker-compose.yml 2>/dev/null; then
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
+# ─── Обновление адреса панели на удалённом сервере (subpage/node) ───
+_change_panel_url_remote() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена адреса панели${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    # Находим все docker-compose файлы с REMNAWAVE_PANEL_URL
+    local -a compose_files=()
+    local -a compose_dirs=()
+    local f
+    for f in /opt/subscribe-page/docker-compose.yml \
+             /opt/remnasubpage/docker-compose.yml \
+             /opt/remnanode/docker-compose.yml; do
+        if [ -f "$f" ] && grep -q 'REMNAWAVE_PANEL_URL=' "$f" 2>/dev/null; then
+            compose_files+=("$f")
+            compose_dirs+=("$(dirname "$f")")
+        fi
+    done
+
+    if [ ${#compose_files[@]} -eq 0 ]; then
+        print_error "Не найдены компоненты с подключением к панели"
         echo
-        echo -e "${YELLOW}⚠️  Если страница подписки установлена на удалённом сервере,${NC}"
-        echo -e "${YELLOW}   обновите REMNAWAVE_PANEL_URL на https://${new_domain}${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return 1
     fi
+
+    # Извлекаем текущий адрес панели
+    local current_url
+    current_url=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${compose_files[0]}" 2>/dev/null | head -1)
+
+    echo -e "${WHITE}Текущий адрес панели:${NC} ${YELLOW}${current_url:-не задан}${NC}"
+    echo
+
+    local new_domain
+    if ! prompt_domain_with_retry "Введите новый домен панели:" new_domain; then
+        return 0
+    fi
+
+    new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
+    local new_url="https://${new_domain}"
+
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${WHITE}Текущий адрес:${NC} ${YELLOW}${current_url}${NC}"
+    echo -e "${WHITE}Новый адрес:${NC}   ${GREEN}${new_url}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    if ! confirm_action; then
+        return 0
+    fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена адреса панели${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    # Обновляем REMNAWAVE_PANEL_URL во всех найденных compose файлах
+    local i
+    for i in "${!compose_files[@]}"; do
+        sed -i "s|REMNAWAVE_PANEL_URL=.*|REMNAWAVE_PANEL_URL=${new_url}|g" "${compose_files[$i]}"
+    done
+    (sleep 0.3) &
+    show_spinner "Обновление конфигов"
+
+    # Перезапускаем контейнеры
+    (
+        for i in "${!compose_dirs[@]}"; do
+            cd "${compose_dirs[$i]}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1
+        done
+        cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+    ) &
+    show_spinner "Перезапуск сервисов"
+
+    echo
+    print_success "Адрес панели обновлён на ${new_url}"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
