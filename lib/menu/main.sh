@@ -19,7 +19,7 @@ main_menu() {
         { is_panel_installed || is_node_installed || is_subpage_remote_installed; } \
             && _rw_label="${_rw_label} ${GREEN}(установлено)${NC}" \
             || _rw_label="${_rw_label} ${DARKGRAY}(не установлено)${NC}"
-        is_beszel_installed \
+        { is_beszel_installed || is_beszel_agent_installed; } \
             && _bz_label="${_bz_label} ${GREEN}(установлено)${NC}" \
             || _bz_label="${_bz_label} ${DARKGRAY}(не установлено)${NC}"
         _mt_installed \

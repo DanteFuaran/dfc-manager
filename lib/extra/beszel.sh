@@ -324,10 +324,19 @@ install_beszel() {
         return 0
     fi
 
-    # ─── Домен ───
+    # ─── Домен / IP ───
     local BESZEL_DOMAIN
-    prompt_domain_with_retry "Домен для Beszel (например monitor.example.com):" BESZEL_DOMAIN true || return 1
+    local _server_ip
+    _server_ip=$(get_server_ip 2>/dev/null)
+    local _is_ip_mode=false
+
+    reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
     echo
+
+    if [ -z "$BESZEL_DOMAIN" ]; then
+        BESZEL_DOMAIN="$_server_ip"
+        _is_ip_mode=true
+    fi
     echo
 
     # ─── Сертификат ───
@@ -348,6 +357,20 @@ install_beszel() {
         CERT_DOMAIN="$base_domain"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+    elif [ "$_is_ip_mode" = true ]; then
+        # IP-адрес — автоматически самоподписанный сертификат
+        local SELF_SIGNED_DIR
+        SELF_SIGNED_DIR=$(mktemp -d)
+        (
+            openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+                -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
+                -out "${SELF_SIGNED_DIR}/fullchain.pem" \
+                -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
+        ) &
+        show_spinner "Генерация самоподписанного сертификата"
+        CERT_DOMAIN="$BESZEL_DOMAIN"
+        CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
+        CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
         show_arrow_menu "🔒  SSL сертификат" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
