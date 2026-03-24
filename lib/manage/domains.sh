@@ -519,17 +519,7 @@ _change_sub_domain_remote() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # Обновляем SUB_PUBLIC_DOMAIN
-    (
-        if grep -q "^SUB_PUBLIC_DOMAIN=" "${panel_dir}/.env" 2>/dev/null; then
-            sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=${new_domain}|" "${panel_dir}/.env"
-        else
-            echo "SUB_PUBLIC_DOMAIN=${new_domain}" >> "${panel_dir}/.env"
-        fi
-    ) &
-    show_spinner "Обновление конфигурации"
-
-    # Получаем токен панели для создания API-ключа
+    # Авторизуемся в панели ДО спиннеров (чтобы ввод логина/пароля не перемешивался)
     local domain_url="127.0.0.1:3000"
     local _gpt_rc
     get_panel_token; _gpt_rc=$?
@@ -542,6 +532,16 @@ _change_sub_domain_remote() {
     fi
     local token
     token=$(cat "${DIR_SCRIPT}/token")
+
+    # Обновляем SUB_PUBLIC_DOMAIN
+    (
+        if grep -q "^SUB_PUBLIC_DOMAIN=" "${panel_dir}/.env" 2>/dev/null; then
+            sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=${new_domain}|" "${panel_dir}/.env"
+        else
+            echo "SUB_PUBLIC_DOMAIN=${new_domain}" >> "${panel_dir}/.env"
+        fi
+    ) &
+    show_spinner "Обновление конфигурации"
 
     # Проверяем, есть ли уже API токен subscription-page
     local existing_api_token
@@ -572,7 +572,7 @@ _change_sub_domain_remote() {
     show_spinner "Перезапуск панели"
 
     echo
-    print_success "SUB_PUBLIC_DOMAIN обновлён на ${new_domain}"
+    print_success "Домен страницы подписки изменён на ${new_domain}"
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
