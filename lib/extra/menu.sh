@@ -981,10 +981,10 @@ run_geolocation() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    # Устанавливаем util-linux (нужен ipregion.sh) и запускаем скрипт в фоне
+    # Запускаем скрипт геолокации в фоне с таймаутом 20 сек
     (
-        apt-get install -y util-linux >/dev/null 2>&1
-        bash <(curl -s "storage.umager.ru/ipregion.sh") </dev/null
+        command -v lscpu >/dev/null 2>&1 || apt-get install -y util-linux >/dev/null 2>&1
+        bash <(curl -fsSL --connect-timeout 8 --max-time 15 "https://storage.umager.ru/ipregion.sh") </dev/null
     ) > "$tmpfile" 2>&1 &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo
