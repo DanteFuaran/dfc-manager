@@ -305,17 +305,11 @@ _change_panel_url_remote() {
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
     local new_url="https://${new_domain}"
 
-    reading_inline "API токен (Enter оставить без изменений):" new_api_token "sk-..."
-    echo
-
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${WHITE}Текущий адрес:${NC} ${YELLOW}${current_url}${NC}"
     echo -e "${WHITE}Новый адрес:${NC}   ${GREEN}${new_url}${NC}"
-    if [ -n "$new_api_token" ]; then
-        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
-    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -329,13 +323,10 @@ _change_panel_url_remote() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # Обновляем REMNAWAVE_PANEL_URL и при необходимости REMNAWAVE_API_TOKEN
+    # Обновляем REMNAWAVE_PANEL_URL
     local i
     for i in "${!compose_files[@]}"; do
         sed -i "s|REMNAWAVE_PANEL_URL=.*|REMNAWAVE_PANEL_URL=${new_url}|g" "${compose_files[$i]}"
-        if [ -n "$new_api_token" ]; then
-            sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=${new_api_token}|g" "${compose_files[$i]}"
-        fi
     done
     (sleep 0.3) &
     show_spinner "Обновление конфигов"
@@ -365,30 +356,13 @@ _change_panel_url_remote() {
 }
 
 change_sub_domain() {
-    show_arrow_menu "🌐  Настройка подписки" \
-        "📄  Страница подписки на этом сервере" \
-        "🌐  Страница подписки на удалённом сервере" \
-        "──────────────────────────────────────" \
-        "⬅️   Назад"
-    local choice=$?
-    [[ $choice -eq 255 ]] && return
-
-    case $choice in
-        0) _change_sub_domain_local ;;
-        1) _change_sub_domain_remote ;;
-        *) return ;;
-    esac
-}
-
-# ─── Страница подписки на этом сервере ───
-_change_sub_domain_local() {
-    # Проверяем, установлена ли sub-page в составе панели
+    # Автоопределение: sub-page в составе панели
     if grep -q 'remnawave-subscription-page' /opt/remnawave/docker-compose.yml 2>/dev/null; then
         _change_sub_domain_local_existing
         return
     fi
 
-    # Проверяем standalone-варианты
+    # Sub-page как standalone
     local _sp_dir=""
     local _d
     for _d in "/opt/subscribe-page" "/opt/remnasubpage"; do
@@ -400,9 +374,24 @@ _change_sub_domain_local() {
 
     if [ -n "$_sp_dir" ]; then
         _change_sub_domain_standalone "$_sp_dir"
-    else
-        _installation_subpage_on_panel
+        return
     fi
+
+    # Панель есть, sub-page нет — sub-page на удалённом сервере
+    if is_panel_installed; then
+        _change_sub_domain_remote
+        return
+    fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    print_error "Страница подписки не найдена на этом сервере"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
 }
 
 # ─── Смена домена standalone страницы подписки ───
@@ -420,7 +409,7 @@ _change_sub_domain_standalone() {
     current_sub_domain=$(grep -oP 'server_name\s+\K\S+(?=;)' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
 
     # Извлекаем panel_url и api_token из docker-compose
-    local panel_url api_token
+    local panel_url api_token new_api_token
     panel_url=$(grep -oP 'REMNAWAVE_PANEL_URL=\K\S+' "${subpage_dir}/docker-compose.yml" 2>/dev/null | head -1)
     api_token=$(grep -oP 'REMNAWAVE_API_TOKEN=\K\S+' "${subpage_dir}/docker-compose.yml" 2>/dev/null | head -1)
 
@@ -431,11 +420,17 @@ _change_sub_domain_standalone() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
+    reading_inline "API токен (Enter оставить без изменений):" new_api_token
+    echo
+
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain:-не определён}${NC}"
     echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
+    if [ -n "$new_api_token" ]; then
+        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -459,8 +454,11 @@ _change_sub_domain_standalone() {
 
     nginx_copy_cert "$new_cert_domain" 2>/dev/null || true
 
+    # Используем новый токен если указан
+    local _use_token="${new_api_token:-$api_token}"
+
     (
-        generate_docker_compose_subpage "$new_cert_domain" "$panel_url" "$api_token" "$subpage_dir"
+        generate_docker_compose_subpage "$new_cert_domain" "$panel_url" "$_use_token" "$subpage_dir"
         generate_nginx_conf_subpage "$new_domain" "$new_cert_domain" "$subpage_dir"
     ) &
     show_spinner "Подготовка файлов"
@@ -515,11 +513,18 @@ _change_sub_domain_local_existing() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
+    local new_api_token
+    reading_inline "API токен (Enter оставить без изменений):" new_api_token
+    echo
+
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain}${NC}"
     echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
+    if [ -n "$new_api_token" ]; then
+        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
@@ -564,6 +569,9 @@ _change_sub_domain_local_existing() {
         sed -i "s|server_name ${current_sub_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
         if [ -f "${panel_dir}/.env" ]; then
             sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=${new_domain}|" "${panel_dir}/.env"
+            if [ -n "$new_api_token" ]; then
+                sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=${new_api_token}|" "${panel_dir}/.env"
+            fi
         fi
     ) &
     show_spinner "Подготовка файлов"
