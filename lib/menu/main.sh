@@ -165,8 +165,8 @@ main_menu() {
                                         done
                                         ;;
                                     subpage)    installation_subpage ;;
-                                    node)       installation_node  || break ;;
-                                    add_node)   installation_node_local ;;
+                                    node)       installation_node_local ;;
+                                    add_node)   installation_node_connect ;;
                                     *) break ;;
                                 esac
                             done ;;

@@ -88,11 +88,164 @@ installation_node() {
     fi
 }
 
+# ─── Подключение удалённой ноды к панели (только API регистрация) ───
+installation_node_connect() {
+    local domain_url="127.0.0.1:3000"
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    # ─── Запрашиваем домен и имя ноды ───
+    local SELFSTEAL_DOMAIN entity_name
+    while true; do
+        prompt_domain_with_retry "Введите домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
+        while true; do
+            reading_inline "Введите имя для ноды (например, Germany):" entity_name
+            local _rc_en=$?
+            if [[ $_rc_en -eq 2 ]]; then
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo
+                break
+            fi
+            if [[ -z "$entity_name" ]]; then continue; fi
+            if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
+                    break 2
+                else
+                    print_error "Название должно быть от 3 до 20 символов"
+                fi
+            else
+                print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
+            fi
+        done
+    done
+
+    # ─── Авторизация в панели ───
+    local _gpt_rc
+    get_panel_token; _gpt_rc=$?
+    if [[ $_gpt_rc -eq 2 ]]; then return; fi
+    if [[ $_gpt_rc -ne 0 ]]; then
+        echo -e "${YELLOW}Авторизация отменена${NC}"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+    local token
+    token=$(cat "${DIR_SCRIPT}/token")
+
+    # ─── Проверка уникальности ───
+    if ! check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+        print_error "Домен $SELFSTEAL_DOMAIN уже используется в панели"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+
+    local _cp_resp
+    _cp_resp=$(make_api_request "GET" "$domain_url/api/config-profiles" "$token")
+    if echo "$_cp_resp" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" >/dev/null 2>&1; then
+        print_error "Имя конфигурационного профиля '$entity_name' уже используется"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+
+    # ─── API: регистрация ноды ───
+    echo
+    print_action "Генерация REALITY ключей..."
+    local private_key
+    private_key=$(generate_xray_keys "$domain_url" "$token")
+    if [ -z "$private_key" ]; then
+        print_error "Не удалось сгенерировать ключи"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+    print_success "Ключи сгенерированы"
+
+    print_action "Создание конфиг-профиля ($entity_name)..."
+    local config_result config_profile_uuid inbound_uuid
+    if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
+        print_error "Не удалось создать конфигурационный профиль"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+    read config_profile_uuid inbound_uuid <<< "$config_result"
+    print_success "Конфигурационный профиль: $entity_name"
+
+    print_action "Создание ноды ($entity_name)..."
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
+        print_success "Нода создана"
+    else
+        print_error "Не удалось создать ноду"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+
+    print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
+    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+        print_success "Хост зарегистрирован"
+    else
+        print_error "Не удалось зарегистрировать хост"
+    fi
+
+    print_action "Настройка сквадов..."
+    local squad_uuids
+    squad_uuids=$(get_default_squad "$domain_url" "$token")
+    if [ -n "$squad_uuids" ]; then
+        while IFS= read -r squad_uuid; do
+            [ -z "$squad_uuid" ] && continue
+            update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
+        done <<< "$squad_uuids"
+        print_success "Сквады обновлены"
+    else
+        echo -e "${YELLOW}⚠️  Сквады не найдены${NC}"
+    fi
+
+    # ─── Получаем SECRET_KEY для удалённого сервера ───
+    print_action "Получение публичного ключа панели..."
+    local pubkey
+    pubkey=$(make_api_request "GET" "$domain_url/api/keygen" "$token" | jq -r '.response.pubKey // empty' 2>/dev/null)
+
+    # ─── Итог ───
+    clear
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "   ${GREEN}🎉 Нода зарегистрирована в панели${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${WHITE}Нода:${NC}    $SELFSTEAL_DOMAIN"
+    echo -e "${WHITE}Имя:${NC}    $entity_name"
+    echo
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${GREEN}✅ Нода зарегистрирована в панели${NC}"
+    echo -e "${GREEN}✅ Хост добавлен${NC}"
+    echo
+    if [ -n "$pubkey" ]; then
+        echo -e "${YELLOW}⚠️  SECRET_KEY для установки ноды на удалённом сервере:${NC}"
+        echo
+        echo -e "${WHITE}${pubkey}${NC}"
+        echo
+        echo -e "${DARKGRAY}Скопируйте ключ и используйте при установке ноды на удалённом сервере${NC}"
+    fi
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
 # ─── Установка ноды на сервер с панелью (автодетект) ───
 installation_node_local() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+    echo -e "${GREEN}     🌐 Установка ноды на сервер${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Проверяем пакеты
@@ -192,7 +345,7 @@ installation_node_local() {
                 # Esc → очищаем экран, перерисовываем заголовок, назад к вводу домена
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+                echo -e "${GREEN}     🌐 Установка ноды на сервер${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 break
