@@ -342,6 +342,40 @@ _change_panel_url_remote() {
 }
 
 change_sub_domain() {
+    show_arrow_menu "🌐  Настройка подписки" \
+        "📄  Страница подписки на этом сервере" \
+        "🌐  Страница подписки на удалённом сервере" \
+        "──────────────────────────────────────" \
+        "⬅️   Назад"
+    local choice=$?
+    [[ $choice -eq 255 ]] && return
+
+    case $choice in
+        0) _change_sub_domain_local ;;
+        1) _change_sub_domain_remote ;;
+        *) return ;;
+    esac
+}
+
+# ─── Страница подписки на этом сервере ───
+_change_sub_domain_local() {
+    # Проверяем, установлена ли уже sub-page локально
+    local _has_local_sub=false
+    if grep -q 'remnawave-subscription-page' /opt/remnawave/docker-compose.yml 2>/dev/null; then
+        _has_local_sub=true
+    fi
+
+    if [ "$_has_local_sub" = true ]; then
+        # Sub-page уже установлена — меняем домен
+        _change_sub_domain_local_existing
+    else
+        # Sub-page не установлена — запускаем установку
+        _installation_subpage_on_panel
+    fi
+}
+
+# ─── Смена домена локальной страницы подписки ───
+_change_sub_domain_local_existing() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
@@ -351,8 +385,8 @@ change_sub_domain() {
     local panel_dir
     if ! panel_dir=$(detect_remnawave_path); then
         echo
-        read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
         return 1
     fi
 
@@ -438,6 +472,116 @@ change_sub_domain() {
 
     echo
     print_success "Домен страницы подписки изменён на ${new_domain}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
+# ─── Страница подписки на удалённом сервере ───
+_change_sub_domain_remote() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Подписка на удалённом сервере${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    local panel_dir
+    if ! panel_dir=$(detect_remnawave_path); then
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return 1
+    fi
+
+    local new_domain
+    if ! prompt_domain_with_retry "Домен страницы подписки на удалённом сервере:" new_domain; then
+        return 0
+    fi
+
+    new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
+
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${WHITE}Домен подписки:${NC} ${GREEN}${new_domain}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+
+    if ! confirm_action; then
+        print_error "Операция отменена"
+        sleep 2
+        return 0
+    fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🌐 Подписка на удалённом сервере${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    # Обновляем SUB_PUBLIC_DOMAIN
+    (
+        if grep -q "^SUB_PUBLIC_DOMAIN=" "${panel_dir}/.env" 2>/dev/null; then
+            sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=${new_domain}|" "${panel_dir}/.env"
+        else
+            echo "SUB_PUBLIC_DOMAIN=${new_domain}" >> "${panel_dir}/.env"
+        fi
+    ) &
+    show_spinner "Обновление конфигурации"
+
+    # Получаем токен панели для создания API-ключа
+    local domain_url="127.0.0.1:3000"
+    local _gpt_rc
+    get_panel_token; _gpt_rc=$?
+    if [[ $_gpt_rc -ne 0 ]]; then
+        print_error "Не удалось авторизоваться в панели"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return 1
+    fi
+    local token
+    token=$(cat "${DIR_SCRIPT}/token")
+
+    # Проверяем, есть ли уже API токен subscription-page
+    local existing_api_token
+    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${panel_dir}/.env" 2>/dev/null | head -1)
+
+    if [ -z "$existing_api_token" ] || [ "$existing_api_token" = "\$api_token" ]; then
+        # Переименовываем старый токен если есть
+        docker exec remnawave-db psql -U postgres -d postgres -c \
+            "UPDATE api_tokens SET token_name = token_name || '_old' WHERE token_name = 'subscription-page';" >/dev/null 2>&1 || true
+        if create_api_token "$domain_url" "$token" "$panel_dir" 2>/dev/null; then
+            existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${panel_dir}/.env" 2>/dev/null | head -1)
+        else
+            print_error "Не удалось создать API токен"
+            echo -e "${YELLOW}Создайте токен вручную: Dashboard → Settings → API Tokens${NC}"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            show_continue_prompt || return 1
+            return 1
+        fi
+    fi
+
+    # Перезапускаем панель с новым SUB_PUBLIC_DOMAIN
+    (
+        cd "$panel_dir"
+        docker compose down >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner "Перезапуск панели"
+
+    echo
+    print_success "SUB_PUBLIC_DOMAIN обновлён на ${new_domain}"
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    echo
+    echo -e "${WHITE}API токен для страницы подписки:${NC}"
+    echo
+    echo -e "${GREEN}${existing_api_token}${NC}"
+    echo
+    echo -e "${DARKGRAY}Используйте этот токен при установке${NC}"
+    echo -e "${DARKGRAY}страницы подписки на удалённом сервере.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
