@@ -113,13 +113,16 @@ _installation_subpage_on_panel() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    print_success "Панель: $panel_domain"
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
-
     # Запрашиваем домен подписки
     local SUB_DOMAIN
     local cert_choice
     while true; do
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    print_success "Панель: $panel_domain"
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
     prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
 
     # Сертификат для sub_domain
@@ -309,15 +312,6 @@ _installation_subpage_on_panel() {
 _installation_subpage_on_node() {
     local NODE_DIR="/opt/remnanode"
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
-    echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
-    echo
-
     # Проверяем пакеты
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
@@ -343,6 +337,14 @@ _installation_subpage_on_node() {
     local PANEL_URL=""
     local cert_choice
     while true; do
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
+    echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
+    echo
     PANEL_URL=""
     while true; do
         reading "Домен панели (например panel.example.com):" PANEL_URL
@@ -557,11 +559,6 @@ _installation_subpage_standalone() {
         is_fresh_install=true
     fi
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
     mkdir -p "${SUBPAGE_DIR}" && cd "${SUBPAGE_DIR}"
 
     # Устанавливаем trap для удаления при прерывании
@@ -573,6 +570,10 @@ _installation_subpage_standalone() {
     local PANEL_URL=""
     local cert_choice
     while true; do
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     PANEL_URL=""
     while true; do
         reading "Домен панели (например panel.example.com):" PANEL_URL

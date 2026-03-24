@@ -29,14 +29,6 @@ installation_panel() {
         is_fresh_install=true
     fi
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if [ "$with_subpage" = true ]; then
-        echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
-    else
-        echo -e "${GREEN}  📦 Установка отдельной панели${NC}"
-    fi
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
     [ "$with_subpage" = true ] && mkdir -p "${DIR_SUB}"
 
@@ -47,6 +39,14 @@ installation_panel() {
 
     local cert_choice
     while true; do
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if [ "$with_subpage" = true ]; then
+        echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
+    else
+        echo -e "${GREEN}  📦 Установка отдельной панели${NC}"
+    fi
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     local SUB_DOMAIN=""
