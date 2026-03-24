@@ -764,11 +764,19 @@ installation_node_with_existing_subpage() {
     fi
 
     # Запрашиваем параметры ноды
-    local SELFSTEAL_DOMAIN
-    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN || return
-
-    local PANEL_IP
-    prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || return
+    local SELFSTEAL_DOMAIN PANEL_IP
+    while true; do
+        echo
+        prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true || return
+        if prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP; then
+            break
+        else
+            clear
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${GREEN}          📦 Установка ноды${NC}"
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+        fi
+    done
 
     echo
     echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (SECRET_KEY) из панели и нажмите Enter дважды:${NC}"
