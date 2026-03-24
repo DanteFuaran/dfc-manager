@@ -12,19 +12,19 @@ main_menu() {
 
     while true; do
         tput civis 2>/dev/null || true
-        local menu_title="      🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
+        local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
 
         local -a items=() actions=()
-        local _rw_label="📦  Remnawave" _bz_label="📊  Beszel" _mt_label="📡  MTProto"
+        local _rw_label="📦  Remnawave - Панель" _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "
         { is_panel_installed || is_node_installed || is_subpage_remote_installed; } \
-            && _rw_label="📦  Remnawave ${GREEN}(установлено)${NC}" \
-            || _rw_label="📦  Remnawave ${DARKGRAY}(сервис)${NC}"
+            && _rw_label="${_rw_label} ${GREEN}(установлено)${NC}" \
+            || _rw_label="${_rw_label} ${DARKGRAY}(не установлено)${NC}"
         is_beszel_installed \
-            && _bz_label="📊  Beszel ${GREEN}(установлено)${NC}" \
-            || _bz_label="📊  Beszel ${DARKGRAY}(мониторинг)${NC}"
+            && _bz_label="${_bz_label} ${GREEN}(установлено)${NC}" \
+            || _bz_label="${_bz_label} ${DARKGRAY}(не установлено)${NC}"
         _mt_installed \
-            && _mt_label="📡  MTProto ${GREEN}(установлено)${NC}" \
-            || _mt_label="📡  MTProto ${DARKGRAY}(прокси)${NC}"
+            && _mt_label="${_mt_label} ${GREEN}(установлено)${NC}" \
+            || _mt_label="${_mt_label} ${DARKGRAY}(не установлено)${NC}"
         items+=("$_rw_label");                     actions+=("remnawave")
         items+=("$_bz_label");                     actions+=("beszel")
         items+=("$_mt_label");                      actions+=("mtproto")
