@@ -55,34 +55,35 @@ manage_ufw() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "${GREEN}     📋 Открытые порты (UFW)${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                printf "  ${DARKGRAY}%-6s %-20s     %-18s       %s${NC}\n" "" "Порт" "Состояние" "Описание"
+                printf "  ${DARKGRAY}%-6s     %-20s %-18s  %s${NC}\n" "" "Порт" "Состояние" "Описание"
                 while IFS= read -r line; do
                     local idx port state comment state_color
                     idx=$(echo "$line" | grep -oP '^\[\s*\d+\]')
                     port=$(echo "$line" | sed 's/^\[\s*[0-9]*\]\s*//' | awk '{print $1}')
 
+                    # Источник — последнее значимое поле (после ALLOW IN / DENY IN)
+                    local source
+                    source=$(echo "$line" | awk '{print $NF}' | tr -d '(v6)' | xargs)
+
                     # Определяем ipv6
                     local is_v6=""
-                    echo "$line" | grep -q '(v6)' && { port="$port (v6)"; is_v6="(v6)"; }
+                    echo "$line" | grep -q '(v6)' && { port="$port (v6)"; is_v6=" (v6)"; }
 
                     # Определяем состояние
-                    local action
-                    action=$(echo "$line" | awk '{print $2}')
                     if echo "$line" | grep -qiP 'DENY|REJECT'; then
-                        state="Закрыт"
+                        state="Закрыт${is_v6}"
                         state_color="${RED}"
-                    elif echo "$line" | grep -qiP 'from [0-9]'; then
-                        local from_ip
-                        from_ip=$(echo "$line" | grep -oP 'from \K[0-9][^\s]+')
-                        state="$from_ip${is_v6:+ $is_v6}"
+                    elif [ -z "$source" ] || [ "$source" = "Anywhere" ] || [ "$source" = "anywhere" ]; then
+                        state="Для всех${is_v6}"
                         state_color="${GREEN}"
                     else
-                        state="Для всех${is_v6:+ $is_v6}"
+                        # Конкретный IP — source содержит адрес
+                        state="${source}${is_v6}"
                         state_color="${GREEN}"
                     fi
 
                     comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
-                    printf "  ${WHITE}%-6s %-20s ${state_color}%-18s${NC}       ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
+                    printf "  ${WHITE}%-6s     %-20s ${state_color}%-18s${NC}  ${DARKGRAY}%s${NC}\n" "$idx" "$port" "$state" "$comment"
                 done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
