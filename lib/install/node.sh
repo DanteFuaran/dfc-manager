@@ -550,7 +550,7 @@ installation_node_remote() {
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "'"${NODE_INSTALL_DIR}"'" 2>/dev/null; exit 1' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен selfsteal/ноды (например node.example.com):" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
 
     local PANEL_IP
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
@@ -746,7 +746,6 @@ installation_node_with_existing_subpage() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}   📦 Установка ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     # Извлекаем данные из существующей установки subpage
     local PANEL_URL API_TOKEN SUB_DOMAIN SUB_CERT_DOMAIN
@@ -766,7 +765,7 @@ installation_node_with_existing_subpage() {
 
     # Запрашиваем параметры ноды
     local SELFSTEAL_DOMAIN
-    prompt_domain_with_retry "Домен selfsteal/ноды (например node.example.com):" SELFSTEAL_DOMAIN || return
+    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN || return
 
     local PANEL_IP
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || return
