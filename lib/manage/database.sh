@@ -610,7 +610,7 @@ db_restore() {
             fi
 
             # Перезапуск subscription-page (ищем во всех возможных местах)
-            local _sub_page_dir=""
+            local _sub_page_dir="" _dir
             for _dir in "/opt/remnawave" "/opt/remnanode" "/opt/remnasubpage" "/opt/subscribe-page"; do
                 if grep -q 'remnawave-subscription-page' "$_dir/docker-compose.yml" 2>/dev/null; then
                     _sub_page_dir="$_dir"
