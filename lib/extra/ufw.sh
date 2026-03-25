@@ -88,9 +88,13 @@ manage_ufw() {
                     elif [ -z "$source" ] || [ "$source" = "Anywhere" ] || [ "$source" = "anywhere" ]; then
                         state="Всем${is_v6}"
                         state_color="${GREEN}"
-                    else
-                        # Конкретный IP — source содержит адрес
+                    elif echo "$source" | grep -qE '\.|:'; then
+                        # Конкретный IP адрес (содержит точки для IPv4 или двоеточия для IPv6)
                         state="${source}${is_v6}"
+                        state_color="${GREEN}"
+                    else
+                        # Неопознанный формат - считаем как Всем
+                        state="Всем${is_v6}"
                         state_color="${GREEN}"
                     fi
 
