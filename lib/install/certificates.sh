@@ -22,11 +22,21 @@ _parse_cert_error() {
         echo "Ошибка Cloudflare API — проверьте токен и права доступа"
     else
         local detail
-        detail=$(grep -iE "Detail:|error:" "$log_file" 2>/dev/null | head -1 | sed 's/.*Detail: *//;s/.*error: *//')
+        detail=$(grep -iE "Detail:|Error:|FAILED|Problem|certbot: error" "$log_file" 2>/dev/null \
+            | grep -v "^-\|Saving debug\|^$" | head -2 \
+            | sed 's/.*Detail: *//;s/.*Error: *//;s/.*certbot: error: *//')
         if [ -n "$detail" ]; then
             echo "$detail"
         else
-            echo "Не удалось определить причину — проверьте DNS и сетевые настройки"
+            # Последний шанс: любые непустые строки из хвоста лога
+            local _tail
+            _tail=$(grep -vE '^[[:space:]]*$|^-{5}|Saving debug log|^Cert is due|^IMPORTANT' \
+                "$log_file" 2>/dev/null | tail -4 | tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//')
+            if [ -n "$_tail" ]; then
+                echo "$_tail"
+            else
+                echo "Не удалось определить причину — проверьте DNS и сетевые настройки"
+            fi
         fi
     fi
 }
@@ -122,11 +132,19 @@ get_cert_cloudflare() {
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
     if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
-        local _cert_reason
+        local _cert_reason _raw_log
         _cert_reason=$(_parse_cert_error "$_tmp_log")
+        _raw_log=$(grep -vE '^[[:space:]]*$' "$_tmp_log" 2>/dev/null | tail -35)
         rm -f "$_tmp_log" "$_exit_file"
+        echo
         print_error "Не удалось получить сертификат для $domain"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
+        if [ -n "$_raw_log" ]; then
+            echo
+            echo -e "${DARKGRAY}── Вывод certbot ───────────────────────${NC}"
+            echo "$_raw_log"
+            echo -e "${DARKGRAY}────────────────────────────────────────${NC}"
+        fi
         return 1
     fi
 
@@ -174,11 +192,19 @@ get_cert_acme() {
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
     if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
-        local _cert_reason
+        local _cert_reason _raw_log
         _cert_reason=$(_parse_cert_error "$_tmp_log")
+        _raw_log=$(grep -vE '^[[:space:]]*$' "$_tmp_log" 2>/dev/null | tail -35)
         rm -f "$_tmp_log" "$_exit_file"
+        echo
         print_error "Не удалось получить сертификат для $domain"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
+        if [ -n "$_raw_log" ]; then
+            echo
+            echo -e "${DARKGRAY}── Вывод certbot ───────────────────────────────${NC}"
+            echo "$_raw_log"
+            echo -e "${DARKGRAY}────────────────────────────────────────────────${NC}"
+        fi
         return 1
     fi
 
