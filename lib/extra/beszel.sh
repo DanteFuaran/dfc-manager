@@ -901,44 +901,63 @@ install_beszel_agent() {
     fi
 
     echo
-    echo -e "${DARKGRAY}Агент собирает метрики и отправляет их на панель Beszel.${NC}"
     echo -e "${DARKGRAY}В панели управления Beszel нажмите Добавить систему → скопируйте Ключ и Токен.${NC}"
     echo
 
-    # ─── URL панели ───
-    local BESZEL_HUB_URL
-    reading_inline "URL панели Beszel (например monitor.example.com):" BESZEL_HUB_URL
-    [[ $? -eq 2 ]] && return 1
-    if [ -z "$BESZEL_HUB_URL" ]; then
-        print_error "URL не может быть пустым"
-        echo; show_continue_prompt || return 1; return 1
-    fi
+    local BESZEL_HUB_URL BESZEL_AGENT_PORT BESZEL_KEY BESZEL_TOKEN
+    BESZEL_AGENT_PORT="45876"
+    local _step=1
 
-    # ─── Порт агента ───
-    local BESZEL_AGENT_PORT
-    reading_inline "Порт агента (по умолчанию 45876):" BESZEL_AGENT_PORT
-    [[ $? -eq 2 ]] && return 1
-    [ -z "$BESZEL_AGENT_PORT" ] && BESZEL_AGENT_PORT="45876"
+    # Стереть предыдущую строку (answered line) при возврате назад
+    _bza_erase() { printf "\033[A\033[K"; }
 
-    # ─── Публичный ключ (KEY) ───
-    local BESZEL_KEY
-    reading_inline "Ключ (публичный ключ из панели):" BESZEL_KEY
-    [[ $? -eq 2 ]] && return 1
-    if [ -z "$BESZEL_KEY" ]; then
-        print_error "Ключ не может быть пустым"
-        echo; show_continue_prompt || return 1; return 1
-    fi
+    while true; do
+        case $_step in
+            1) # URL
+                _mt_read_input BESZEL_HUB_URL "URL панели Beszel (например monitor.example.com):" ""
+                if [ $? -eq 0 ]; then
+                    if [ -z "$BESZEL_HUB_URL" ]; then
+                        _bza_erase   # стереть пустую строку, повторить
+                    else
+                        (( _step++ ))
+                    fi
+                else
+                    return 1   # Esc на 1-м шаге — выход
+                fi ;;
+            2) # Порт
+                _mt_read_input BESZEL_AGENT_PORT "Порт агента ${DARKGRAY}(по умолчанию 45876)${NC}:" "45876"
+                if [ $? -eq 0 ]; then
+                    [ -z "$BESZEL_AGENT_PORT" ] && BESZEL_AGENT_PORT="45876"
+                    (( _step++ ))
+                else
+                    _bza_erase; (( _step-- ))
+                fi ;;
+            3) # Ключ
+                _mt_read_input BESZEL_KEY "Ключ (публичный ключ из панели):" ""
+                if [ $? -eq 0 ]; then
+                    if [ -z "$BESZEL_KEY" ]; then
+                        _bza_erase
+                    else
+                        (( _step++ ))
+                    fi
+                else
+                    _bza_erase; (( _step-- ))
+                fi ;;
+            4) # Токен
+                _mt_read_input BESZEL_TOKEN "Токен (токен из панели):" ""
+                if [ $? -eq 0 ]; then
+                    if [ -z "$BESZEL_TOKEN" ]; then
+                        _bza_erase
+                    else
+                        break
+                    fi
+                else
+                    _bza_erase; (( _step-- ))
+                fi ;;
+        esac
+    done
 
-    # ─── TOKEN ───
-    local BESZEL_TOKEN
-    reading_inline "Токен (токен из панели):" BESZEL_TOKEN
-    [[ $? -eq 2 ]] && return 1
-    if [ -z "$BESZEL_TOKEN" ]; then
-        print_error "Токен не может быть пустым"
-        echo; show_continue_prompt || return 1; return 1
-    fi
-
-    # ─── Нормализуем URL (добавляем https:// если не указан протокол) ───
+    # Нормализуем URL (добавляем https:// если не указан протокол)
     if [[ "$BESZEL_HUB_URL" != http://* ]] && [[ "$BESZEL_HUB_URL" != https://* ]]; then
         BESZEL_HUB_URL="https://${BESZEL_HUB_URL}"
     fi
