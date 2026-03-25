@@ -99,7 +99,7 @@ manage_ufw() {
                     fi
 
                     comment=$(echo "$line" | grep -oP '#\s*\K.*' | xargs)
-                    printf "${WHITE}%-5s   %-6s   %-4s   ${state_color}%-16s${NC}   ${DARKGRAY}%s${NC}\n" "$idx" "$port_num" "$proto" "$state" "$comment"
+                    printf "${WHITE}%-5s   %-6s   %-4s   ${state_color}%-16s${NC}       ${DARKGRAY}%s${NC}\n" "$idx" "$port_num" "$proto" "$state" "$comment"
                 done < <(ufw status numbered 2>/dev/null | grep '^\[')
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
