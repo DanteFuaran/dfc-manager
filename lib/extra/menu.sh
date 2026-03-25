@@ -219,14 +219,13 @@ _mt_do_install() {
         case $_step in
             1) # IP/домен для ссылки с проверкой
                 local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
-                local _first_attempt=true
                 while true; do
                     _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
                     if [ $? -eq 1 ]; then
                         return  # Esc на первом шаге — выход
                     fi
                     
-                    # Проверяем сопоставление домена/IP с серверном
+                    # Проверяем сопоставление домена/IP с сервером
                     if check_domain "$SERVER_IP" true; then
                         (( _step++ ))
                         break
@@ -243,25 +242,19 @@ _mt_do_install() {
                         if [[ "$key" == $'\x1b' ]]; then
                             tput cnorm 2>/dev/null || true
                             echo
-                            break 2  # Выходим из обоих циклов (while и case)
+                            return  # Esc — выход из установки
                         elif [[ "$key" == "s" || "$key" == "S" ]]; then
                             tput cnorm 2>/dev/null || true
-                            echo
-                            local skip_lines=7
-                            for ((l=0; l<skip_lines; l++)); do
-                                tput cuu1 2>/dev/null
-                                tput el 2>/dev/null
-                            done
                             (( _step++ ))
-                            break
+                            break 2  # Пропустить проверку
                         elif [[ "$key" == "" ]]; then
                             tput cnorm 2>/dev/null || true
+                            # Перерисовываем экран с заголовком и повторяем ввод
+                            clear
+                            echo -e "${BLUE}══════════════════════════════════════${NC}"
+                            echo -e "${GREEN}       📦 Установка MTProto${NC}"
+                            echo -e "${BLUE}══════════════════════════════════════${NC}"
                             echo
-                            local lines_up=7
-                            for ((l=0; l<lines_up; l++)); do
-                                tput cuu1 2>/dev/null
-                                tput el 2>/dev/null
-                            done
                             break  # Повторить ввод домена
                         fi
                     done
