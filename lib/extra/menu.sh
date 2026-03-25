@@ -217,14 +217,55 @@ _mt_do_install() {
 
     while true; do
         case $_step in
-            1) # IP/домен для ссылки
+            1) # IP/домен для ссылки с проверкой
                 local _default_host="${SERVER_IP:-$(_mt_get_server_ip)}"
-                _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
-                if [ $? -eq 0 ]; then
-                    (( _step++ ))
-                else
-                    return  # Esc на первом шаге — выход
-                fi
+                local _first_attempt=true
+                while true; do
+                    _mt_read_input SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
+                    if [ $? -eq 1 ]; then
+                        return  # Esc на первом шаге — выход
+                    fi
+                    
+                    # Проверяем сопоставление домена/IP с серверном
+                    if check_domain "$SERVER_IP" true; then
+                        (( _step++ ))
+                        break
+                    fi
+                    
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+                    
+                    tput civis 2>/dev/null || true
+                    local key
+                    while true; do
+                        read -s -n 1 key
+                        if [[ "$key" == $'\x1b' ]]; then
+                            tput cnorm 2>/dev/null || true
+                            echo
+                            break 2  # Выходим из обоих циклов (while и case)
+                        elif [[ "$key" == "s" || "$key" == "S" ]]; then
+                            tput cnorm 2>/dev/null || true
+                            echo
+                            local skip_lines=7
+                            for ((l=0; l<skip_lines; l++)); do
+                                tput cuu1 2>/dev/null
+                                tput el 2>/dev/null
+                            done
+                            (( _step++ ))
+                            break
+                        elif [[ "$key" == "" ]]; then
+                            tput cnorm 2>/dev/null || true
+                            echo
+                            local lines_up=7
+                            for ((l=0; l<lines_up; l++)); do
+                                tput cuu1 2>/dev/null
+                                tput el 2>/dev/null
+                            done
+                            break  # Повторить ввод домена
+                        fi
+                    done
+                done
                 ;;
             2) # Порт
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
@@ -288,7 +329,7 @@ _mt_do_install() {
 
     # UFW
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${PROXY_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
 
     if _mt_running; then
