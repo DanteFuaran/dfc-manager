@@ -630,8 +630,6 @@ manage_mtproto() {
         _mt_running   && _running=true
 
         local _line1="📡 MTProto Proxy"
-        local _l1_pad=$(( (38 - ${#_line1}) / 2 ))
-        local _l1_prefix; printf -v _l1_prefix "%${_l1_pad}s" ""
 
         local _stat_word _stat_color
         if   [ "$_running"   = true ]; then
@@ -645,7 +643,7 @@ manage_mtproto() {
         local _l2_pad=$(( (38 - ${#_stat_plain}) / 2 ))
         local _l2_prefix; printf -v _l2_prefix "%${_l2_pad}s" ""
 
-        local _title="${_l1_prefix}${_line1}\n${_l2_prefix}${DARKGRAY}Статус: ${_stat_color}● ${_stat_word}${NC}"
+        local _title="${_line1}\n${_l2_prefix}${DARKGRAY}Статус: ${_stat_color}● ${_stat_word}${NC}"
 
         local -a _items=() _actions=()
 
