@@ -212,6 +212,8 @@ prompt_domain_with_retry() {
                 [ $_rc -eq 2 ] && return 1
             else
                 reading "$prompt_text" "$var_name"
+                local _rc=$?
+                [ $_rc -ne 0 ] && return 1
             fi
             first=false
         else

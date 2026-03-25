@@ -317,7 +317,7 @@ db_restore() {
         echo
 
         tput cnorm 2>/dev/null || true
-        reading "Путь к файлу бэкапа (или Enter для отмены):" custom_dump_path
+        reading "Путь к файлу бэкапа (или Enter для отмены):" custom_dump_path || return 0
 
         if [ -z "$custom_dump_path" ]; then
             return 0
@@ -813,7 +813,7 @@ _rw_configure_autobackup() {
     local current_hint=""
     [ -n "$backup_bot_token" ] && current_hint=" (Enter = оставить текущий)"
     tput cnorm 2>/dev/null || true
-    reading "Токен бота для бекапов${current_hint}:" new_backup_token
+    reading "Токен бота для бекапов${current_hint}:" new_backup_token || return
     if [ -z "$new_backup_token" ] && [ -n "$backup_bot_token" ]; then
         new_backup_token="$backup_bot_token"
     fi
@@ -830,7 +830,7 @@ _rw_configure_autobackup() {
     fi
     current_hint=""
     [ -n "$backup_chat_id" ] && current_hint=" (Enter = оставить текущий)"
-    reading "Telegram ID для получения бекапов${current_hint}:" new_chat_id
+    reading "Telegram ID для получения бекапов${current_hint}:" new_chat_id || return
     if [ -z "$new_chat_id" ] && [ -n "$backup_chat_id" ]; then
         new_chat_id="$backup_chat_id"
     fi

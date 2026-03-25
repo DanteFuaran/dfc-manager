@@ -53,7 +53,7 @@ installation_full() {
     # Название ноды
     local entity_name=""
     while true; do
-        reading "Название ноды (Пример: Germany):" entity_name
+        reading "Название ноды (Пример: Germany):" entity_name || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
                 break
@@ -91,7 +91,7 @@ installation_full() {
             3) return ;;
         esac
 
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
@@ -405,7 +405,7 @@ installation_panel_with_node() {
     echo -e "${DARKGRAY}установлена на удалённом сервере (для генерации ссылок подписки).${NC}"
     local SUB_DOMAIN=""
     while true; do
-        reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN
+        reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
         if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
             break
         else
@@ -421,7 +421,7 @@ installation_panel_with_node() {
 
     local entity_name=""
     while true; do
-        reading "Название ноды (Пример: Germany):" entity_name
+        reading "Название ноды (Пример: Germany):" entity_name || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
                 break
@@ -455,7 +455,7 @@ installation_panel_with_node() {
             2) : ;;
             3) return ;;
         esac
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return

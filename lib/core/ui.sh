@@ -277,12 +277,44 @@ show_arrow_menu() {
 reading() {
     local prompt="$1"
     local var_name="$2"
-    local input
+    local input=""
+    local char
+    local _rl_stty
+    _rl_stty=$(stty -g 2>/dev/null || echo "")
     echo
     tput cnorm 2>/dev/null
-    read -e -p "$(echo -e "${BLUE}➜${NC}  ${YELLOW}$prompt${NC} \033[32m")" input
+    echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} \033[32m"
+    while IFS= read -r -s -n1 char; do
+        if [[ -z "$char" ]]; then
+            break
+        elif [[ "$char" == $'\x7f' ]] || [[ "$char" == $'\x08' ]]; then
+            if [[ -n "$input" ]]; then
+                input="${input%?}"
+                echo -en "\b \b"
+            fi
+        elif [[ "$char" == $'\x1b' ]]; then
+            local _seq=""
+            while IFS= read -r -s -n1 -t 0.1 _sc; do
+                _seq+="$_sc"
+                [[ "$_sc" =~ [A-Za-z~] ]] && break
+            done
+            if [[ -z "$_seq" ]]; then
+                echo -en "\033[0m"
+                echo
+                if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
+                printf -v "$var_name" ''
+                return 2
+            fi
+        else
+            input+="$char"
+            echo -en "$char"
+        fi
+    done
     echo -en "\033[0m"
+    if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
+    echo
     printf -v "$var_name" '%s' "$input"
+    return 0
 }
 
 reading_inline() {

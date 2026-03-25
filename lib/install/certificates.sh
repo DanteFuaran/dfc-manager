@@ -201,7 +201,7 @@ get_cert_acme() {
 }
 
 setup_cloudflare_credentials() {
-    reading "Введите Cloudflare API Token:" CF_TOKEN
+    reading "Введите Cloudflare API Token:" CF_TOKEN || return 1
 
     # Проверяем токен
     local check

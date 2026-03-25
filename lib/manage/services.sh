@@ -143,6 +143,7 @@ manage_reinstall() {
         "──────────────────────────────────────" \
         "⬅️   Назад"
     local choice=$?
+    [[ $choice -eq 255 ]] && return
 
     case $choice in
         0) installation_full ;;
