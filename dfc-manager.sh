@@ -135,6 +135,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
             chmod +x "${DIR_SCRIPT}dfc-manager.sh"
             ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
             ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+            ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
             touch "$_UPDATE_FLAG"
         fi
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null || true

@@ -244,6 +244,7 @@ install_script() {
         chmod +x "${DIR_SCRIPT}dfc-manager.sh"
         ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
         ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
         return
     fi
 
@@ -257,6 +258,7 @@ install_script() {
     chmod +x "${DIR_SCRIPT}dfc-manager.sh"
     ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
     ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+    ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
 }
 
 update_script() {
@@ -329,6 +331,7 @@ update_script() {
         chmod +x "${DIR_SCRIPT}dfc-manager.sh"
         ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
         ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
+        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
     ) &
     show_spinner "Загрузка обновлений"
 
