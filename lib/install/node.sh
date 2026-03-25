@@ -101,9 +101,9 @@ installation_node_connect() {
     # ─── Запрашиваем домен и имя ноды ───
     local SELFSTEAL_DOMAIN entity_name
     while true; do
-        prompt_domain_with_retry "Введите домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
+        prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
         while true; do
-            reading_inline "Введите имя для ноды (например, Germany):" entity_name
+            reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
                 clear
@@ -333,9 +333,9 @@ installation_node_local() {
     # ─── Запрашиваем selfsteal домен и имя ноды ───
     local SELFSTEAL_DOMAIN entity_name
     while true; do
-        prompt_domain_with_retry "Введите домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true true || return
+        prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
         while true; do
-            reading_inline "Введите имя для ноды (например, Germany):" entity_name
+            reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
                 # Esc → очищаем экран, перерисовываем заголовок, назад к вводу домена
@@ -694,7 +694,7 @@ installation_node_remote() {
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "'"${NODE_INSTALL_DIR}"'" 2>/dev/null; exit 1' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
 
     local PANEL_IP
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
@@ -910,7 +910,7 @@ installation_node_with_existing_subpage() {
     local SELFSTEAL_DOMAIN PANEL_IP
     while true; do
         echo
-        prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true || return
+        prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true || return
         if prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP; then
             break
         else

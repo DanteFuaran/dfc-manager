@@ -40,9 +40,9 @@ installation_full() {
     fi
 
     # Домены
-    prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен подписки (например sub.example.com):" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
@@ -399,7 +399,7 @@ installation_panel_with_node() {
         trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен панели (например panel.example.com):" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     # Домен подписки для SUB_PUBLIC_DOMAIN — пользователь установит subpage отдельно
     echo
@@ -407,7 +407,7 @@ installation_panel_with_node() {
     echo -e "${DARKGRAY}установлена на удалённом сервере (для генерации ссылок подписки).${NC}"
     local SUB_DOMAIN=""
     while true; do
-        reading "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+        reading "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
         if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
             break
         else
@@ -415,7 +415,7 @@ installation_panel_with_node() {
         fi
     done
 
-    prompt_domain_with_retry "Домен ноды (например node.example.com):" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
 
     local SUPERADMIN_USERNAME SUPERADMIN_PASSWORD
     SUPERADMIN_USERNAME=$(generate_admin_username)

@@ -123,7 +123,7 @@ _installation_subpage_on_panel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     print_success "Панель: $panel_domain"
     echo -e "${BLUE}──────────────────────────────────────${NC}"
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || return
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
 
     # Сертификат для sub_domain
     local CERT_METHOD="$AUTO_CERT_METHOD"
@@ -349,7 +349,7 @@ _installation_subpage_on_node() {
     while true; do
         [ "$_first_panel" = true ] && echo
         _first_panel=false
-        reading_inline "Домен панели (например panel.example.com):" PANEL_URL
+        reading_inline "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_URL
         [[ $? -eq 2 ]] && return 1
         # Убираем протокол если введён
         PANEL_URL="${PANEL_URL#https://}"
@@ -387,7 +387,7 @@ _installation_subpage_on_node() {
     while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
     clear
@@ -398,8 +398,8 @@ _installation_subpage_on_node() {
     echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
     echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели (например panel.example.com):${NC} ${GREEN}${PANEL_URL#https://}${NC}"
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки (например sub.example.com):${NC} ${GREEN}${SUB_DOMAIN}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:${NC} ${GREEN}${PANEL_URL#https://}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
@@ -618,7 +618,7 @@ _installation_subpage_standalone() {
     while true; do
         [ "$_first_panel" = true ] && echo
         _first_panel=false
-        reading_inline "Домен панели (например panel.example.com):" PANEL_URL
+        reading_inline "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_URL
         [[ $? -eq 2 ]] && { [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null; return 1; }
         # Убираем протокол если введён
         PANEL_URL="${PANEL_URL#https://}"
@@ -657,7 +657,7 @@ _installation_subpage_standalone() {
     while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки (например sub.example.com):" SUB_DOMAIN true || break
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
     clear
@@ -665,8 +665,8 @@ _installation_subpage_standalone() {
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели (например panel.example.com):${NC} ${GREEN}${PANEL_URL#https://}${NC}"
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки (например sub.example.com):${NC} ${GREEN}${SUB_DOMAIN}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:${NC} ${GREEN}${PANEL_URL#https://}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo

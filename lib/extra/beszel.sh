@@ -275,36 +275,38 @@ is_beszel_agent_installed() {
 }
 
 manage_beszel() {
-    local -a items=()
-    local -a actions=()
+    while true; do
+        local -a items=()
+        local -a actions=()
 
-    if ! is_beszel_installed; then
-        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
-    else
-        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
-    fi
+        if ! is_beszel_installed; then
+            items+=("📊  Установить панель Beszel"); actions+=("install_hub")
+        else
+            items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
+        fi
 
-    if ! is_beszel_agent_installed; then
-        items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
-    elif ! is_beszel_installed; then
-        # Агент есть, хаба нет — меняем адрес хаба у агента
-        items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
-    fi
+        if ! is_beszel_agent_installed; then
+            items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
+        elif ! is_beszel_installed; then
+            # Агент есть, хаба нет — меняем адрес хаба у агента
+            items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
+        fi
 
-    items+=("──────────────────────────────────────"); actions+=("sep")
-    items+=("⬅️   Назад");                             actions+=("back")
+        items+=("──────────────────────────────────────"); actions+=("sep")
+        items+=("⬅️   Назад");                             actions+=("back")
 
-    show_arrow_menu "📊  Beszel" "${items[@]}"
-    local choice=$?
-    local action="${actions[$choice]:-back}"
+        show_arrow_menu "📊  Beszel" "${items[@]}"
+        local choice=$?
+        local action="${actions[$choice]:-back}"
 
-    case "$action" in
-        install_hub)       install_beszel ;;
-        change_domain)     change_domain_beszel ;;
-        install_agent)     install_beszel_agent ;;
-        change_agent_hub)  change_agent_hub_url ;;
-        *) return 0 ;;
-    esac
+        case "$action" in
+            install_hub)       install_beszel ;;
+            change_domain)     change_domain_beszel ;;
+            install_agent)     install_beszel_agent ;;
+            change_agent_hub)  change_agent_hub_url ;;
+            *) return 0 ;;
+        esac
+    done
 }
 
 install_beszel() {
@@ -771,7 +773,7 @@ change_agent_hub_url() {
     echo
 
     local NEW_HUB_URL
-    reading_inline "Новый домен/ip хаба (например example.com):" NEW_HUB_URL
+    reading_inline "Новый домен/ip хаба ${DARKGRAY}(например example.com)${YELLOW}:" NEW_HUB_URL
     [[ $? -eq 2 ]] && return 1
     if [ -z "$NEW_HUB_URL" ]; then
         print_error "Адрес не может быть пустым"
@@ -914,7 +916,7 @@ install_beszel_agent() {
     while true; do
         case $_step in
             1) # URL
-                _mt_read_input BESZEL_HUB_URL "URL панели Beszel (например monitor.example.com):" ""
+                _mt_read_input BESZEL_HUB_URL "URL панели Beszel ${DARKGRAY}(например monitor.example.com)${YELLOW}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$BESZEL_HUB_URL" ]; then
                         _bza_erase   # стереть пустую строку, повторить
