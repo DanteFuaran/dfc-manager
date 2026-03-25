@@ -104,22 +104,51 @@ check_if_certificates_needed() {
     return 1
 }
 
-# Устанавливает certbot если не установлен
-_ensure_certbot() {
-    if command -v certbot >/dev/null 2>&1; then
-        return 0
-    fi
+# Устанавливает certbot и docker если не установлены
+_ensure_system_deps() {
+    local _need_certbot=false _need_docker=false
+    command -v certbot >/dev/null 2>&1 || _need_certbot=true
+    { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; } || _need_docker=true
+
+    [ "$_need_certbot" = false ] && [ "$_need_docker" = false ] && return 0
+
     (
         export DEBIAN_FRONTEND=noninteractive
+        local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+        systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+        local _lw=0
+        while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
+              /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
+              >/dev/null 2>&1; do
+            sleep 2; _lw=$(( _lw + 2 )); [ "$_lw" -ge 120 ] && break
+        done
         apt-get update -qq >/dev/null 2>&1
-        apt-get install -y -qq certbot python3-certbot-dns-cloudflare >/dev/null 2>&1
+        if [ "$_need_certbot" = true ]; then
+            apt-get install -y -qq $DPKG_OPTS certbot python3-certbot-dns-cloudflare >/dev/null 2>&1
+        fi
+        if [ "$_need_docker" = true ]; then
+            apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
+            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+            sh /tmp/get-docker.sh >/dev/null 2>&1
+            rm -f /tmp/get-docker.sh
+            systemctl start docker >/dev/null 2>&1 || true
+            systemctl enable docker >/dev/null 2>&1 || true
+        fi
     ) &
-    show_spinner "Установка certbot"
-    if ! command -v certbot >/dev/null 2>&1; then
+    show_spinner "Обновление пакетов системы"
+
+    if [ "$_need_certbot" = true ] && ! command -v certbot >/dev/null 2>&1; then
         print_error "certbot не удалось установить. Установите вручную: apt install certbot"
         return 1
     fi
+    if [ "$_need_docker" = true ] && { ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; }; then
+        print_error "Docker не удалось установить. Установите вручную: curl -fsSL https://get.docker.com | sh"
+        return 1
+    fi
 }
+
+# Для обратной совместимости: вызывает _ensure_system_deps
+_ensure_certbot() { _ensure_system_deps; }
 
 get_cert_cloudflare() {
     local domain="$1"

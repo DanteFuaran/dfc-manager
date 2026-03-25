@@ -524,6 +524,35 @@ NGINX
         ufw allow 443/tcp >/dev/null 2>&1 || true
     fi
 
+    # ─── Устанавливаем зависимости (докер, если не установлен) ───
+    if ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
+        (
+            export DEBIAN_FRONTEND=noninteractive
+            local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+            systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+            local _lw=0
+            while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
+                  /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
+                  >/dev/null 2>&1; do
+                sleep 2; _lw=$(( _lw + 2 )); [ "$_lw" -ge 120 ] && break
+            done
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
+            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+            sh /tmp/get-docker.sh >/dev/null 2>&1
+            rm -f /tmp/get-docker.sh
+            systemctl start docker >/dev/null 2>&1 || true
+            systemctl enable docker >/dev/null 2>&1 || true
+        ) &
+        if ! show_spinner "Обновление пакетов системы"; then
+            print_error "Docker не удалось установить"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            show_continue_prompt || return 0
+            return 0
+        fi
+    fi
+
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
         mkdir -p "${DIR_BESZEL}"
@@ -588,6 +617,7 @@ YAML
             echo -e "${DARKGRAY}────────────────────────────────────────${NC}"
         fi
         echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 0
         return 0
     fi
@@ -1047,7 +1077,7 @@ install_beszel_agent() {
             systemctl enable docker >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner "Обновление пакетов"
+    show_spinner "Обновление пакетов системы"
 
     # ─── Открываем порт в UFW ───
     ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
