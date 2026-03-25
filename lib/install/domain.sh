@@ -90,7 +90,7 @@ check_domain() {
 
     if [ -z "$domain_ip" ]; then
         echo
-        echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} не найден в DNS${NC}"
+        echo -e "${RED}✖  Домена ${YELLOW}$domain${RED} не существует${NC}"
         echo -e "${RED}❗ Убедитесь что A-запись настроена или нажмите S чтобы пропустить проверку.${NC}"
         return 1
     fi
