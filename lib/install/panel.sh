@@ -174,9 +174,11 @@ installation_panel() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
-        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 || true
     ) &
     show_spinner "Запуск сервисов" || true
+
+    (nginx_reload) &
+    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"

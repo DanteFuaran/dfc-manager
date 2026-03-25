@@ -518,7 +518,7 @@ installation_node_local() {
         return
     fi
 
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
 
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
@@ -836,7 +836,7 @@ EOL
         return
     fi
 
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
+    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
