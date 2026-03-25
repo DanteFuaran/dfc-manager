@@ -264,7 +264,11 @@ _mt_do_install() {
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
-                    (( _step++ ))
+                    if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
+                        (( _step++ ))
+                    else
+                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                    fi
                 else
                     _mt_erase_lines 1
                     (( _step-- ))
@@ -282,6 +286,15 @@ _mt_do_install() {
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            5) # Telegram TAG
+                _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${PROXY_TAG:-}"
+                if [ $? -eq 0 ]; then
                     break
                 else
                     _mt_erase_lines 1
@@ -297,7 +310,6 @@ _mt_do_install() {
     else
         PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
     fi
-    PROXY_TAG=""
     echo
     echo
 
@@ -517,10 +529,12 @@ _mt_do_change_config() {
     fi
     _mt_load_env
 
+    local _old_port="${PROXY_PORT:-}"
     local _step=1 _secret_input=""
     local NEW_SERVER_IP="$SERVER_IP"
     local NEW_PROXY_PORT="$PROXY_PORT"
     local NEW_FAKE_DOMAIN="$FAKE_DOMAIN"
+    local NEW_PROXY_TAG="${PROXY_TAG:-}"
 
     _mt_erase_lines() {
         local n=$1
@@ -561,7 +575,12 @@ _mt_do_change_config() {
             2) # Порт
                 local _port_default="${NEW_PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input NEW_PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
-                if [ $? -eq 0 ]; then (( _step++ ))
+                if [ $? -eq 0 ]; then
+                    if [[ "$NEW_PROXY_PORT" =~ ^[0-9]+$ ]] && (( NEW_PROXY_PORT >= 1 && NEW_PROXY_PORT <= 65535 )); then
+                        (( _step++ ))
+                    else
+                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                    fi
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             3) # Fake TLS домен
                 _mt_read_input NEW_FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${NEW_FAKE_DOMAIN}]${NC}:" "$NEW_FAKE_DOMAIN"
@@ -569,6 +588,10 @@ _mt_do_change_config() {
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+                if [ $? -eq 0 ]; then (( _step++ ))
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+            5) # Telegram TAG
+                _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
         esac
@@ -582,6 +605,7 @@ _mt_do_change_config() {
     SERVER_IP="$NEW_SERVER_IP"
     PROXY_PORT="$NEW_PROXY_PORT"
     FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
+    PROXY_TAG="$NEW_PROXY_TAG"
     echo
     echo
 
@@ -595,6 +619,9 @@ _mt_do_change_config() {
 
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+        if [ -n "$_old_port" ] && [ "$_old_port" != "$PROXY_PORT" ]; then
+            ufw delete allow "$_old_port" >/dev/null 2>&1 || true
+        fi
     fi
 
     echo
@@ -682,7 +709,7 @@ _mt_do_uninstall() {
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
-        ufw delete allow "${PROXY_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
@@ -703,6 +730,23 @@ _mt_do_uninstall() {
             "")      tput cnorm 2>/dev/null || true; return 0 ;;
         esac
     done
+}
+
+_mt_do_update() {
+    if ! _mt_installed; then
+        echo -e "${RED}✖ MTProto не установлен${NC}"
+        _mt_press_enter; return
+    fi
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}     ⬆️  Обновление образа MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
+    show_spinner "Загрузка нового образа..." "Образ обновлён"
+    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Перезапуск MTProto..." "MTProto обновлён!"
+    _mt_press_enter
 }
 
 manage_mtproto() {
@@ -735,6 +779,7 @@ manage_mtproto() {
             _items+=("📦  Установить MTProto");     _actions+=("install")
         else
             _items+=("📦  Переустановить MTProto"); _actions+=("install")
+            _items+=("⬆️   Обновить образ");          _actions+=("update")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             _items+=("📊  Статистика подключений");            _actions+=("stats")
             _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
@@ -758,6 +803,7 @@ manage_mtproto() {
         local _action="${_actions[$_choice]:-sep}"
         case "$_action" in
             install)       _mt_do_install || return ;;
+            update)        _mt_do_update ;;
             stats)         _mt_do_stats || return ;;
             config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
