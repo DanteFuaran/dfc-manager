@@ -301,7 +301,7 @@ _mt_do_install() {
                 fi
                 echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
                 echo
-                _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${PROXY_TAG:-}"
+                _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
                     break
                 else
@@ -607,7 +607,7 @@ _mt_do_change_config() {
                 fi
                 echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
                 echo
-                _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
+                _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
                 else _mt_erase_lines 2; (( _step-- )); fi ;;
         esac
