@@ -253,11 +253,7 @@ nginx_reload() {
     fi
     # Перезагружаем сервер-блоки из памяти перед перезагрузкой
     [ -f "${DIR_NGINX}nginx.conf" ] && nginx_restore_server_blocks
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "remnawave-nginx"; then
-        (cd "${DIR_NGINX}" && docker compose down nginx >/dev/null 2>&1; docker compose up -d nginx >/dev/null 2>&1)
-    else
-        (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1)
-    fi
+    cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
 }
 
 # ─── Полностью удаляет nginx ───
