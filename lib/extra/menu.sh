@@ -292,12 +292,20 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            5) # Telegram TAG
+            5) # Показать секрет + Telegram TAG
+                local _disp_secret
+                if [ -n "$_secret_input" ]; then
+                    _disp_secret="$_secret_input"
+                else
+                    _disp_secret=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+                fi
+                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+                echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
                     break
                 else
-                    _mt_erase_lines 1
+                    _mt_erase_lines 2
                     (( _step-- ))
                 fi
                 ;;
@@ -590,10 +598,18 @@ _mt_do_change_config() {
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            5) # Telegram TAG
+            5) # Показать секрет + Telegram TAG
+                local _disp_secret
+                if [ -n "$_secret_input" ]; then
+                    _disp_secret="$_secret_input"
+                else
+                    _disp_secret=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
+                fi
+                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+                echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter — пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
-                else _mt_erase_lines 1; (( _step-- )); fi ;;
+                else _mt_erase_lines 2; (( _step-- )); fi ;;
         esac
     done
 
