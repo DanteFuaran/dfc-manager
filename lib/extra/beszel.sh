@@ -916,7 +916,7 @@ install_beszel_agent() {
     while true; do
         case $_step in
             1) # URL
-                _mt_read_input BESZEL_HUB_URL "URL панели Beszel ${DARKGRAY}(например monitor.example.com)${YELLOW}:" ""
+                _mt_read_input BESZEL_HUB_URL "Домен панели Beszel ${DARKGRAY}(например monitor.example.com)${YELLOW}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$BESZEL_HUB_URL" ]; then
                         _bza_erase   # стереть пустую строку, повторить
