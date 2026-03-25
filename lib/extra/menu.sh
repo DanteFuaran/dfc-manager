@@ -145,8 +145,8 @@ _mt_generate_fake_tls_secret() {
 
 # Ищет свободный порт начиная с base
 _mt_find_free_port() {
-    local base="${1:-1337}"
-    for port in "$base" 8443 8444 8445 9443 10443; do
+    local base="${1:-8443}"
+    for port in "$base" 8444 8445 9443 10443 1337; do
         if ! ss -tuln 2>/dev/null | grep -q ":${port} "; then
             echo "$port"; return 0
         fi
@@ -189,7 +189,7 @@ COMPOSE
 _mt_do_install() {
     set +e
     local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
-    PROXY_PORT="1337"
+    PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
@@ -261,7 +261,7 @@ _mt_do_install() {
                 done
                 ;;
             2) # Порт
-                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "1337")}"
+                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
                     (( _step++ ))
@@ -559,7 +559,7 @@ _mt_do_change_config() {
                     done
                 done ;;
             2) # Порт
-                local _port_default="${NEW_PROXY_PORT:-$(_mt_find_free_port "1337")}"
+                local _port_default="${NEW_PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input NEW_PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
