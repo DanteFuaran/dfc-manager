@@ -278,21 +278,17 @@ manage_beszel() {
     local -a items=()
     local -a actions=()
 
+    if ! is_beszel_installed; then
+        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
+    else
+        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
+    fi
+
     if ! is_beszel_agent_installed; then
         items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
     elif ! is_beszel_installed; then
         # Агент есть, хаба нет — меняем адрес хаба у агента
         items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
-    fi
-
-    if [ ${#items[@]} -gt 0 ]; then
-        items+=("──────────────────────────────────────"); actions+=("sep")
-    fi
-
-    if ! is_beszel_installed; then
-        items+=("📊  Установить панель Beszel"); actions+=("install_hub")
-    else
-        items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
     fi
 
     items+=("──────────────────────────────────────"); actions+=("sep")
@@ -893,7 +889,6 @@ install_beszel_agent() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    🖥️  Подключение агента Beszel${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     if is_beszel_agent_installed; then
         echo
@@ -910,7 +905,7 @@ install_beszel_agent() {
 
     # ─── URL панели ───
     local BESZEL_HUB_URL
-    reading_inline "URL панели Beszel (например https://monitor.example.com):" BESZEL_HUB_URL
+    reading_inline "URL панели Beszel (например monitor.example.com):" BESZEL_HUB_URL
     [[ $? -eq 2 ]] && return 1
     if [ -z "$BESZEL_HUB_URL" ]; then
         print_error "URL не может быть пустым"
