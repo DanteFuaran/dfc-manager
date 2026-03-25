@@ -104,9 +104,28 @@ check_if_certificates_needed() {
     return 1
 }
 
+# Устанавливает certbot если не установлен
+_ensure_certbot() {
+    if command -v certbot >/dev/null 2>&1; then
+        return 0
+    fi
+    (
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq >/dev/null 2>&1
+        apt-get install -y -qq certbot python3-certbot-dns-cloudflare >/dev/null 2>&1
+    ) &
+    show_spinner "Установка certbot"
+    if ! command -v certbot >/dev/null 2>&1; then
+        print_error "certbot не удалось установить. Установите вручную: apt install certbot"
+        return 1
+    fi
+}
+
 get_cert_cloudflare() {
     local domain="$1"
     local email="$2"
+
+    _ensure_certbot || return 1
 
     if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
         print_error "Файл /etc/letsencrypt/cloudflare.ini не найден"
@@ -139,7 +158,10 @@ get_cert_cloudflare() {
         echo
         print_error "Не удалось получить сертификат для $domain"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
-        if [ -n "$_raw_log" ]; then
+        # Показываем развёрнутый лог только если он содержит больше одной новой строки (=не дублирует Причину)
+        local _raw_lines
+        _raw_lines=$(echo "$_raw_log" | wc -l)
+        if [ -n "$_raw_log" ] && [ "$_raw_lines" -gt 1 ]; then
             echo
             echo -e "${DARKGRAY}── Вывод certbot ───────────────────────${NC}"
             echo "$_raw_log"
@@ -161,6 +183,8 @@ get_cert_cloudflare() {
 get_cert_acme() {
     local domain="$1"
     local email="$2"
+
+    _ensure_certbot || return 1
 
     local _tmp_log _exit_file
     _tmp_log=$(mktemp)
@@ -199,9 +223,11 @@ get_cert_acme() {
         echo
         print_error "Не удалось получить сертификат для $domain"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
-        if [ -n "$_raw_log" ]; then
+        local _raw_lines
+        _raw_lines=$(echo "$_raw_log" | wc -l)
+        if [ -n "$_raw_log" ] && [ "$_raw_lines" -gt 1 ]; then
             echo
-            echo -e "${DARKGRAY}── Вывод certbot ───────────────────────────────${NC}"
+            echo -e "${DARKGRAY}── Вывод certbot ────────────────────────────${NC}"
             echo "$_raw_log"
             echo -e "${DARKGRAY}────────────────────────────────────────────────${NC}"
         fi
