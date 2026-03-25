@@ -509,14 +509,98 @@ _mt_do_stats() {
     _mt_stats_restore
 }
 
-# Сменить конфигурацию — делегируем mtproto (нужен read_input, generate_fake_tls_secret)
+# Сменить конфигурацию — интерактивно
 _mt_do_change_config() {
-    if command -v mtproto >/dev/null 2>&1; then
-        mtproto
-    else
+    if ! _mt_installed; then
         echo -e "${RED}✖ MTProto не установлен. Сначала установите прокси.${NC}"
-        _mt_press_enter
+        _mt_press_enter; return
     fi
+    _mt_load_env
+
+    local _step=1 _secret_input=""
+    local NEW_SERVER_IP="$SERVER_IP"
+    local NEW_PROXY_PORT="$PROXY_PORT"
+    local NEW_FAKE_DOMAIN="$FAKE_DOMAIN"
+
+    _mt_erase_lines() {
+        local n=$1
+        while [ $n -gt 0 ]; do
+            printf "\033[A\033[K"
+            (( n-- ))
+        done
+    }
+
+    while true; do
+        case $_step in
+            1) # IP/домен
+                local _default_host="${NEW_SERVER_IP:-$(_mt_get_server_ip)}"
+                while true; do
+                    clear
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo -e "${GREEN}     🔑 Смена конфигурации MTProto${NC}"
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo
+                    _mt_read_input NEW_SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
+                    if [ $? -eq 1 ]; then return; fi
+                    if check_domain "$NEW_SERVER_IP" true; then
+                        (( _step++ )); break
+                    fi
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+                    tput civis 2>/dev/null || true
+                    local key
+                    while true; do
+                        read -s -n 1 key
+                        if [[ "$key" == $'\x1b' ]]; then tput cnorm 2>/dev/null || true; return
+                        elif [[ "$key" == "s" || "$key" == "S" ]]; then tput cnorm 2>/dev/null || true; (( _step++ )); break 2
+                        elif [[ "$key" == "" ]]; then tput cnorm 2>/dev/null || true; break
+                        fi
+                    done
+                done ;;
+            2) # Порт
+                local _port_default="${NEW_PROXY_PORT:-$(_mt_find_free_port "1337")}"
+                _mt_read_input NEW_PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+                if [ $? -eq 0 ]; then (( _step++ ))
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+            3) # Fake TLS домен
+                _mt_read_input NEW_FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${NEW_FAKE_DOMAIN}]${NC}:" "$NEW_FAKE_DOMAIN"
+                if [ $? -eq 0 ]; then (( _step++ ))
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+            4) # Секрет
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+                if [ $? -eq 0 ]; then break
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+        esac
+    done
+
+    if [ -n "$_secret_input" ]; then
+        PROXY_SECRET="$_secret_input"
+    else
+        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
+    fi
+    SERVER_IP="$NEW_SERVER_IP"
+    PROXY_PORT="$NEW_PROXY_PORT"
+    FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
+    echo
+    echo
+
+    _mt_write_compose
+    _mt_save_config
+    print_success "Конфигурация сохранена"
+
+    # Перезапуск с новым портом
+    (cd "$_MT_DIR" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Перезапуск MTProto..." "MTProto перезапущен!"
+
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+    fi
+
+    echo
+    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo
+    _mt_press_enter
 }
 
 _mt_do_stop() {
