@@ -204,7 +204,7 @@ manage_delete_components() {
                       done; exit 0 ) &
                     show_spinner "Удаление Страницы подписки" "Страница подписки удалена"
                 fi
-                if is_beszel_installed; then
+                if [ -f "/opt/beszel/docker-compose.yml" ]; then
                     ( uninstall_beszel --force >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление Beszel" "Beszel удалён"
                 fi

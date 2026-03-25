@@ -386,11 +386,17 @@ install_beszel() {
                 reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
                 if [ -z "$BESZEL_EMAIL" ]; then
                     print_error "Email не может быть пустым"
-                    return 1
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
                 fi
                 echo
                 echo
-                get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL" || return 1
+                if ! get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL"; then
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
+                fi
                 CERT_DOMAIN="$BESZEL_DOMAIN"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
@@ -555,10 +561,29 @@ YAML
     show_spinner "Подготовка файлов"
 
     # ─── Запускаем Beszel ───
+    local _bz_install_log
+    _bz_install_log=$(mktemp)
     (
-        cd "${DIR_BESZEL}" && docker compose up -d >/dev/null 2>&1
+        cd "${DIR_BESZEL}" && docker compose up -d > "$_bz_install_log" 2>&1
     ) &
-    show_spinner "Установка Beszel"
+    if ! show_spinner "Установка Beszel"; then
+        echo
+        local _bz_err_detail
+        _bz_err_detail=$(tail -40 "$_bz_install_log" 2>/dev/null)
+        if [ -z "$_bz_err_detail" ] && [ -f "${DIR_BESZEL}docker-compose.yml" ]; then
+            _bz_err_detail=$(cd "${DIR_BESZEL}" && docker compose logs --no-log-prefix 2>&1 | tail -40) || true
+        fi
+        rm -f "$_bz_install_log"
+        if [ -n "$_bz_err_detail" ]; then
+            echo -e "${DARKGRAY}── Подробности ──────────────────────────${NC}"
+            echo "$_bz_err_detail"
+            echo -e "${DARKGRAY}────────────────────────────────────────${NC}"
+        fi
+        echo
+        show_continue_prompt || return 0
+        return 0
+    fi
+    rm -f "$_bz_install_log"
 
     # ─── Авто-установка агента на этом же сервере ───
     (
@@ -634,9 +659,18 @@ change_domain_beszel() {
         case $cert_choice in
             0)
                 reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
-                if [ -z "$BESZEL_EMAIL" ]; then print_error "Email не может быть пустым"; return 1; fi
+                if [ -z "$BESZEL_EMAIL" ]; then
+                    print_error "Email не может быть пустым"
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
+                fi
                 echo
-                get_cert_acme "$NEW_DOMAIN" "$BESZEL_EMAIL" || return 1
+                if ! get_cert_acme "$NEW_DOMAIN" "$BESZEL_EMAIL"; then
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
+                fi
                 CERT_DOMAIN="$NEW_DOMAIN"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
