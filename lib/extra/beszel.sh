@@ -568,13 +568,15 @@ YAML
     (nginx_reload) &
     show_spinner "Запуск Nginx"
 
-    echo
-    print_success "Beszel успешно установлен"
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}       📊   Beszel успешно установлена !${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
     echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
+    echo
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
     echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
     echo
