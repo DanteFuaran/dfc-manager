@@ -955,6 +955,7 @@ installation_node_with_existing_subpage() {
             3) return ;;
         esac
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
@@ -1054,7 +1055,7 @@ installation_node_with_existing_subpage() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}$(center "🎉 Нода и страница подписки установлены" "$GREEN")${NC}"
+    echo -e "$(center "🎉 Нода и страница подписки установлены" "$GREEN")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if [ "$health_ok" = true ]; then
