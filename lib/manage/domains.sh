@@ -404,9 +404,14 @@ _change_sub_domain_standalone() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # Извлекаем текущий домен из nginx.conf
+    # Извлекаем текущий домен из секции SUB_BLOCK в nginx.conf, или первый server_name
     local current_sub_domain
-    current_sub_domain=$(grep -oP 'server_name\s+\K\S+(?=;)' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
+    if grep -q '# BEGIN_SUB_BLOCK' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        current_sub_domain=$(sed -n '/^# BEGIN_SUB_BLOCK$/,/^# END_SUB_BLOCK$/p' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP 'server_name\s+\K\S+(?=;)' | head -1)
+    fi
+    if [ -z "$current_sub_domain" ]; then
+        current_sub_domain=$(grep -oP 'server_name\s+\K\S+(?=;)' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
+    fi
 
     # Извлекаем panel_url и api_token из docker-compose
     local panel_url api_token new_api_token
