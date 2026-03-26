@@ -216,6 +216,7 @@ _installation_subpage_on_panel() {
         true
     ) &
     show_spinner "Остановка сервисов"
+    echo
 
     # Подготовка файлов (перегенерация docker-compose и nginx)
     if [ "$has_local_node" = true ]; then
@@ -256,6 +257,7 @@ _installation_subpage_on_panel() {
     ) &
     show_spinner "Обновление конфигурации" || true
 
+    echo
     if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает. Восстановление конфигурации..."
         _restore_config

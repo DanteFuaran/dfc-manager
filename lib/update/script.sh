@@ -161,12 +161,14 @@ _delete_component_subpage() {
 
     # Ждём доступности панели (проверяем напрямую, т.к. nginx требует cookie)
     if [ -n "$_panel_domain" ]; then
-        if show_spinner_until_ready "http://127.0.0.1:3001/health" "Ожидание запуска панели" 90; then
+        if show_spinner_until_ready "http://127.0.0.1:3001/health" "Запуск панели" 90; then
+            echo
             print_success "Страница подписки удалена"
         else
             print_error "Панель не отвечает после перезапуска. Проверьте состояние сервисов."
         fi
     else
+        echo
         print_success "Страница подписки удалена"
     fi
     echo
