@@ -743,6 +743,7 @@ installation_node_remote() {
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
     fi
 
+    echo
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
