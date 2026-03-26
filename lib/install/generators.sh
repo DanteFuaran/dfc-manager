@@ -33,9 +33,9 @@ generate_admin_username() {
 }
 
 generate_cookie_key() {
-    # Генерация случайного ключа для cookie-защиты панели (32 символа, буквы + цифры)
+    # Генерация случайного ключа для cookie-защиты панели (16 символов, буквы + цифры)
     local key
-    key=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    key=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 16)
     echo "$key"
 }
 
