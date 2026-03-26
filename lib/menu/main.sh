@@ -61,29 +61,15 @@ main_menu() {
                         ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw 2>/dev/null || true
                     fi
 
-                    local install_status=""
-                    if [ "$has_panel" = true ] && [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Подписка | Нода${NC}"
-                    elif [ "$has_panel" = true ] && [ "$has_node" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Нода${NC}"
-                    elif [ "$has_panel" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель | Подписка${NC}"
-                    elif [ "$has_panel" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Панель${NC}"
-                    elif [ "$has_node" = true ] && [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Нода | Подписка${NC}"
-                    elif [ "$has_node" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Нода${NC}"
-                    elif [ "$has_subpage" = true ]; then
-                        install_status="\n${DARKGRAY}Установлено: ${GREEN}Страница подписки${NC}"
-                    fi
+                    local _c_panel _c_sub _c_node
+                    [ "$has_panel" = true ]   && _c_panel="${GREEN}" || _c_panel="${DARKGRAY}"
+                    [ "$has_subpage" = true ] && _c_sub="${GREEN}"   || _c_sub="${DARKGRAY}"
+                    [ "$has_node" = true ]    && _c_node="${GREEN}"  || _c_node="${DARKGRAY}"
+                    local install_status="\n${DARKGRAY}Компоненты: ${_c_panel}Панель${DARKGRAY} | ${_c_sub}Подписка${DARKGRAY} | ${_c_node}Нода${NC}"
 
                     local rw_title="📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()
                     rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
-                    if [ "$is_installed" = true ]; then
-                        rw_items+=("🔄  Переустановить");      rw_actions+=("reinstall")
-                    fi
                     rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     if [ "$is_installed" = true ]; then
                         rw_items+=("▶️   Запустить сервисы");       rw_actions+=("start")
