@@ -1,3 +1,109 @@
+# ─── Восстановление конфига nginx до заводского состояния ───
+restore_nginx_config() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🔧 Восстановление конфига nginx${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
+        print_error "Файл nginx.conf не найден"
+        sleep 2
+        return 1
+    fi
+
+    # Извлекаем cookie
+    local COOKIE_NAME="" COOKIE_VALUE=""
+    if ! get_cookie_from_nginx; then
+        print_error "Не удалось извлечь cookie из nginx.conf"
+        sleep 2
+        return 1
+    fi
+
+    # Извлекаем домен панели
+    local panel_domain=""
+    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | grep -v '^_$' | head -1)
+    if [ -z "$panel_domain" ]; then
+        print_error "Не удалось определить домен панели из nginx.conf"
+        sleep 2
+        return 1
+    fi
+
+    # Определяем сертификат панели
+    local panel_cert=""
+    panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+    [ -z "$panel_cert" ] && panel_cert="$panel_domain"
+
+    # Определяем домен подписки (если есть upstream json)
+    local sub_domain="" sub_cert=""
+    local _json_line=""
+    _json_line=$(grep -n 'proxy_pass http://json' "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
+    if [ -n "$_json_line" ]; then
+        sub_domain=$(head -n "$_json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
+        sub_cert=$(head -n "$_json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
+        [ -z "$sub_cert" ] && sub_cert="$sub_domain"
+    fi
+
+    # Определяем selfsteal домен (используется при наличии ноды)
+    local selfsteal_domain="" node_cert=""
+    if is_node_installed; then
+        selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
+        # Определяем сертификат ноды
+        if [ -n "$selfsteal_domain" ]; then
+            node_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
+            [ -z "$node_cert" ] && node_cert="$selfsteal_domain"
+        fi
+    fi
+
+    echo -e "${YELLOW}⚠️  Конфиг nginx будет перегенерирован с нуля.${NC}"
+    echo
+    echo -e "${DARKGRAY}  Домен панели:   ${WHITE}${panel_domain}${NC}"
+    [ -n "$sub_domain" ] && echo -e "${DARKGRAY}  Домен подписки: ${WHITE}${sub_domain}${NC}"
+    [ -n "$selfsteal_domain" ] && echo -e "${DARKGRAY}  Selfsteal:      ${WHITE}${selfsteal_domain}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if ! confirm_action; then
+        return
+    fi
+
+    # Генерируем конфиг в зависимости от типа установки
+    # (_nginx_http_header внутри генератора вызывает _nginx_extract_external_blocks)
+    if is_node_installed && is_panel_installed; then
+        if [ -n "$selfsteal_domain" ] && [ -n "$sub_domain" ]; then
+            generate_nginx_conf_full "$panel_domain" "$sub_domain" "$selfsteal_domain" "$panel_cert" "$sub_cert" "$node_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        elif [ -n "$selfsteal_domain" ]; then
+            generate_nginx_conf_panel_with_node "$panel_domain" "$selfsteal_domain" "$panel_cert" "$node_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        elif [ -n "$sub_domain" ]; then
+            generate_nginx_conf_panel "$panel_domain" "$sub_domain" "$panel_cert" "$sub_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        else
+            generate_nginx_conf_panel_only "$panel_domain" "$panel_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        fi
+    elif [ -n "$sub_domain" ]; then
+        generate_nginx_conf_panel "$panel_domain" "$sub_domain" "$panel_cert" "$sub_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+    else
+        generate_nginx_conf_panel_only "$panel_domain" "$panel_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+    fi
+
+    # Убираем IPv6 если отключён
+    nginx_strip_ipv6_if_disabled
+
+    # Перезапускаем nginx
+    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+    if ! show_spinner "Перезапуск nginx" "Конфиг nginx восстановлен"; then
+        print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
+        echo
+        show_continue_prompt || return 1
+        return 1
+    fi
+
+    echo
+    echo -e "${GREEN}🔗 Cookie-ссылка для входа в панель:${NC}"
+    echo -e "${WHITE}https://${panel_domain}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 1
+}
+
 # ═══════════════════════════════════════════════════
 # УПРАВЛЕНИЕ ДОСТУПОМ К ПАНЕЛИ
 # ═══════════════════════════════════════════════════
@@ -36,6 +142,7 @@ manage_panel_access() {
             "🔗  Показать ссылку входа" \
             "──────────────────────────────────────" \
             "$_toggle_label" \
+            "🔧  Восстановить конфиг nginx" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
@@ -80,8 +187,9 @@ manage_panel_access() {
                     switch_panel_port 8443 || break
                 fi
                 ;;
-            8) ;;
-            9) return ;;
+            8) restore_nginx_config ;;
+            9) ;;
+            10) return ;;
         esac
     done
 }
@@ -448,6 +556,9 @@ SERVERBLOCK_8443
         cat "$temp_file" >> "${DIR_NGINX}nginx.conf"
     fi
     rm -f "$temp_file"
+
+    # Убираем IPv6 из сгенерированных блоков если IPv6 отключён
+    nginx_strip_ipv6_if_disabled
 
     (
         cd "${DIR_NGINX}"
