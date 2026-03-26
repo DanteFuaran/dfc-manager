@@ -209,18 +209,22 @@ manage_logs() {
             docker logs -f -t --tail 100 "$svc" 2>&1 &
             _logs_pid=$!
         else
-            (cd "$dir" && docker compose logs -f -t --tail 100 "$svc" 2>&1) &
+            # exec заменяет subshell процессом docker compose — kill корректно завершает его
+            (cd "$dir" && exec docker compose logs -f -t --tail 100 "$svc" 2>&1) &
             _logs_pid=$!
         fi
 
         # Ctrl+C — убиваем процесс логов и возвращаемся в меню выбора
-        trap "kill \$_logs_pid 2>/dev/null; trap - INT" INT
+        trap "kill \$_logs_pid 2>/dev/null || true; wait \$_logs_pid 2>/dev/null; trap - INT" INT
 
         # Опрашиваем stdin: Esc завершает просмотр логов и возвращает в меню
         local _key=""
         while kill -0 "$_logs_pid" 2>/dev/null; do
             IFS= read -r -s -n1 -t 0.2 _key 2>/dev/null || true
-            [[ "$_key" == $'\033' ]] && { kill "$_logs_pid" 2>/dev/null; break; }
+            if [[ "$_key" == $'\033' ]]; then
+                kill "$_logs_pid" 2>/dev/null || true
+                break
+            fi
         done
 
         wait "$_logs_pid" 2>/dev/null || true
