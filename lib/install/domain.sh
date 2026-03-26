@@ -89,7 +89,6 @@ check_domain() {
     server_ip=$(get_server_ip)
 
     if [ -z "$domain_ip" ]; then
-        echo
         echo -e "${RED}✖  Домена ${YELLOW}$domain${RED} не существует${NC}"
         echo -e "${RED}Проверьте запись домена или пропустите проверку.${NC}"
         return 1
@@ -149,7 +148,6 @@ check_domain() {
     # ═══════════════════════════════════════════════════════════
     
     if [ "$ip_match" = false ]; then
-        echo
         echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} указывает на ${YELLOW}${domain_ip}${RED}, а не на IP сервера ${YELLOW}${server_ip}${NC}"
         echo -e "${RED}Проверьте запись домена или пропустите проверку.${NC}"
         return 1
@@ -238,6 +236,7 @@ prompt_domain_with_retry() {
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
         tput civis 2>/dev/null || true
+        echo
         while kill -0 $_check_pid 2>/dev/null; do
             printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
             _si=$(( (_si+1) % 10 ))
