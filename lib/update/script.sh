@@ -89,28 +89,70 @@ _delete_component_subpage() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then return; fi
     echo
+    echo
 
-    # Извлекаем инфо о ноде до удаления (для перегенерации nginx.conf)
-    local _node_domain _node_cert
-    if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
-        _node_domain=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /server_name [^_]/{gsub(/.*server_name[[:space:]]+|;.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
-        _node_cert=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /ssl_certificate /{gsub(/.*\/ssl\/|\/fullchain.*|\/privkey.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
+    # Извлекаем информацию для перегенерации nginx.conf до удаления
+    local _panel_domain _panel_cert _node_domain _node_cert _cookie_name _cookie_value
+    if [ -f "${DIR_NGINX}nginx.conf" ]; then
+        _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+        _panel_cert=$(grep -A5 "server_name ${_panel_domain};" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/ssl/\K[^/]+' | head -1)
+        [ -z "$_panel_cert" ] && _panel_cert="$_panel_domain"
+
+        # Извлекаем cookie
+        _cookie_name=$(grep -oP '~\*\K[^=]+(?==[^"]+"\s+1)' "${DIR_NGINX}nginx.conf" | head -1)
+        _cookie_value=$(grep -oP '~\*[^=]+=\K[^"]+(?="\s+1)' "${DIR_NGINX}nginx.conf" | head -1)
+
+        # Извлекаем инфо о ноде (для перегенерации)
+        if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+            _node_domain=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /server_name [^_]/{gsub(/.*server_name[[:space:]]+|;.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
+            _node_cert=$(awk '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{next} /ssl_certificate /{gsub(/.*\/ssl\/|\/fullchain.*|\/privkey.*/,""); print; exit}' "${DIR_NGINX}nginx.conf" 2>/dev/null)
+        fi
     fi
 
+    # Подготовка файлов: перегенерируем nginx.conf и останавливаем/удаляем subpage
     (
-        [ -d "/opt/remnasubpage" ] && cd "/opt/remnasubpage" && docker compose down -v --rmi all >/dev/null 2>&1 || true
-        [ -d "/opt/subscribe-page" ] && cd "/opt/subscribe-page" && docker compose down -v --rmi all >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление страницы подписки"
-    rm -rf /opt/remnasubpage /opt/subscribe-page
+        # Останавливаем и удаляем subpage
+        for _d in /opt/remnasubpage /opt/subscribe-page; do
+            [ -d "$_d" ] || continue
+            [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; }
+            rm -rf "$_d" 2>/dev/null || true
+        done
 
-    # Обновляем nginx: перегенерируем для оставшихся компонентов
-    if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
-        generate_nginx_conf_node "$_node_domain" "$_node_cert"
-        nginx_reload
-    else
-        nginx_ensure_conf_for_remaining
-    fi
+        # Также удаляем subscription-page из docker-compose панели/ноды если он встроен
+        if is_panel_installed; then
+            cd /opt/remnawave 2>/dev/null && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1 || true
+            # Очищаем SUB_PUBLIC_DOMAIN из .env
+            sed -i '/^SUB_PUBLIC_DOMAIN=/d' /opt/remnawave/.env 2>/dev/null || true
+        fi
+        if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+            cd /opt/remnanode 2>/dev/null && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1 || true
+        fi
+
+        # Перегенерируем конфиги для оставшихся компонентов
+        if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
+            if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
+                # Панель + нода (без subpage)
+                generate_docker_compose_panel_with_node "$_panel_cert" "$_node_cert"
+                generate_nginx_conf_panel_with_node "$_panel_domain" "$_node_domain" \
+                    "$_panel_cert" "$_node_cert" \
+                    "$_cookie_name" "$_cookie_value"
+            else
+                # Только панель (без subpage)
+                generate_docker_compose_panel_only "$_panel_cert"
+                generate_nginx_conf_panel_only "$_panel_domain" "$_panel_cert" \
+                    "$_cookie_name" "$_cookie_value"
+            fi
+            # Перезапускаем панель с обновлённым docker-compose
+            cd /opt/remnawave 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
+            nginx_reload
+        elif [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
+            generate_nginx_conf_node "$_node_domain" "$_node_cert"
+            cd /opt/remnanode 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
+            nginx_reload
+        fi
+    ) &
+    show_spinner "Подготовка файлов"
+
     nginx_cleanup_unused_certs
 
     print_success "Страница подписки удалена"

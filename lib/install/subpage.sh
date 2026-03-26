@@ -221,8 +221,9 @@ _installation_subpage_on_panel() {
         cd /opt/remnawave 2>/dev/null && docker compose down >/dev/null 2>&1 || true
         [ -n "$backup_node_compose" ] && { cd /opt/remnanode 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
         [ -f "${DIR_SUB}docker-compose.yml" ] && { cd "${DIR_SUB}" 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
+        true
     ) &
-    show_spinner "Остановка сервисов" || true
+    show_spinner "Остановка сервисов"
 
     # Подготовка файлов (перегенерация docker-compose и nginx)
     if [ "$has_local_node" = true ]; then
@@ -473,8 +474,8 @@ _installation_subpage_on_node() {
     echo
     print_action "Обновление конфигурации..."
 
-    (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1) &
-    show_spinner "Остановка сервисов" || true
+    (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1; true) &
+    show_spinner "Остановка сервисов"
 
     # Добавляем subscription-page сервис к docker-compose ноды
     (
