@@ -163,7 +163,7 @@ switch_panel_port() {
     panel_cert=$(grep -A 5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
 
     # Определяем sub_domain (домен подписки → upstream json)
-    local sub_domain sub_cert json_line
+    local sub_domain="" sub_cert="" json_line=""
     json_line=$(grep -n 'proxy_pass http://json' "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
     if [ -n "$json_line" ]; then
         sub_domain=$(head -n "$json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
@@ -172,7 +172,7 @@ switch_panel_port() {
     fi
 
     # Определяем selfsteal_domain (третий домен, не панель и не подписка)
-    local selfsteal_domain selfsteal_cert
+    local selfsteal_domain="" selfsteal_cert=""
     selfsteal_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sort -u | grep -v '^_$' | grep -vF "$panel_domain" | grep -vF "${sub_domain:-__NONE__}" | head -1)
     if [ -n "$selfsteal_domain" ]; then
         selfsteal_cert=$(grep -A 5 "server_name ${selfsteal_domain};" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | head -1)
