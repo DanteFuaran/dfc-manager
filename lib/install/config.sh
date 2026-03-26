@@ -557,6 +557,8 @@ http {
     include       /etc/nginx/mime.types;
     default_type  application/octet-stream;
 
+    map_hash_bucket_size 128;
+
     access_log off;
 
     sendfile        on;
