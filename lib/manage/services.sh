@@ -5,13 +5,32 @@
 manage_start() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
+
+    # Запускаем remnawave (панель + нода + subscription-page в одном compose)
     (
         cd "$rw_path"
         docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Запуск сервисов"
+    show_spinner "Запуск remnawave"
+
+    # Запускаем отдельную ноду (если установлена на том же сервере)
+    if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+        (cd /opt/remnanode && docker compose up -d >/dev/null 2>&1) &
+        show_spinner "Запуск remnanode" || true
+    fi
+
+    # Запускаем subscription-page (если установлена отдельно)
+    for _sp in /opt/subscribe-page /opt/remnasubpage; do
+        if [ -f "${_sp}/docker-compose.yml" ] && [ "$_sp" != "$rw_path" ]; then
+            (cd "$_sp" && docker compose up -d >/dev/null 2>&1) &
+            show_spinner "Запуск subscription-page" || true
+            break
+        fi
+    done
+
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
+
     print_success "Сервисы запущены"
     echo
     show_continue_prompt || return 1
@@ -20,13 +39,33 @@ manage_start() {
 manage_stop() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
+
+    # Останавливаем nginx первым
+    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1) &
+    show_spinner "Остановка nginx" || true
+
+    # Останавливаем отдельную ноду (если есть)
+    if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) &
+        show_spinner "Остановка remnanode" || true
+    fi
+
+    # Останавливаем отдельный subscription-page (если есть)
+    for _sp in /opt/subscribe-page /opt/remnasubpage; do
+        if [ -f "${_sp}/docker-compose.yml" ] && [ "$_sp" != "$rw_path" ]; then
+            (cd "$_sp" && docker compose down >/dev/null 2>&1) &
+            show_spinner "Остановка subscription-page" || true
+            break
+        fi
+    done
+
+    # Останавливаем remnawave
     (
         cd "$rw_path"
         docker compose down >/dev/null 2>&1
     ) &
-    show_spinner "Остановка сервисов"
-    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1) &
-    show_spinner "Остановка nginx" || true
+    show_spinner "Остановка remnawave"
+
     print_success "Сервисы остановлены"
     echo
     show_continue_prompt || return 1
@@ -94,11 +133,80 @@ manage_update() {
 manage_logs() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
+
+    # Строим список доступных сервисов
+    local -a log_items=() log_services=() log_dirs=()
+
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
+        log_items+=("🌊  remnawave (панель)")
+        log_services+=("remnawave")
+        log_dirs+=("$rw_path")
+    fi
+
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
+        log_items+=("🌐  remnanode (нода)")
+        log_services+=("remnanode")
+        if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+            log_dirs+=("/opt/remnanode")
+        else
+            log_dirs+=("$rw_path")
+        fi
+    fi
+
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
+        log_items+=("📄  subscription-page")
+        log_services+=("remnawave-subscription-page")
+        for _sp in /opt/subscribe-page /opt/remnasubpage; do
+            if [ -f "${_sp}/docker-compose.yml" ]; then
+                log_dirs+=("$_sp")
+                break
+            fi
+        done
+        if [ ${#log_dirs[@]} -lt ${#log_services[@]} ]; then
+            log_dirs+=("$rw_path")
+        fi
+    fi
+
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+        log_items+=("🔀  nginx")
+        log_services+=("nginx")
+        log_dirs+=("${DIR_NGINX%/}")
+    fi
+
+    if [ ${#log_items[@]} -eq 0 ]; then
+        clear
+        echo -e "${RED}✖  Сервисы remnawave не найдены.${NC}"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+
+    log_items+=("──────────────────────────────────────")
+    log_items+=("⬅️   Назад")
+
+    local _sep_idx=${#log_services[@]}
+
+    show_arrow_menu "📋  Логи какого сервиса показать?" "${log_items[@]}"
+    local choice=$?
+    [[ $choice -eq 255 ]] && return
+    # Назад или разделитель
+    [[ $choice -ge $_sep_idx ]] && return
+
+    local svc="${log_services[$choice]}"
+    local dir="${log_dirs[$choice]}"
+
     clear
-    echo -e "${YELLOW}Для выхода из логов нажмите Ctrl+C${NC}"
-    sleep 1
-    cd "$rw_path"
-    docker compose logs -f -t --tail 100
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}  📋  Логи: ${WHITE}${svc}${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${DARKGRAY}Для выхода нажмите Ctrl+C${NC}"
+    echo
+    # Если нода или subscription-page — ищем сначала по имени контейнера
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
+        docker logs -f -t --tail 100 "$svc" 2>&1
+    else
+        cd "$dir" && docker compose logs -f -t --tail 100 "$svc" 2>&1
+    fi
 }
 
 manage_reinstall() {
