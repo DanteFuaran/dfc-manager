@@ -56,15 +56,6 @@ installation_subpage() {
 
 # ─── Добавление страницы подписки на сервер с панелью (без sub-page) ───
 _installation_subpage_on_panel() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📄 ДОБАВЛЕНИЕ СТРАНИЦЫ ПОДПИСКИ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${DARKGRAY}Панель обнаружена на этом сервере.${NC}"
-    echo -e "${DARKGRAY}Страница подписки будет добавлена к панели.${NC}"
-    echo
-
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
 
