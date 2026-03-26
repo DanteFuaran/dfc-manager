@@ -50,18 +50,20 @@ installation_panel() {
     prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
     local SUB_DOMAIN=""
     if [ "$with_subpage" = true ]; then
-        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || continue
     else
+        local _sub_esc=false
         while true; do
             reading_inline "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN
             local _rc=$?
-            [ $_rc -eq 2 ] && { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+            if [ $_rc -eq 2 ]; then _sub_esc=true; break; fi
             if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
                 break
             else
                 print_error "Введите корректный домен"
             fi
         done
+        [ "$_sub_esc" = true ] && continue
         echo
     fi
 
