@@ -121,8 +121,12 @@ _delete_component_subpage() {
         # Также удаляем subscription-page из docker-compose панели/ноды если он встроен
         if is_panel_installed; then
             cd /opt/remnawave 2>/dev/null && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1 || true
-            # Очищаем SUB_PUBLIC_DOMAIN из .env
-            sed -i '/^SUB_PUBLIC_DOMAIN=/d' /opt/remnawave/.env 2>/dev/null || true
+            # SUB_PUBLIC_DOMAIN обязателен для панели — ставим fallback на домен панели
+            if [ -n "$_panel_domain" ]; then
+                sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$_panel_domain|" /opt/remnawave/.env 2>/dev/null || true
+                grep -q '^SUB_PUBLIC_DOMAIN=' /opt/remnawave/.env 2>/dev/null || \
+                    echo "SUB_PUBLIC_DOMAIN=$_panel_domain" >> /opt/remnawave/.env
+            fi
         fi
         if [ -f "/opt/remnanode/docker-compose.yml" ]; then
             cd /opt/remnanode 2>/dev/null && docker compose rm -sf remnawave-subscription-page >/dev/null 2>&1 || true
