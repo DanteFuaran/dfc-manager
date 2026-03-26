@@ -144,13 +144,13 @@ manage_logs() {
         local -a log_items=() log_services=() log_dirs=()
 
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
-            log_items+=("🌊  remnawave (панель)")
+            log_items+=("🌊  Remnawave (Панель)")
             log_services+=("remnawave")
             log_dirs+=("$rw_path")
         fi
 
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
-            log_items+=("🌐  remnanode (нода)")
+            log_items+=("🔗  Remnawave (Нода)")
             log_services+=("remnanode")
             if [ -f "/opt/remnanode/docker-compose.yml" ]; then
                 log_dirs+=("/opt/remnanode")
@@ -174,7 +174,7 @@ manage_logs() {
         fi
 
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
-            log_items+=("🔀  nginx")
+            log_items+=("🔀  Nginx")
             log_services+=("nginx")
             log_dirs+=("${DIR_NGINX%/}")
         fi
@@ -192,7 +192,7 @@ manage_logs() {
 
         local _sep_idx=${#log_services[@]}
 
-        show_arrow_menu "📋  Логи какого сервиса показать?" "${log_items[@]}"
+        show_arrow_menu "📋  Просмотр логов" "${log_items[@]}"
         local choice=$?
         [[ $choice -eq 255 ]] && return
         # Назад или разделитель
