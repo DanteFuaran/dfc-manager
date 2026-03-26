@@ -46,11 +46,11 @@ apply_template() {
     # Очищаем директорию (кроме метаданных)
     find /var/www/html/ -mindepth 1 -not -name '.current_template' -not -name '.template_changed' -delete 2>/dev/null
     
-    # Скачиваем шаблон с GitHub
-    local base_url="https://raw.githubusercontent.com/DanteFuaran/dfc-manager/${SCRIPT_BRANCH}/templates/${template_id}"
-    local cache_bust="?t=$(date +%s)"
+    # Скачиваем шаблон с GitHub (через API, т.к. репо приватный)
+    local _api_url="https://api.github.com/repos/DanteFuaran/dfc-manager/contents/templates/${template_id}/index.html?ref=${SCRIPT_BRANCH}"
     
-    if curl -fsSL "${base_url}/index.html${cache_bust}" -o /var/www/html/index.html; then
+    if curl -fsSL -H "Authorization: Bearer ${_DFC_KEY}" -H "Accept: application/vnd.github.v3.raw" \
+        "${_api_url}" -o /var/www/html/index.html; then
         echo "$name" > /var/www/.current_template
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed
         echo -e "${GREEN}✅${NC} Установка шаблона: ${WHITE}${name}${NC}"
