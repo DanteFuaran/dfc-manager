@@ -44,16 +44,29 @@ _delete_component_node() {
     if ! confirm_action; then return; fi
     echo
 
-    # Извлекаем инфо о sub-page до удаления (для перегенерации nginx.conf)
-    local _sub_domain _sub_cert _sub_dir
+    # Извлекаем инфо из nginx.conf до удаления (для перегенерации)
+    local _sub_domain="" _sub_cert="" _sub_dir=""
+    local _panel_domain="" _panel_cert="" _cookie_name="" _cookie_value=""
+
     if [ -f "/opt/subscribe-page/docker-compose.yml" ]; then
         _sub_dir="/opt/subscribe-page"
     elif [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
         _sub_dir="/opt/remnasubpage"
     fi
-    if [ -n "$_sub_dir" ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
-        _sub_domain=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/server_name/{s/.*server_name\s\+//;s/;.*//;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
-        _sub_cert=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/ssl_certificate /{s|.*/ssl/||;s|/.*||;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+
+    if [ -f "${DIR_NGINX}nginx.conf" ]; then
+        # Извлекаем данные панели
+        _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+        _panel_cert=$(grep -A5 "server_name ${_panel_domain};" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/ssl/\K[^/]+' | head -1)
+        [ -z "$_panel_cert" ] && _panel_cert="$_panel_domain"
+        _cookie_name=$(grep -oP '~\*\K[^=]+(?==[^"]+\"\s+1)' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+        _cookie_value=$(grep -oP '~\*[^=]+=\K[^"]+(?=\"\s+1)' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+
+        # Извлекаем данные subpage
+        if [ -n "$_sub_dir" ]; then
+            _sub_domain=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/server_name/{s/.*server_name\s\+//;s/;.*//;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+            _sub_cert=$(sed -n '/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/{/ssl_certificate /{s|.*/ssl/||;s|/.*||;p;}}' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
+        fi
     fi
 
     (
@@ -64,12 +77,24 @@ _delete_component_node() {
     rm -rf /opt/remnanode
 
     # Обновляем nginx: перегенерируем для оставшихся компонентов
-    if [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
-        generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "$_sub_dir"
-        nginx_reload
-    else
-        nginx_ensure_conf_for_remaining
-    fi
+    (
+        if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
+            # Панель осталась — перегенерируем как panel_only
+            generate_docker_compose_panel_only "$_panel_cert"
+            generate_nginx_conf_panel_only "$_panel_domain" "$_panel_cert" \
+                "$_cookie_name" "$_cookie_value"
+            cd /opt/remnawave 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
+            nginx_reload
+        elif [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
+            # Только subpage осталась
+            generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "$_sub_dir"
+            nginx_reload
+        else
+            nginx_ensure_conf_for_remaining
+        fi
+    ) &
+    show_spinner "Обновление конфигурации"
+
     nginx_cleanup_unused_certs
 
     print_success "Нода Remnawave удалена"
@@ -92,7 +117,7 @@ _delete_component_subpage() {
     echo
 
     # Извлекаем информацию для перегенерации nginx.conf до удаления
-    local _panel_domain _panel_cert _node_domain _node_cert _cookie_name _cookie_value
+    local _panel_domain="" _panel_cert="" _node_domain="" _node_cert="" _cookie_name="" _cookie_value=""
     if [ -f "${DIR_NGINX}nginx.conf" ]; then
         _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1)
         _panel_cert=$(grep -A5 "server_name ${_panel_domain};" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/ssl/\K[^/]+' | head -1)
