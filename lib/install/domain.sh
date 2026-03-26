@@ -249,7 +249,11 @@ prompt_domain_with_retry() {
         rm -f "$_check_out_file" "$_check_rc_file"
 
         # Выводим сообщение об ошибке (если есть) после очистки строки спиннера
-        [ -n "$_check_out" ] && printf "%s\n" "$_check_out"
+        local _out_lines=0
+        if [ -n "$_check_out" ]; then
+            printf "%s\n" "$_check_out"
+            _out_lines=$(echo "$_check_out" | wc -l)
+        fi
 
         if [ "$_check_rc" = "0" ]; then
             return 0
@@ -258,6 +262,9 @@ prompt_domain_with_retry() {
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+
+        # input_line + error_lines + empty + separator + action_prompt
+        local _total_lines=$((_out_lines + 4))
 
         tput civis 2>/dev/null || true
         local key
@@ -270,7 +277,7 @@ prompt_domain_with_retry() {
             elif [[ "$key" == "s" || "$key" == "S" ]]; then
                 tput cnorm 2>/dev/null || true
                 echo
-                local skip_lines=7
+                local skip_lines=$((_total_lines + 1))
                 for ((l=0; l<skip_lines; l++)); do
                     tput cuu1 2>/dev/null
                     tput el 2>/dev/null
@@ -278,7 +285,7 @@ prompt_domain_with_retry() {
                 return 0
             elif [[ "$key" == "" ]]; then
                 tput cnorm 2>/dev/null || true
-                local lines_up=7
+                local lines_up=$_total_lines
                 for ((l=0; l<lines_up; l++)); do
                     tput cuu1 2>/dev/null
                     tput el 2>/dev/null
