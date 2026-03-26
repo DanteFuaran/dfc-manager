@@ -134,79 +134,98 @@ manage_logs() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
 
-    # Строим список доступных сервисов
-    local -a log_items=() log_services=() log_dirs=()
+    while true; do
+        # Строим список доступных сервисов
+        local -a log_items=() log_services=() log_dirs=()
 
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
-        log_items+=("🌊  remnawave (панель)")
-        log_services+=("remnawave")
-        log_dirs+=("$rw_path")
-    fi
-
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
-        log_items+=("🌐  remnanode (нода)")
-        log_services+=("remnanode")
-        if [ -f "/opt/remnanode/docker-compose.yml" ]; then
-            log_dirs+=("/opt/remnanode")
-        else
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
+            log_items+=("🌊  remnawave (панель)")
+            log_services+=("remnawave")
             log_dirs+=("$rw_path")
         fi
-    fi
 
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
-        log_items+=("📄  subscription-page")
-        log_services+=("remnawave-subscription-page")
-        for _sp in /opt/subscribe-page /opt/remnasubpage; do
-            if [ -f "${_sp}/docker-compose.yml" ]; then
-                log_dirs+=("$_sp")
-                break
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
+            log_items+=("🌐  remnanode (нода)")
+            log_services+=("remnanode")
+            if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+                log_dirs+=("/opt/remnanode")
+            else
+                log_dirs+=("$rw_path")
             fi
-        done
-        if [ ${#log_dirs[@]} -lt ${#log_services[@]} ]; then
-            log_dirs+=("$rw_path")
         fi
-    fi
 
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
-        log_items+=("🔀  nginx")
-        log_services+=("nginx")
-        log_dirs+=("${DIR_NGINX%/}")
-    fi
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
+            log_items+=("📄  subscription-page")
+            log_services+=("remnawave-subscription-page")
+            for _sp in /opt/subscribe-page /opt/remnasubpage; do
+                if [ -f "${_sp}/docker-compose.yml" ]; then
+                    log_dirs+=("$_sp")
+                    break
+                fi
+            done
+            if [ ${#log_dirs[@]} -lt ${#log_services[@]} ]; then
+                log_dirs+=("$rw_path")
+            fi
+        fi
 
-    if [ ${#log_items[@]} -eq 0 ]; then
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+            log_items+=("🔀  nginx")
+            log_services+=("nginx")
+            log_dirs+=("${DIR_NGINX%/}")
+        fi
+
+        if [ ${#log_items[@]} -eq 0 ]; then
+            clear
+            echo -e "${RED}✖  Сервисы remnawave не найдены.${NC}"
+            echo
+            show_continue_prompt || return 1
+            return
+        fi
+
+        log_items+=("──────────────────────────────────────")
+        log_items+=("⬅️   Назад")
+
+        local _sep_idx=${#log_services[@]}
+
+        show_arrow_menu "📋  Логи какого сервиса показать?" "${log_items[@]}"
+        local choice=$?
+        [[ $choice -eq 255 ]] && return
+        # Назад или разделитель
+        [[ $choice -ge $_sep_idx ]] && return
+
+        local svc="${log_services[$choice]}"
+        local dir="${log_dirs[$choice]}"
+
         clear
-        echo -e "${RED}✖  Сервисы remnawave не найдены.${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${GREEN}  📋  Логи: ${WHITE}${svc}${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${DARKGRAY}Для выхода нажмите Esc или Ctrl+C${NC}"
         echo
-        show_continue_prompt || return 1
-        return
-    fi
 
-    log_items+=("──────────────────────────────────────")
-    log_items+=("⬅️   Назад")
+        # Запускаем docker logs в фоне — чтобы параллельно отслеживать нажатия клавиш
+        local _logs_pid=""
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
+            docker logs -f -t --tail 100 "$svc" 2>&1 &
+            _logs_pid=$!
+        else
+            (cd "$dir" && docker compose logs -f -t --tail 100 "$svc" 2>&1) &
+            _logs_pid=$!
+        fi
 
-    local _sep_idx=${#log_services[@]}
+        # Ctrl+C — убиваем процесс логов и возвращаемся в меню выбора
+        trap "kill \$_logs_pid 2>/dev/null; trap - INT" INT
 
-    show_arrow_menu "📋  Логи какого сервиса показать?" "${log_items[@]}"
-    local choice=$?
-    [[ $choice -eq 255 ]] && return
-    # Назад или разделитель
-    [[ $choice -ge $_sep_idx ]] && return
+        # Опрашиваем stdin: Esc завершает просмотр логов и возвращает в меню
+        local _key=""
+        while kill -0 "$_logs_pid" 2>/dev/null; do
+            IFS= read -r -s -n1 -t 0.2 _key 2>/dev/null || true
+            [[ "$_key" == $'\033' ]] && { kill "$_logs_pid" 2>/dev/null; break; }
+        done
 
-    local svc="${log_services[$choice]}"
-    local dir="${log_dirs[$choice]}"
-
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}  📋  Логи: ${WHITE}${svc}${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${DARKGRAY}Для выхода нажмите Ctrl+C${NC}"
-    echo
-    # Если нода или subscription-page — ищем сначала по имени контейнера
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
-        docker logs -f -t --tail 100 "$svc" 2>&1
-    else
-        cd "$dir" && docker compose logs -f -t --tail 100 "$svc" 2>&1
-    fi
+        wait "$_logs_pid" 2>/dev/null || true
+        trap - INT
+    done
 }
 
 manage_reinstall() {
