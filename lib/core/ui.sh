@@ -95,26 +95,47 @@ show_spinner_until_ready() {
     local msg="$2"
     local timeout=${3:-120}
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local i=0 elapsed=0 delay=0.08 loop_count=0
-    tput civis 2>/dev/null || true
-    printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
-    while [ $elapsed -lt $timeout ]; do
-        i=$(( (i+1) % 10 ))
-        sleep $delay
-        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
-        loop_count=$((loop_count + 1))
-        if [ $((loop_count % 12)) -eq 0 ]; then
-            elapsed=$((elapsed + 1))
-            if curl -s -f --max-time 5 "$url" \
+    local i=0 delay=0.08
+    local _done_file
+    _done_file=$(mktemp)
+
+    # Фоновый процесс: проверяет URL раз в секунду, не блокируя анимацию
+    (
+        local t=0
+        while [ $t -lt "$timeout" ]; do
+            if curl -s -f --max-time 3 "$url" \
                 --header 'X-Forwarded-For: 127.0.0.1' \
                 --header 'X-Forwarded-Proto: https' \
                 > /dev/null 2>&1; then
-                printf "\r${GREEN}✅${NC} %s\n" "$msg"
-                tput cnorm 2>/dev/null || true
-                return 0
+                echo "ok" > "$_done_file"
+                exit 0
             fi
-        fi
+            sleep 1
+            t=$((t + 1))
+        done
+        echo "timeout" > "$_done_file"
+    ) &
+    local _checker_pid=$!
+
+    tput civis 2>/dev/null || true
+    printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
+
+    while kill -0 $_checker_pid 2>/dev/null; do
+        i=$(( (i + 1) % 10 ))
+        sleep $delay
+        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
     done
+    wait $_checker_pid 2>/dev/null
+
+    local _result
+    _result=$(cat "$_done_file" 2>/dev/null)
+    rm -f "$_done_file"
+
+    if [ "$_result" = "ok" ]; then
+        printf "\r${GREEN}✅${NC} %s\n" "$msg"
+        tput cnorm 2>/dev/null || true
+        return 0
+    fi
     printf "\r${YELLOW}⚠️${NC}  %s (таймаут)\n" "$msg"
     tput cnorm 2>/dev/null || true
     return 1
