@@ -35,7 +35,6 @@ get_panel_token() {
         test_response=$(make_api_request "GET" "$domain_url/api/config-profiles" "$token")
 
         if [ -z "$test_response" ] || ! echo "$test_response" | jq -e '.response.configProfiles' >/dev/null 2>&1; then
-            echo -e "${RED}Сохранённый токен недействителен. Запрашиваем новый...${NC}"
             token=""
         fi
     fi
