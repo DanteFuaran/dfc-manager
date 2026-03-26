@@ -969,6 +969,7 @@ server {
 }
 # END_SUB_BLOCK
 
+# ─── Default Direct
 server {
     listen 443 ssl default_server;
     server_name _;
@@ -1397,6 +1398,7 @@ server {
     }
 }
 
+# ─── Default Direct
 server {
     listen 443 ssl default_server;
     server_name _;
@@ -1935,6 +1937,7 @@ server {
     }
 }
 
+# ─── Default Direct
 server {
     listen 443 ssl default_server;
     server_name _;
