@@ -79,10 +79,18 @@ _delete_component_node() {
     # Обновляем nginx: перегенерируем для оставшихся компонентов
     (
         if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
-            # Панель осталась — перегенерируем как panel_only
-            generate_docker_compose_panel_only "$_panel_cert"
-            generate_nginx_conf_panel_only "$_panel_domain" "$_panel_cert" \
-                "$_cookie_name" "$_cookie_value"
+            if [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
+                # Панель + subpage остались
+                generate_docker_compose_panel "$_panel_cert" "$_sub_cert"
+                generate_nginx_conf_panel "$_panel_domain" "$_sub_domain" \
+                    "$_panel_cert" "$_sub_cert" \
+                    "$_cookie_name" "$_cookie_value"
+            else
+                # Только панель осталась
+                generate_docker_compose_panel_only "$_panel_cert"
+                generate_nginx_conf_panel_only "$_panel_domain" "$_panel_cert" \
+                    "$_cookie_name" "$_cookie_value"
+            fi
             cd /opt/remnawave 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
             nginx_reload
         elif [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
