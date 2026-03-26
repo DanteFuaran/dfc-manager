@@ -250,11 +250,13 @@ installation_node_local() {
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
+    local node_dir="/opt/remnanode"
 
     # ─── Сохраняем бэкап конфигов для восстановления при отмене ───
-    local backup_compose="" backup_nginx=""
+    local backup_compose="" backup_nginx="" backup_node_compose=""
     backup_compose=$(cat /opt/remnawave/docker-compose.yml 2>/dev/null)
     backup_nginx=$(cat ${DIR_NGINX}nginx.conf 2>/dev/null)
+    backup_node_compose=$(cat /opt/remnanode/docker-compose.yml 2>/dev/null)
 
     # Функция восстановления при отмене (до изменения конфигов)
     _restore_panel_config() {
@@ -264,7 +266,13 @@ installation_node_local() {
         if [ -n "$backup_nginx" ]; then
             echo "$backup_nginx" > ${DIR_NGINX}nginx.conf
         fi
-        # Перезапускаем панель с оригинальными конфигами
+        if [ -n "$backup_node_compose" ]; then
+            echo "$backup_node_compose" > /opt/remnanode/docker-compose.yml
+        else
+            rm -f /opt/remnanode/docker-compose.yml 2>/dev/null
+        fi
+        # Останавливаем ноду и перезапускаем панель с оригинальными конфигами
+        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) 2>/dev/null || true
         (
             cd /opt/remnawave
             docker compose down >/dev/null 2>&1
@@ -519,6 +527,9 @@ installation_node_local() {
         return
     fi
 
+    (cd "$node_dir" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск ноды" || true
+
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
 
@@ -534,10 +545,10 @@ installation_node_local() {
 
     # ─── Публичный ключ → SECRET_KEY ───
     print_action "Получение публичного ключа панели..."
-    get_public_key "$domain_url" "$token" "$target_dir"
+    get_public_key "$domain_url" "$token" "$node_dir"
 
     # Проверяем, что SECRET_KEY реально обновлён (не остался плейсхолдером)
-    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$target_dir/docker-compose.yml" 2>/dev/null; then
+    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
         print_error "Не удалось установить публичный ключ. Восстановление конфигурации..."
         _restore_panel_config
         echo
@@ -610,6 +621,13 @@ installation_node_local() {
         docker compose up -d >/dev/null 2>&1
     ) &
     show_spinner "Запуск контейнеров" || true
+
+    (
+        cd "$node_dir"
+        docker compose down >/dev/null 2>&1
+        docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner "Перезапуск ноды" || true
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Перезапуск nginx" || true
