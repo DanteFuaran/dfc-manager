@@ -437,7 +437,6 @@ installation_node_local() {
             return
         fi
     else
-        echo -e "${BLUE}──────────────────────────────────────${NC}"
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
         echo
     fi
@@ -452,41 +451,27 @@ installation_node_local() {
     # Копируем сертификат ноды в /opt/nginx/ssl/
     nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
-    # ─── Остановка сервисов и обновление конфигов ───
-    echo
-    print_action "Обновление конфигурации..."
-
+    # ─── Остановка и подготовка файлов ───
     (
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
     ) &
     show_spinner "Остановка сервисов" || true
 
-    mkdir -p /var/www/html
-
-    # ─── Перегенерация docker-compose.yml (с нодой) ───
     (
+        exec >/dev/null 2>&1
+        mkdir -p /var/www/html
+
         if [ "$has_local_sub" = true ]; then
             generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN"
         else
             generate_docker_compose_panel_with_node "$panel_cert_domain" "$NODE_CERT_DOMAIN"
         fi
-    ) &
-    show_spinner "Обновление docker-compose.yml" || true
 
-    # Определяем gateway и subnet сети (после генерации docker-compose.yml)
-    local network_info network_gateway network_subnet
-    network_info=$(get_remnawave_network_info)
-    network_gateway=$(echo "$network_info" | awk '{print $1}')
-    network_subnet=$(echo "$network_info" | awk '{print $2}')
+        if [ -n "$existing_api_token" ]; then
+            sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$existing_api_token|" /opt/remnawave/.env
+        fi
 
-    # Восстанавливаем API токен
-    if [ -n "$existing_api_token" ]; then
-        sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$existing_api_token|" /opt/remnawave/.env
-    fi
-
-    # ─── Перегенерация nginx.conf (с selfsteal) ───
-    (
         if [ "$has_local_sub" = true ]; then
             generate_nginx_conf_full "$panel_domain" "$sub_domain" "$SELFSTEAL_DOMAIN" \
                 "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN" \
@@ -496,44 +481,38 @@ installation_node_local() {
                 "$panel_cert_domain" "$NODE_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         fi
-    ) &
-    show_spinner "Обновление nginx.conf" || true
 
-    # ─── Открываем порты для ноды ───
-    # Docker MASQUERADE: panel container → external IP → port 2222
-    # Добавляем публичный IP сервера, docker gateway и subnet
-    local _node_server_ip
-    _node_server_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
-                      curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
-                      hostname -I | awk '{print $1}')
-    ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
-    ufw allow from "${network_gateway}" to any port 2222 >/dev/null 2>&1 || true
-    [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port 2222 >/dev/null 2>&1 || true
-    ufw allow 443/tcp >/dev/null 2>&1 || true
+        _ni=$(get_remnawave_network_info 2>/dev/null) || true
+        _ng=$(echo "$_ni" | awk '{print $1}')
+        _ns=$(echo "$_ni" | awk '{print $2}')
+        _node_server_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
+                          curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
+                          hostname -I | awk '{print $1}')
+        [ -n "$_ns" ] && ufw allow from "$_ns" to any port 2222 >/dev/null 2>&1 || true
+        [ -n "$_ng" ] && ufw allow from "$_ng" to any port 2222 >/dev/null 2>&1 || true
+        [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port 2222 >/dev/null 2>&1 || true
+        ufw allow 443/tcp >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Подготовка файлов" || true
+
+    echo
 
     # ─── Запуск сервисов ───
-    echo
-    print_action "Запуск сервисов..."
-
     (
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1
+        cd "$node_dir"
+        docker compose up -d >/dev/null 2>&1 || true
+        cd "${DIR_NGINX}"
+        docker compose up -d --force-recreate >/dev/null 2>&1 || true
     ) &
-    if ! show_spinner "Запуск Docker контейнеров"; then
+    if ! show_spinner "Настройка сервисов"; then
         print_error "Не удалось запустить контейнеры"
         _restore_panel_config
         echo
         show_continue_prompt || return 1
         return
     fi
-
-    (cd "$node_dir" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск ноды" || true
-
-    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
-
-    show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
     if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает. Восстановление конфигурации..."
@@ -543,101 +522,80 @@ installation_node_local() {
         return
     fi
 
-    # ─── Публичный ключ → SECRET_KEY ───
-    print_action "Получение публичного ключа панели..."
-    get_public_key "$domain_url" "$token" "$node_dir"
-
-    # Проверяем, что SECRET_KEY реально обновлён (не остался плейсхолдером)
-    if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
-        print_error "Не удалось установить публичный ключ. Восстановление конфигурации..."
-        _restore_panel_config
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
-
-    # ─── API: регистрация ноды ───
     echo
-    print_action "Генерация REALITY ключей..."
-    local private_key
-    private_key=$(generate_xray_keys "$domain_url" "$token")
-    if [ -z "$private_key" ]; then
-        print_error "Не удалось сгенерировать ключи. Восстановление конфигурации..."
+
+    # ─── Регистрация ноды ───
+    local _tmp_pk="/tmp/_nd_pk_$$"
+    local _tmp_cr="/tmp/_nd_cr_$$"
+
+    (
+        exec >/dev/null 2>&1
+        get_public_key "$domain_url" "$token" "$node_dir" || exit 1
+        if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
+            exit 1
+        fi
+        pk=$(generate_xray_keys "$domain_url" "$token") || exit 1
+        [ -z "$pk" ] && exit 1
+        echo "$pk" > "$_tmp_pk"
+        cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name") || exit 1
+        echo "$cr" > "$_tmp_cr"
+        read cpu_u ci_u <<< "$cr"
+        create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" || exit 1
+    ) &
+    if ! show_spinner "Создание Ноды"; then
+        print_error "Не удалось зарегистрировать ноду. Восстановление..."
         _restore_panel_config
+        rm -f "$_tmp_pk" "$_tmp_cr"
         echo
         show_continue_prompt || return 1
         return
     fi
-    print_success "Ключи сгенерированы"
 
-    print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
-    if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
-        print_error "Не удалось создать конфигурационный профиль. Восстановление конфигурации..."
-        _restore_panel_config
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
+    config_result=$(cat "$_tmp_cr" 2>/dev/null)
+    rm -f "$_tmp_pk" "$_tmp_cr"
     read config_profile_uuid inbound_uuid <<< "$config_result"
-    print_success "Конфигурационный профиль: $entity_name"
 
-    print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
-        print_success "Нода создана"
-    else
-        print_error "Не удалось создать ноду. Восстановление конфигурации..."
+    if [ -z "$config_profile_uuid" ] || [ -z "$inbound_uuid" ]; then
+        print_error "Не удалось получить данные ноды. Восстановление..."
         _restore_panel_config
         echo
         show_continue_prompt || return 1
         return
     fi
 
-    print_action "Создание хоста ($SELFSTEAL_DOMAIN)..."
-    if create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
-        print_success "Хост зарегистрирован"
-    else
-        print_error "Не удалось зарегистрировать хост"
-    fi
-
-    print_action "Настройка сквадов..."
-    local squad_uuids
-    squad_uuids=$(get_default_squad "$domain_url" "$token")
-    if [ -n "$squad_uuids" ]; then
-        while IFS= read -r squad_uuid; do
-            [ -z "$squad_uuid" ] && continue
-            update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-        done <<< "$squad_uuids"
-        print_success "Сквады обновлены"
-    else
-        echo -e "${YELLOW}⚠️  Сквады не найдены (будут настроены при создании пользователей)${NC}"
-    fi
+    (
+        exec >/dev/null 2>&1
+        create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" || true
+        squad_uuids=$(get_default_squad "$domain_url" "$token") || true
+        if [ -n "$squad_uuids" ]; then
+            while IFS= read -r squad_uuid; do
+                [ -z "$squad_uuid" ] && continue
+                update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid" || true
+            done <<< "$squad_uuids"
+        fi
+    ) &
+    show_spinner "Регистрация хоста" || true
 
     # ─── Финальный перезапуск (с обновлённым SECRET_KEY) ───
-    print_action "Перезапуск сервисов..."
     (
         cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Запуск контейнеров" || true
-
-    (
+        docker compose down >/dev/null 2>&1 || true
+        docker compose up -d >/dev/null 2>&1 || true
         cd "$node_dir"
-        docker compose down >/dev/null 2>&1
-        docker compose up -d >/dev/null 2>&1
+        docker compose down >/dev/null 2>&1 || true
+        docker compose up -d >/dev/null 2>&1 || true
+        cd "${DIR_NGINX}"
+        docker compose restart nginx >/dev/null 2>&1 || true
     ) &
-    show_spinner "Перезапуск ноды" || true
-
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск nginx" || true
+    show_spinner "Подготовка панели" || true
 
     randomhtml
+    echo
 
-    # Ожидаем готовность панели после перезапуска
-    show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+    show_spinner_timer 15 "Запуск сервисов" "Запуск сервисов"
 
-    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности панели" 120; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Подключение к панели" 120; then
         print_error "Панель не отвечает после перезапуска. Восстановление..."
         _restore_panel_config
         echo
