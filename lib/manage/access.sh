@@ -186,6 +186,13 @@ switch_panel_port() {
     sed -i '/# ─── Selfsteal Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
     sed -i '/# ─── Default Direct/,/^}$/d' "${DIR_NGINX}nginx.conf"
 
+    # Удаляем неразмеченные default_server блоки на порту 443 (совместимость со старыми конфигами)
+    awk '
+    /^server \{/ { buf=$0; ds=0; next }
+    buf != "" { buf = buf "\n" $0; if ($0 ~ /listen 443 ssl default_server/) ds=1; if (/^\}$/) { if (!ds) print buf; buf = ""; ds = 0 }; next }
+    { print }
+    ' "${DIR_NGINX}nginx.conf" > "${DIR_NGINX}nginx.conf.tmp" && mv "${DIR_NGINX}nginx.conf.tmp" "${DIR_NGINX}nginx.conf"
+
     # Вставляем после последнего серверного блока
     local insert_after_line
     insert_after_line=$(grep -n "^}$" "${DIR_NGINX}nginx.conf" | tail -1 | cut -d: -f1)
