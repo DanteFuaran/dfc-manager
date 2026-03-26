@@ -131,7 +131,11 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
     export _START_TIME=$(date +%s)
     (
         _api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
-        _remote_sha=$(curl -sL --max-time 5 -H "Cache-Control: no-cache" \
+        _auth_hdr=""
+        [ -n "${_DFC_KEY:-}" ] && _auth_hdr="Authorization: token ${_DFC_KEY}"
+        _remote_sha=$(curl -sL --max-time 5 \
+            ${_auth_hdr:+-H "$_auth_hdr"} \
+            -H "Cache-Control: no-cache" \
             "https://api.github.com/repos/${_api_repo}/commits/${SCRIPT_BRANCH}" 2>/dev/null \
             | grep -m1 '"sha"' | cut -d'"' -f4 2>/dev/null || true)
         _local_sha=$(git -C "${DIR_SCRIPT%/}" rev-parse HEAD 2>/dev/null || true)
