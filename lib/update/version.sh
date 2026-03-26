@@ -24,14 +24,20 @@ get_installed_version() {
 }
 
 get_remote_version() {
-    # Формируем raw URL из репозитория
+    # Очищаем токен из URL для формирования api_repo и raw_url
+    local clean_repo
+    clean_repo=$(echo "$SCRIPT_REPO" | sed 's|https://[^@]*@|https://|')
     local raw_url
-    raw_url=$(echo "$SCRIPT_REPO" | sed 's|github.com|raw.githubusercontent.com|; s|\.git$||')
+    raw_url=$(echo "$clean_repo" | sed 's|github.com|raw.githubusercontent.com|; s|\.git$||')
+
+    local _auth_header=""
+    [ -n "${_DFC_KEY:-}" ] && _auth_header="Authorization: token ${_DFC_KEY}"
 
     local latest_sha
     local api_repo
-    api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
+    api_repo=$(echo "$clean_repo" | sed 's|https://github.com/||; s|\.git$||')
     latest_sha=$(curl -sL --max-time 5 \
+        ${_auth_header:+-H "$_auth_header"} \
         -H "Cache-Control: no-cache" \
         "https://api.github.com/repos/${api_repo}/commits/${SCRIPT_BRANCH}" 2>/dev/null \
         | grep -m 1 '"sha"' | cut -d'"' -f4 || true)
@@ -39,11 +45,15 @@ get_remote_version() {
     local content=""
     if [ -n "$latest_sha" ]; then
         content=$(curl -sL --max-time 5 \
-            "${raw_url}/${latest_sha}/version" 2>/dev/null || true)
+            ${_auth_header:+-H "$_auth_header"} \
+            -H "Accept: application/vnd.github.v3.raw" \
+            "https://api.github.com/repos/${api_repo}/contents/version?ref=${latest_sha}" 2>/dev/null || true)
     else
         content=$(curl -sL --max-time 5 \
+            ${_auth_header:+-H "$_auth_header"} \
             -H "Cache-Control: no-cache" \
-            "${raw_url}/${SCRIPT_BRANCH}/version" 2>/dev/null || true)
+            -H "Accept: application/vnd.github.v3.raw" \
+            "https://api.github.com/repos/${api_repo}/contents/version?ref=${SCRIPT_BRANCH}" 2>/dev/null || true)
     fi
 
     if [ -n "$content" ]; then

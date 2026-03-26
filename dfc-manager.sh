@@ -29,14 +29,20 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
+    if [ -z "${DFC_ACCESS_KEY:-}" ]; then
+        echo -e "${_RED}✖ Ключ доступа не найден. Используйте установщик: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-install/main/install.sh)${_NC}"
+        exit 1
+    fi
     if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
-            "https://github.com/DanteFuaran/dfc-manager.git" \
+            "https://${DFC_ACCESS_KEY}@github.com/DanteFuaran/dfc-manager.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
-        echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${_NC}"
+        echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте ключ доступа и соединение с интернетом.${_NC}"
         rm -rf "${_INSTALL_DIR}"
         exit 1
     fi
     chmod +x "$_INSTALL_SCRIPT"
+    echo "${DFC_ACCESS_KEY}" > "${_INSTALL_DIR}/.access_key"
+    chmod 600 "${_INSTALL_DIR}/.access_key"
     exec "$_INSTALL_SCRIPT" "$@"
 fi
 

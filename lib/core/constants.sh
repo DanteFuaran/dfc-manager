@@ -11,6 +11,9 @@ DIR_SUB="/opt/subscribe-page/"
 SCRIPT_VERSION="0.0.9"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
+_DFC_KEY=""
+[ -f "${DIR_SCRIPT}.access_key" ] && _DFC_KEY=$(cat "${DIR_SCRIPT}.access_key" | tr -d '[:space:]')
+[ -n "$_DFC_KEY" ] && SCRIPT_REPO="https://${_DFC_KEY}@github.com/DanteFuaran/dfc-manager.git"
 _vf="${DIR_SCRIPT}version"
 if [ -f "$_vf" ]; then
     _sv=$(grep '^version:' "$_vf" 2>/dev/null | cut -d: -f2 | tr -d ' ')
