@@ -44,7 +44,7 @@ installation_panel() {
     if [ "$with_subpage" = true ]; then
         echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
     else
-        echo -e "${GREEN}  📦 Установка отдельной панели${NC}"
+        echo -e "${GREEN}         📦 Установка панели${NC}"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
