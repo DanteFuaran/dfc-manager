@@ -238,7 +238,6 @@ prompt_domain_with_retry() {
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
         tput civis 2>/dev/null || true
-        echo
         while kill -0 $_check_pid 2>/dev/null; do
             printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
             _si=$(( (_si+1) % 10 ))
