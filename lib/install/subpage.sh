@@ -113,21 +113,35 @@ _installation_subpage_on_panel() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    # Запрашиваем домен подписки
-    local SUB_DOMAIN
-    local cert_choice
-    while true; do
+    # Показываем заголовок и сразу запрашиваем авторизацию
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
 
-    # Сертификат для sub_domain
+    # Авторизация в панели
+    local _gpt_rc
+    get_panel_token; _gpt_rc=$?
+    if [[ $_gpt_rc -eq 2 ]]; then return; fi
+    if [[ $_gpt_rc -ne 0 ]]; then
+        echo -e "${YELLOW}Установка отменена${NC}"
+        show_continue_prompt || return 1
+        return
+    fi
+    local token
+    token=$(cat "${DIR_SCRIPT}/token")
+
+    # Запрашиваем домен подписки (inline, без clear)
+    local SUB_DOMAIN
+    local cert_choice
     local CERT_METHOD="$AUTO_CERT_METHOD"
     local LETSENCRYPT_EMAIL=""
+    while true; do
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
 
+    echo
+    echo
     unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
@@ -167,12 +181,12 @@ _installation_subpage_on_panel() {
             return
         fi
     else
-        echo -e "${BLUE}──────────────────────────────────────${NC}"
         print_success "Сертификат для $SUB_DOMAIN уже существует"
-        echo
     fi
     break
     done
+
+    echo
 
     local SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -184,18 +198,6 @@ _installation_subpage_on_panel() {
     # Копируем сертификат подписки в /opt/nginx/ssl/
     nginx_copy_cert "$SUB_CERT_DOMAIN" 2>/dev/null || true
 
-    # Авторизация в панели
-    local _gpt_rc
-    get_panel_token; _gpt_rc=$?
-    if [[ $_gpt_rc -eq 2 ]]; then return; fi
-    if [[ $_gpt_rc -ne 0 ]]; then
-        echo -e "${YELLOW}Установка отменена${NC}"
-        show_continue_prompt || return 1
-        return
-    fi
-    local token
-    token=$(cat "${DIR_SCRIPT}/token")
-
     # Обновляем .env — SUB_PUBLIC_DOMAIN
     if grep -q "^SUB_PUBLIC_DOMAIN=" /opt/remnawave/.env 2>/dev/null; then
         sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$SUB_DOMAIN|" /opt/remnawave/.env
@@ -203,51 +205,45 @@ _installation_subpage_on_panel() {
         echo "SUB_PUBLIC_DOMAIN=$SUB_DOMAIN" >> /opt/remnawave/.env
     fi
 
-    # Остановка сервисов
-    (cd /opt/remnawave && docker compose down >/dev/null 2>&1) &
-    show_spinner "Остановка сервисов" || true
-    if [ -n "$backup_node_compose" ]; then
-        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) &
-        show_spinner "Остановка ноды" || true
-    fi
-    [ -f "${DIR_SUB}docker-compose.yml" ] && { (cd "${DIR_SUB}" && docker compose down >/dev/null 2>&1) & show_spinner "Остановка страницы подписки" || true; }
-
     # Определяем, есть ли нода (full/panel)
     local has_local_node=false
     if [ -n "$backup_node_compose" ] || ([ -n "$backup_compose" ] && echo "$backup_compose" | grep -q "remnanode" 2>/dev/null); then
         has_local_node=true
     fi
 
-    # Перегенерация docker-compose и nginx
+    # Восстанавливаем существующие значения .env (SECRET_KEY в compose и API_TOKEN)
+    local existing_api_token
+    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${DIR_SUB}.env" 2>/dev/null | head -1)
+    [ -z "$existing_api_token" ] && existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+
+    # Остановка сервисов
+    (
+        cd /opt/remnawave 2>/dev/null && docker compose down >/dev/null 2>&1 || true
+        [ -n "$backup_node_compose" ] && { cd /opt/remnanode 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
+        [ -f "${DIR_SUB}docker-compose.yml" ] && { cd "${DIR_SUB}" 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
+    ) &
+    show_spinner "Остановка сервисов" || true
+
+    # Подготовка файлов (перегенерация docker-compose и nginx)
     if [ "$has_local_node" = true ]; then
-        # Panel + Node — нужно определить selfsteal домен и сертификат
         local selfsteal_domain node_cert_domain
-        # Ищем selfsteal домен по server-блоку с root /var/www/html (не зависит от позиции)
         selfsteal_domain=$(grep -B5 'root /var/www/html' ${DIR_NGINX}nginx.conf | grep -oP 'server_name\s+\K[^;]+' | head -1)
         node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
-
         (
             generate_docker_compose_full "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain"
             generate_nginx_conf_full "$panel_domain" "$SUB_DOMAIN" "$selfsteal_domain" \
                 "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         ) &
-        show_spinner "Обновление конфигурации" || true
     else
-        # Panel only — обновляем до panel+sub
         (
             generate_docker_compose_panel "$panel_cert_domain" "$SUB_CERT_DOMAIN"
             generate_nginx_conf_panel "$panel_domain" "$SUB_DOMAIN" "$panel_cert_domain" "$SUB_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         ) &
-        show_spinner "Обновление конфигурации" || true
     fi
-
-    # Восстанавливаем существующие значения .env (SECRET_KEY в compose и API_TOKEN)
-    local existing_api_token
-    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${DIR_SUB}.env" 2>/dev/null | head -1)
-    [ -z "$existing_api_token" ] && existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+    show_spinner "Подготовка файлов" || true
 
     # Если SECRET_KEY был в старом compose, восстанавливаем его
     if [ "$has_local_node" = true ]; then
@@ -259,18 +255,14 @@ _installation_subpage_on_panel() {
         fi
     fi
 
-    # Запуск сервисов
-    echo
-    (cd /opt/remnawave && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск сервисов" || true
+    # Обновление конфигурации (запуск сервисов)
+    (
+        cd /opt/remnawave && docker compose up -d >/dev/null 2>&1 || true
+        [ "$has_local_node" = true ] && { cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1 || true; }
+        cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Обновление конфигурации" || true
 
-    if [ "$has_local_node" = true ]; then
-        (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
-        show_spinner "Запуск ноды" || true
-    fi
-
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск nginx" || true
     echo
 
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
@@ -284,17 +276,11 @@ _installation_subpage_on_panel() {
 
     # Создание API токена для subscription-page (если нет)
     if [ -z "$existing_api_token" ] || [ "$existing_api_token" = "\$api_token" ]; then
-        print_action "Создание API токена для подписок..."
-        if create_api_token "$domain_url" "$token" "${DIR_SUB}"; then
-            print_success "API токен создан"
-        else
-            print_error "Не удалось создать API токен"
-            echo -e "${YELLOW}⚠️  Создайте токен вручную: Dashboard → Settings → API Tokens${NC}"
-        fi
+        create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
     fi
 
     (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск страницы подписки"
+    wait $! 2>/dev/null || true
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
