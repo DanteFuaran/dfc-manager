@@ -271,7 +271,7 @@ installation_panel() {
     clear
     tput civis 2>/dev/null
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "              ${GREEN}🎉 Панель успешно установлена!${NC}"
+    echo -e "              ${GREEN}🎉 Панель Remnawave установлена!${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}🔗 Ссылка для первого входа в панель:${NC}"
@@ -282,8 +282,7 @@ installation_panel() {
         api_token_display=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
         echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
         echo
-        echo -e "${WHITE}Теперь запустите процесс установки страницы подписки на сервере,${NC}"
-        echo -e "${WHITE}где будет расположена страница подписки.${NC}"
+        echo -e "${WHITE}Теперь запустите установку страницы подписки на удаленном сервере.${NC}"
         echo
         echo -e "${YELLOW}📄 Для установки страницы подписки на удалённом сервере:${NC}"
         echo -e "${WHITE}URL панели:${NC}   https://$PANEL_DOMAIN"
@@ -291,6 +290,8 @@ installation_panel() {
         if [ -n "$api_token_display" ]; then
             echo -e "${WHITE}API токен:${NC}    $api_token_display"
         fi
+        echo
+        echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
         echo
     fi
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
@@ -303,6 +304,5 @@ installation_panel() {
     echo -e "${YELLOW}   время через главное меню скрипта.${NC}"
     echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-    echo
     show_continue_prompt || return 1
 }
