@@ -34,7 +34,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         exit 1
     fi
     if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
-            "https://${DFC_ACCESS_KEY}@github.com/DanteFuaran/dfc-manager.git" \
+            "https://oauth2:${DFC_ACCESS_KEY}@github.com/DanteFuaran/dfc-manager.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
         echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте ключ доступа и соединение с интернетом.${_NC}"
         rm -rf "${_INSTALL_DIR}"
