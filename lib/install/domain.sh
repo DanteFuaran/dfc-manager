@@ -91,7 +91,7 @@ check_domain() {
     if [ -z "$domain_ip" ]; then
         echo
         echo -e "${RED}✖  Домена ${YELLOW}$domain${RED} не существует${NC}"
-        echo -e "${RED}❗ Убедитесь что A-запись настроена или нажмите S чтобы пропустить проверку.${NC}"
+        echo -e "${RED}Проверьте запись домена или пропустите проверку.${NC}"
         return 1
     fi
 
@@ -151,7 +151,7 @@ check_domain() {
     if [ "$ip_match" = false ]; then
         echo
         echo -e "${RED}✖ Домен ${YELLOW}$domain${RED} указывает на ${YELLOW}${domain_ip}${RED}, а не на IP сервера ${YELLOW}${server_ip}${NC}"
-        echo -e "${RED}⚠️ Проверьте A-запись домена или нажмите S чтобы пропустить проверку.${NC}"
+        echo -e "${RED}Проверьте запись домена или пропустите проверку.${NC}"
         return 1
     fi
     
@@ -230,7 +230,7 @@ prompt_domain_with_retry() {
 
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+        echo -e "${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
 
         tput civis 2>/dev/null || true
         local key

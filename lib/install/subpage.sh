@@ -121,8 +121,7 @@ _installation_subpage_on_panel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    print_success "Панель: $panel_domain"
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo
     prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
 
     # Сертификат для sub_domain
@@ -261,6 +260,7 @@ _installation_subpage_on_panel() {
     fi
 
     # Запуск сервисов
+    echo
     (cd /opt/remnawave && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск сервисов" || true
 
@@ -271,6 +271,7 @@ _installation_subpage_on_panel() {
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Перезапуск nginx" || true
+    echo
 
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
@@ -297,7 +298,7 @@ _installation_subpage_on_panel() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+    echo -e "     ${GREEN}🎉 Страница подписки подключена!${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
@@ -562,7 +563,7 @@ EOL
     if [ "$health_ok" = true ]; then
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${GREEN}🎉 Страница подписки успешно подключена!${NC}"
+        echo -e "     ${GREEN}🎉 Страница подписки подключена!${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
