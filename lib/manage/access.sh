@@ -1,8 +1,8 @@
-# ─── Восстановление конфига nginx до заводского состояния ───
+# ─── Восстановление конфига Nginx до заводского состояния ───
 restore_nginx_config() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔧 Восстановление конфига nginx${NC}"
+    echo -e "${GREEN}   🔧 Восстановление конфига Nginx${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -89,7 +89,7 @@ restore_nginx_config() {
 
     # Перезапускаем nginx
     (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Перезапуск nginx" "Конфиг nginx восстановлен"; then
+    if ! show_spinner "Перезапуск nginx" "Конфиг Nginx восстановлен"; then
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
         show_continue_prompt || return 1
@@ -142,7 +142,8 @@ manage_panel_access() {
             "🔗  Показать ссылку входа" \
             "──────────────────────────────────────" \
             "$_toggle_label" \
-            "🔧  Восстановить конфиг nginx" \
+            "──────────────────────────────────────" \
+            "🔧  Восстановить конфиг Nginx" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
@@ -187,9 +188,10 @@ manage_panel_access() {
                     switch_panel_port 8443 || break
                 fi
                 ;;
-            8) restore_nginx_config ;;
-            9) ;;
-            10) return ;;
+            8) ;;
+            9) restore_nginx_config ;;
+            10) ;;
+            11) return ;;
         esac
     done
 }
