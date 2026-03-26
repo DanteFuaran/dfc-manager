@@ -47,12 +47,19 @@ services:
       sh -c '
         rm -f /dev/shm/nginx.sock &&
         CONF=/etc/nginx/nginx.conf &&
-        if ! nginx -t -c "$$CONF" 2>/dev/null; then
-          sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
-          CONF=/tmp/nginx_nosub.conf &&
-          touch /dev/shm/.sub_disabled;
-        else
+        if nginx -t -c "$$CONF" 2>/dev/null; then
           rm -f /dev/shm/.sub_disabled;
+        else
+          sed "/listen \[::\]:/d" "$$CONF" > /tmp/nginx_noipv6.conf &&
+          if nginx -t -c /tmp/nginx_noipv6.conf 2>/dev/null; then
+            CONF=/tmp/nginx_noipv6.conf;
+            rm -f /dev/shm/.sub_disabled;
+          else
+            sed "/# BEGIN_SUB_BLOCK/,/# END_SUB_BLOCK/d" "$$CONF" > /tmp/nginx_nosub.conf &&
+            sed -i "/listen \[::\]:/d" /tmp/nginx_nosub.conf &&
+            CONF=/tmp/nginx_nosub.conf &&
+            touch /dev/shm/.sub_disabled;
+          fi;
         fi &&
         exec nginx -c "$$CONF" -g "daemon off;"
       '
@@ -253,7 +260,23 @@ nginx_reload() {
     fi
     # Перезагружаем сервер-блоки из памяти перед перезагрузкой
     [ -f "${DIR_NGINX}nginx.conf" ] && nginx_restore_server_blocks
+    # Убираем IPv6 директивы если IPv6 не поддерживается ядром
+    nginx_strip_ipv6_if_disabled
     cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+}
+
+# ─── Убирает listen [::]: директивы из nginx.conf если IPv6 отключён ───
+nginx_strip_ipv6_if_disabled() {
+    [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+    # Проверяем доступность IPv6 — через proc или ip команду
+    if [ -f /proc/net/if_inet6 ] && [ -s /proc/net/if_inet6 ]; then
+        return 0  # IPv6 работает — ничего не делаем
+    fi
+    if ip -6 addr show 2>/dev/null | grep -q 'inet6'; then
+        return 0  # IPv6 работает — ничего не делаем
+    fi
+    # IPv6 недоступен — удаляем все "listen [::]:..." строки
+    sed -i '/listen \[::\]:/d' "${DIR_NGINX}nginx.conf"
 }
 
 # ─── Полностью удаляет nginx ───
