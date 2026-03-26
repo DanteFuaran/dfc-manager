@@ -134,6 +134,11 @@ manage_logs() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
 
+    # Убиваем любые ранее осиротевшие процессы docker logs
+    pkill -f "docker logs -f" 2>/dev/null || true
+    pkill -f "docker compose logs -f" 2>/dev/null || true
+    sleep 0.1
+
     while true; do
         # Строим список доступных сервисов
         local -a log_items=() log_services=() log_dirs=()
@@ -214,15 +219,24 @@ manage_logs() {
             _logs_pid=$!
         fi
 
+        # Функция для надёжной остановки: SIGTERM → ждём → SIGKILL + дочерние
+        _kill_logs() {
+            kill "$_logs_pid" 2>/dev/null || true
+            pkill -P "$_logs_pid" 2>/dev/null || true
+            sleep 0.1
+            kill -9 "$_logs_pid" 2>/dev/null || true
+            pkill -9 -P "$_logs_pid" 2>/dev/null || true
+        }
+
         # Ctrl+C — убиваем процесс логов и возвращаемся в меню выбора
-        trap "kill \$_logs_pid 2>/dev/null || true; wait \$_logs_pid 2>/dev/null; trap - INT" INT
+        trap "_kill_logs; wait \$_logs_pid 2>/dev/null; trap - INT" INT
 
         # Опрашиваем stdin: Esc завершает просмотр логов и возвращает в меню
         local _key=""
         while kill -0 "$_logs_pid" 2>/dev/null; do
             IFS= read -r -s -n1 -t 0.2 _key 2>/dev/null || true
             if [[ "$_key" == $'\033' ]]; then
-                kill "$_logs_pid" 2>/dev/null || true
+                _kill_logs
                 break
             fi
         done
