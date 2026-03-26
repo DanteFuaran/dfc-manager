@@ -198,9 +198,11 @@ manage_delete_components() {
                     ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
                     show_spinner "Удаление Ноды" "Нода удалена"
                 fi
-                if is_subpage_remote_installed; then
+                if is_subpage_remote_installed || [ -d "/opt/subscribe-page" ] || [ -d "/opt/remnasubpage" ]; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
-                        [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf "$_d" 2>/dev/null || true; }
+                        [ -d "$_d" ] || continue
+                        [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; }
+                        rm -rf "$_d" 2>/dev/null || true
                       done; exit 0 ) &
                     show_spinner "Удаление Страницы подписки" "Страница подписки удалена"
                 fi
