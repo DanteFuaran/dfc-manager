@@ -224,7 +224,37 @@ prompt_domain_with_retry() {
 
         local check_ip_flag=true
         [ "$skip_ip_check" = true ] && check_ip_flag=false
-        if check_domain "${!var_name}" "$check_ip_flag"; then
+
+        # Показываем спиннер пока идёт проверка домена
+        local _check_out _check_rc
+        local _check_out_file _check_rc_file
+        _check_out_file=$(mktemp)
+        _check_rc_file=$(mktemp)
+        (
+            check_domain "${!var_name}" "$check_ip_flag" > "$_check_out_file" 2>&1
+            echo $? > "$_check_rc_file"
+        ) &
+        local _check_pid=$!
+        local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local _si=0
+        tput civis 2>/dev/null || true
+        echo
+        while kill -0 $_check_pid 2>/dev/null; do
+            printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
+            _si=$(( (_si+1) % 10 ))
+            sleep 0.08
+        done
+        printf "\r\033[K"
+        wait $_check_pid 2>/dev/null
+        tput cnorm 2>/dev/null || true
+        _check_rc=$(cat "$_check_rc_file" 2>/dev/null)
+        _check_out=$(cat "$_check_out_file" 2>/dev/null)
+        rm -f "$_check_out_file" "$_check_rc_file"
+
+        # Выводим сообщение об ошибке (если есть) после очистки строки спиннера
+        [ -n "$_check_out" ] && printf "%s\n" "$_check_out"
+
+        if [ "$_check_rc" = "0" ]; then
             return 0
         fi
 
