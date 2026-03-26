@@ -159,7 +159,16 @@ _delete_component_subpage() {
 
     nginx_cleanup_unused_certs
 
-    print_success "Страница подписки удалена"
+    # Ждём доступности панели (проверяем напрямую, т.к. nginx требует cookie)
+    if [ -n "$_panel_domain" ]; then
+        if show_spinner_until_ready "http://127.0.0.1:3001/health" "Ожидание запуска панели" 90; then
+            print_success "Страница подписки удалена"
+        else
+            print_error "Панель не отвечает после перезапуска. Проверьте состояние сервисов."
+        fi
+    else
+        print_success "Страница подписки удалена"
+    fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || true

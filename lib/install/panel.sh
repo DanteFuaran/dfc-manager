@@ -185,7 +185,7 @@ installation_panel() {
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -253,6 +253,7 @@ installation_panel() {
 
         # Ожидаем готовность после перезапуска
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+        tput cnorm 2>/dev/null || true
     fi
 
     # 4. Сброс суперадмина — при первом входе пользователь задаст свои данные

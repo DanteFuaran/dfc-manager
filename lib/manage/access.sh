@@ -664,6 +664,7 @@ EOSQL
     show_spinner "Запуск панели"
 
     show_spinner_timer 10 "Ожидание запуска панели" "Запуск панели"
+    tput cnorm 2>/dev/null || true
 
     echo
     echo -e "${GREEN}✅ Сброс выполнен успешно!${NC}"

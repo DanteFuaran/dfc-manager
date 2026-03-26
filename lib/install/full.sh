@@ -198,7 +198,7 @@ installation_full() {
     local node_dir="${DIR_NODE}"
     local sub_dir="${DIR_SUB}"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 60; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 60; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         echo
         show_continue_prompt || true
@@ -548,7 +548,7 @@ installation_panel_with_node() {
     local target_dir="${DIR_PANEL}"
     local node_dir="${DIR_NODE}"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 60; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 60; then
         print_error "API не отвечает. Проверьте: docker compose -f /opt/remnawave/docker-compose.yml logs"
         echo
         show_continue_prompt || true

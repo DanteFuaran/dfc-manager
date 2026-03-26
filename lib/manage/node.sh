@@ -90,6 +90,7 @@ remove_node_from_panel() {
     show_spinner "Запуск контейнеров"
 
     show_spinner_timer 15 "Ожидание запуска панели" "Запуск панели"
+    tput cnorm 2>/dev/null || true
 
     if curl -s -f http://127.0.0.1:3000/api/auth/status >/dev/null 2>&1; then
         print_success "Панель запущена и работает"

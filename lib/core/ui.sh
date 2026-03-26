@@ -88,7 +88,6 @@ show_spinner_timer() {
         elapsed=$((elapsed + 1))
     done
     printf "\r\033[K${GREEN}✅${NC} %s\n" "$done_msg"
-    tput cnorm 2>/dev/null || true
 }
 
 show_spinner_until_ready() {

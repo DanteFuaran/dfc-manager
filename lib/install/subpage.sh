@@ -86,6 +86,7 @@ _installation_subpage_on_panel() {
         (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
         show_spinner "Перезапуск nginx"
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+        tput cnorm 2>/dev/null || true
     }
 
     # Извлекаем домен панели из nginx.conf
@@ -264,11 +265,12 @@ _installation_subpage_on_panel() {
     ) &
     show_spinner "Обновление конфигурации" || true
 
+    tput civis 2>/dev/null || true
     echo
 
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает. Восстановление конфигурации..."
         _restore_config
         show_continue_prompt || return 1
@@ -537,6 +539,7 @@ EOL
     show_spinner "Запуск nginx" || true
 
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
     local health_ok=true
@@ -774,6 +777,7 @@ _installation_subpage_standalone() {
 
     echo
     show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
     local health_ok=true

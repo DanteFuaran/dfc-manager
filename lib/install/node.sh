@@ -272,6 +272,7 @@ installation_node_local() {
         ) &
         show_spinner "Восстановление конфигурации панели"
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+        tput cnorm 2>/dev/null || true
     }
 
     # ─── Автоопределение конфигурации из существующей панели ───
@@ -523,7 +524,7 @@ installation_node_local() {
 
     show_spinner_timer 20 "Ожидание запуска Remnawave" "Запуск Remnawave"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности API" 120; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает. Восстановление конфигурации..."
         _restore_panel_config
         echo
@@ -618,7 +619,7 @@ installation_node_local() {
     # Ожидаем готовность панели после перезапуска
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
 
-    if ! show_spinner_until_ready "http://$domain_url/api/auth/status" "Проверка доступности панели" 120; then
+    if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности панели" 120; then
         print_error "Панель не отвечает после перезапуска. Восстановление..."
         _restore_panel_config
         echo
@@ -840,6 +841,7 @@ EOL
     show_spinner "Запуск nginx" || true
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
+    tput cnorm 2>/dev/null || true
 
     # Проверка здоровья: nginx должен создать unix-сокет
     local health_ok=true
@@ -1041,6 +1043,7 @@ installation_node_with_existing_subpage() {
 
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
     show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+    tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
     local health_ok=true
