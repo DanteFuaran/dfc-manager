@@ -97,10 +97,11 @@ show_spinner_until_ready() {
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 elapsed=0 delay=0.08 loop_count=0
     tput civis 2>/dev/null || true
+    printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
     while [ $elapsed -lt $timeout ]; do
-        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
+        printf "\r${GREEN}%s${NC}  %s" "${spin[$i]}" "$msg"
         loop_count=$((loop_count + 1))
         if [ $((loop_count % 12)) -eq 0 ]; then
             elapsed=$((elapsed + 1))
