@@ -256,11 +256,6 @@ _installation_subpage_on_panel() {
     ) &
     show_spinner "Обновление конфигурации" || true
 
-    tput civis 2>/dev/null || true
-    echo
-
-    show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
-
     if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
         print_error "API не отвечает. Восстановление конфигурации..."
         _restore_config
@@ -273,8 +268,11 @@ _installation_subpage_on_panel() {
         create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
     fi
 
-    (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
-    wait $! 2>/dev/null || true
+    (
+        cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1
+    ) &
+    show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    tput cnorm 2>/dev/null || true
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
