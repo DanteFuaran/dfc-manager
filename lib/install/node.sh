@@ -728,8 +728,7 @@ installation_node_remote() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
+            2|3) return ;;
         esac
 
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
@@ -767,12 +766,20 @@ installation_node_remote() {
     # Проверяем сертификаты перед запуском Docker
     local cert_path="/etc/letsencrypt/live/$NODE_CERT_DOMAIN"
     if [ ! -f "$cert_path/fullchain.pem" ] || [ ! -f "$cert_path/privkey.pem" ]; then
-        print_error "Сертификаты не найдены в $cert_path"
-        echo -e "${DARKGRAY}Содержимое /etc/letsencrypt/live/:${NC}"
-        ls -la /etc/letsencrypt/live/ 2>/dev/null || echo "  (директория не существует)"
-        [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
-        show_continue_prompt || true
-        return
+        # Пробуем найти с суффиксом (-0001, -0002 и т.д.)
+        local _alt_path
+        _alt_path=$(ls -d /etc/letsencrypt/live/${NODE_CERT_DOMAIN}-* 2>/dev/null | head -1)
+        if [ -n "$_alt_path" ] && [ -f "$_alt_path/fullchain.pem" ] && [ -f "$_alt_path/privkey.pem" ]; then
+            cert_path="$_alt_path"
+            NODE_CERT_DOMAIN=$(basename "$_alt_path")
+        else
+            print_error "Сертификаты не найдены в $cert_path"
+            echo -e "${DARKGRAY}Содержимое /etc/letsencrypt/live/:${NC}"
+            ls -la /etc/letsencrypt/live/ 2>/dev/null || echo "  (директория не существует)"
+            [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
+            show_continue_prompt || true
+            return
+        fi
     fi
 
     # Копируем сертификат ноды в /opt/nginx/ssl/
@@ -953,8 +960,7 @@ installation_node_with_existing_subpage() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
+            2|3) return ;;
         esac
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
@@ -990,9 +996,17 @@ installation_node_with_existing_subpage() {
     # Проверяем сертификаты
     local cert_path="/etc/letsencrypt/live/$NODE_CERT_DOMAIN"
     if [ ! -f "$cert_path/fullchain.pem" ] || [ ! -f "$cert_path/privkey.pem" ]; then
-        print_error "Сертификаты не найдены в $cert_path"
-        show_continue_prompt || true
-        return
+        # Пробуем найти с суффиксом (-0001, -0002 и т.д.)
+        local _alt_path
+        _alt_path=$(ls -d /etc/letsencrypt/live/${NODE_CERT_DOMAIN}-* 2>/dev/null | head -1)
+        if [ -n "$_alt_path" ] && [ -f "$_alt_path/fullchain.pem" ] && [ -f "$_alt_path/privkey.pem" ]; then
+            cert_path="$_alt_path"
+            NODE_CERT_DOMAIN=$(basename "$_alt_path")
+        else
+            print_error "Сертификаты не найдены в $cert_path"
+            show_continue_prompt || true
+            return
+        fi
     fi
 
     # Копируем сертификат ноды в /opt/nginx/ssl/
