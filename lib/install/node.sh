@@ -635,9 +635,7 @@ installation_node_local() {
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
-    echo -e "${GREEN}✅ Нода зарегистрирована в панели${NC}"
-    echo -e "${GREEN}✅ Docker Compose обновлён${NC}"
-    echo -e "${GREEN}✅ Nginx перенастроен${NC}"
+    echo -e "${GREEN}✅ Нода успешно добавлена${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
