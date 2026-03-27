@@ -212,6 +212,7 @@ _installation_subpage_on_panel() {
     existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${DIR_SUB}.env" 2>/dev/null | head -1)
     [ -z "$existing_api_token" ] && existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
 
+    echo
     # Остановка сервисов
     (
         cd /opt/remnawave 2>/dev/null && docker compose down >/dev/null 2>&1 || true
@@ -278,6 +279,8 @@ _installation_subpage_on_panel() {
     # Создание API токена для subscription-page (если нет)
     if [ -z "$existing_api_token" ] || [ "$existing_api_token" = "\$api_token" ]; then
         create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
+    else
+        sed -i "s|^REMNAWAVE_API_TOKEN=.*$|REMNAWAVE_API_TOKEN=${existing_api_token}|" "${DIR_SUB}.env" 2>/dev/null || true
     fi
 
     (
