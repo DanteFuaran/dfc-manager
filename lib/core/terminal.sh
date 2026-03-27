@@ -63,6 +63,7 @@ cleanup_uninstalled() {
 _DFC_INTERRUPTED=false
 
 handle_interrupt() {
+    trap - INT TERM
     cleanup_terminal
     if [ "$_DFC_INTERRUPTED" = false ]; then
         _DFC_INTERRUPTED=true
