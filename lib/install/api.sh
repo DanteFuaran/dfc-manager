@@ -305,6 +305,7 @@ create_config_profile() {
     local domain=$4
     local private_key=$5
     local inbound_tag="${6:-Steal}"
+    local inbound_port="${7:-443}"
 
     local short_id
     short_id=$(openssl rand -hex 8)
@@ -312,7 +313,7 @@ create_config_profile() {
     local request_body
     request_body=$(jq -n --arg name "$name" --arg domain "$domain" \
         --arg private_key "$private_key" --arg short_id "$short_id" \
-        --arg inbound_tag "$inbound_tag" '{
+        --arg inbound_tag "$inbound_tag" --argjson inbound_port "$inbound_port" '{
         name: $name,
         config: {
             log: { loglevel: "warning" },
@@ -326,7 +327,7 @@ create_config_profile() {
             },
             inbounds: [{
                 tag: $inbound_tag,
-                port: 443,
+                port: $inbound_port,
                 protocol: "vless",
                 settings: { clients: [], decryption: "none" },
                 sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
