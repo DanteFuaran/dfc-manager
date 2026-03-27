@@ -67,7 +67,6 @@ handle_interrupt() {
     if [ "$_DFC_INTERRUPTED" = false ]; then
         _DFC_INTERRUPTED=true
         echo
-        echo
         echo -e "${RED}Скрипт остановлен пользователем${NC}"
         echo
         cleanup_uninstalled
