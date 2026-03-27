@@ -448,6 +448,7 @@ installation_node_local() {
     fi
 
     echo
+    echo
 
     local NODE_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -632,7 +633,7 @@ installation_node_local() {
     clear
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${GREEN}🎉 Нода добавлена на сервер панели${NC}"
+    echo -e "  ${GREEN}🎉 Нода добавлена на сервер панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
