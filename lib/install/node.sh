@@ -661,7 +661,7 @@ installation_node_remote() {
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
-        trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "'"${NODE_INSTALL_DIR}"'" 2>/dev/null; exit 1' INT TERM
+        trap 'rm -rf "'"${NODE_INSTALL_DIR}"'" 2>/dev/null; echo; echo "Скрипт остановлен пользователем"; echo; exit 130' INT TERM
     fi
 
     prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
