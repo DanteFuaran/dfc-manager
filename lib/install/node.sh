@@ -106,12 +106,7 @@ installation_node_connect() {
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                clear
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
-                break
+                continue
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
             if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
@@ -353,13 +348,7 @@ installation_node_local() {
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                # Esc → очищаем экран, перерисовываем заголовок, назад к вводу домена
-                clear
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}     🌐 Установка ноды на сервер${NC}"
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
-                break
+                continue
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
             if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
