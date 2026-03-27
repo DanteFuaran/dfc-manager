@@ -34,7 +34,7 @@ installation_panel() {
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
-        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; echo; echo "Скрипт остановлен пользователем"; echo; exit 130' INT TERM
+        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; handle_interrupt' INT TERM
     fi
 
     local cert_choice
