@@ -188,7 +188,7 @@ installation_full() {
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
     ) &
-    show_spinner "Установка сервисов" || true
+    show_spinner "Подготовка сервисов" || true
 
     (nginx_reload) &
     show_spinner "Запуск Nginx" || true
@@ -305,7 +305,7 @@ installation_full() {
     # 9. Создание API токена для subscription-page
     create_api_token "$domain_url" "$token" "$sub_dir" >/dev/null 2>&1
 
-    print_success "Обновление конфигураций"
+    printf "${DARKGRAY}  ✔  Обновление конфигураций${NC}\n"
 
     # 10. Шаблон selfsteal
     randomhtml
@@ -539,7 +539,7 @@ installation_panel_with_node() {
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
     ) &
-    show_spinner "Установка сервисов" || true
+    show_spinner "Подготовка сервисов" || true
 
     (nginx_reload) &
     show_spinner "Запуск Nginx" || true
@@ -639,7 +639,7 @@ installation_panel_with_node() {
 
     create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    print_success "Обновление конфигураций"
+    printf "${DARKGRAY}  ✔  Обновление конфигураций${NC}\n"
 
     randomhtml
 
