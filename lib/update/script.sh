@@ -282,11 +282,11 @@ manage_delete_components() {
                 echo
                 if is_panel_installed; then
                     ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &
-                    show_spinner "Удаление Remnawave" "Remnawave удалён"
+                    show_spinner "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
                 fi
                 if is_node_installed; then
                     ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
-                    show_spinner "Удаление Ноды" "Нода удалена"
+                    show_spinner "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
                 fi
                 if is_subpage_remote_installed || [ -d "/opt/subscribe-page" ] || [ -d "/opt/remnasubpage" ]; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
@@ -294,7 +294,7 @@ manage_delete_components() {
                         [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; }
                         rm -rf "$_d" 2>/dev/null || true
                       done; exit 0 ) &
-                    show_spinner "Удаление Страницы подписки" "Страница подписки удалена"
+                    show_spinner "Удаление Remnawave (Страница подписки)" "Удаление Remnawave (Страница подписки)"
                 fi
                 if [ -f "/opt/beszel/docker-compose.yml" ]; then
                     ( uninstall_beszel --force >/dev/null 2>&1 || true ) &
