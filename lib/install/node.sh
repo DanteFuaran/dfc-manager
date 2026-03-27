@@ -289,7 +289,7 @@ installation_node_local() {
 
     # Определяем, есть ли локальная страница подписки
     local has_local_sub=false
-    if grep -q "remnawave-subscription-page" /opt/remnawave/docker-compose.yml 2>/dev/null; then
+    if [ -f "${DIR_SUB}docker-compose.yml" ]; then
         has_local_sub=true
     fi
 
@@ -298,7 +298,13 @@ installation_node_local() {
     panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
 
     if [ "$has_local_sub" = true ]; then
-        sub_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '2p')
+        # Определяем домен подписки по маркеру upstream json
+        sub_domain=$(
+            awk '/^\s*server_name\s/ && !/server_name\s+_/ {
+                sn = $2; gsub(/;/, "", sn)
+            }
+            /proxy_pass http:\/\/json/ && sn != "" { print sn; exit }' "${DIR_NGINX}nginx.conf"
+        )
     else
         # Страница подписки на удалённом сервере — берём домен из .env
         sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
@@ -437,9 +443,11 @@ installation_node_local() {
             return
         fi
     else
-        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
         echo
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
     fi
+
+    echo
 
     local NODE_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
@@ -638,11 +646,8 @@ installation_node_local() {
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
     echo -e "${GREEN}✅ Нода зарегистрирована в панели${NC}"
-    echo -e "${GREEN}✅ Docker Compose обновлён (nginx + remnanode)${NC}"
-    echo -e "${GREEN}✅ Nginx перенастроен (443 + unix socket)${NC}"
-    echo
-    echo -e "${DARKGRAY}Панель доступна на порту 443${NC}"
-    echo -e "${DARKGRAY}Нода получит порт в настройках inbound (рекомендуется 8443)${NC}"
+    echo -e "${GREEN}✅ Docker Compose обновлён${NC}"
+    echo -e "${GREEN}✅ Nginx перенастроен${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
