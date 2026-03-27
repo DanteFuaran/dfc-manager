@@ -535,7 +535,7 @@ installation_node_local() {
         pk=$(generate_xray_keys "$domain_url" "$token") || exit 1
         [ -z "$pk" ] && exit 1
         echo "$pk" > "$_tmp_pk"
-        cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name") || exit 1
+        cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name" 8443) || exit 1
         echo "$cr" > "$_tmp_cr"
         read cpu_u ci_u <<< "$cr"
         create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" || exit 1
@@ -564,7 +564,7 @@ installation_node_local() {
 
     (
         exec >/dev/null 2>&1
-        create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" || true
+        create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443 || true
         squad_uuids=$(get_default_squad "$domain_url" "$token") || true
         if [ -n "$squad_uuids" ]; then
             while IFS= read -r squad_uuid; do
