@@ -3,16 +3,15 @@
 # ═══════════════════════════════════════════════════
 
 remove_node_from_panel() {
-    # Гарантируем, что мы в корне или в /opt/remnawave
-    cd /opt/remnawave 2>/dev/null || cd / 2>/dev/null
-    
+    cd /opt 2>/dev/null || cd / 2>/dev/null
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${RED}   🗑️  УДАЛЕНИЕ НОДЫ С СЕРВЕРА ПАНЕЛИ${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml 2>/dev/null; then
+    if ! is_node_installed; then
         print_error "Нода не найдена на этом сервере"
         echo -e "${YELLOW}На сервере установлена только панель.${NC}"
         echo
@@ -31,70 +30,99 @@ remove_node_from_panel() {
     echo
 
     if ! confirm_action; then
-        print_error "Операция отменена"
-        sleep 2
+        return
+    fi
+
+    local panel_domain="" panel_cert="" COOKIE_NAME="" COOKIE_VALUE=""
+
+    # Определяем домен панели (из .env → fallback nginx.conf)
+    panel_domain=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+    [ -z "$panel_domain" ] && panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
+
+    if [ -z "$panel_domain" ]; then
+        print_error "Не удалось определить домен панели"
+        echo
+        show_continue_prompt || return 1
         return 1
     fi
 
-    local panel_domain sub_domain panel_cert sub_cert COOKIE_NAME COOKIE_VALUE
-    panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
-    sub_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '2p')
-    
     get_cookie_from_nginx
-    
-    panel_cert=$(grep -A5 "server_name ${panel_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
-    sub_cert=$(grep -A5 "server_name ${sub_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
+
+    panel_cert=$(grep -A5 "server_name ${panel_domain};" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/ssl/\K[^/]+' | head -1)
     [ -z "$panel_cert" ] && panel_cert="$panel_domain"
-    [ -z "$sub_cert" ] && sub_cert="$sub_domain"
+
+    # Определяем подписку (по upstream json — надёжнее чем по позиции)
+    local sub_domain="" sub_cert=""
+    local _json_line=""
+    _json_line=$(grep -n 'proxy_pass http://json' "${DIR_NGINX}nginx.conf" 2>/dev/null | head -1 | cut -d: -f1)
+    if [ -n "$_json_line" ]; then
+        sub_domain=$(head -n "$_json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'server_name\s+\K[^;]+' | tail -1)
+        sub_cert=$(head -n "$_json_line" "${DIR_NGINX}nginx.conf" | grep -oP 'ssl_certificate\s+"/etc/nginx/ssl/\K[^/]+' | tail -1)
+        [ -z "$sub_cert" ] && sub_cert="$sub_domain"
+    fi
 
     echo
-    print_action "Остановка сервисов..."
+    # ─── Остановка сервисов ───
     (
-        cd /opt/remnawave
-        docker compose down >/dev/null 2>&1
+        # Останавливаем отдельную ноду
+        if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+            cd /opt/remnanode && docker compose down >/dev/null 2>&1
+        fi
+        cd /opt/remnawave && docker compose down >/dev/null 2>&1
     ) &
     show_spinner "Остановка контейнеров"
 
-    print_action "Удаление ноды из конфигурации..."
-    
-    cp /opt/remnawave/docker-compose.yml /opt/remnawave/docker-compose.yml.bak 2>/dev/null || true
-    cp /opt/remnawave/.env /opt/remnawave/.env.bak 2>/dev/null || true
-    
-    generate_docker_compose_panel "$panel_cert" "$sub_cert"
-    
-    local existing_api_token
-    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env.bak 2>/dev/null | head -1)
-    if [ -n "$existing_api_token" ]; then
-        sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$existing_api_token|" /opt/remnawave/.env
-    fi
-    
-    rm -f /opt/remnawave/docker-compose.yml.bak /opt/remnawave/.env.bak 2>/dev/null || true
-
-    print_action "Настройка nginx для порта 443..."
-    
-    generate_nginx_conf_panel "$panel_domain" "$sub_domain" "$panel_cert" "$sub_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
-
-    # Удаляем неиспользуемые сертификаты (нода удалена — её сертификат больше не нужен)
-    nginx_cleanup_unused_certs
-
-    print_action "Закрытие порта 8443..."
-    if ufw status 2>/dev/null | grep -q "8443.*ALLOW"; then
-        ufw delete allow 8443/tcp >/dev/null 2>&1
-    fi
-
-    print_action "Запуск сервисов..."
+    # ─── Обновление конфигов ───
     (
-        cd /opt/remnawave
-        docker compose up -d >/dev/null 2>&1
+        exec >/dev/null 2>&1
+        # Бэкап .env
+        cp /opt/remnawave/.env /opt/remnawave/.env.bak 2>/dev/null || true
+
+        # Генерируем compose без ноды
+        if [ -n "$sub_domain" ]; then
+            generate_docker_compose_panel "$panel_cert" "$sub_cert"
+        else
+            generate_docker_compose_panel_only "$panel_cert"
+        fi
+
+        # Восстанавливаем API токен и настройки из бэкапа .env
+        local existing_api_token
+        existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env.bak 2>/dev/null | head -1)
+        if [ -n "$existing_api_token" ]; then
+            sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$existing_api_token|" /opt/remnawave/.env
+        fi
+        rm -f /opt/remnawave/.env.bak 2>/dev/null || true
+
+        # Генерируем nginx без ноды
+        if [ -n "$sub_domain" ]; then
+            generate_nginx_conf_panel "$panel_domain" "$sub_domain" "$panel_cert" "$sub_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        else
+            generate_nginx_conf_panel_only "$panel_domain" "$panel_cert" "$COOKIE_NAME" "$COOKIE_VALUE"
+        fi
+
+        nginx_strip_ipv6_if_disabled
+
+        # Удаляем compose ноды
+        rm -f /opt/remnanode/docker-compose.yml 2>/dev/null || true
+        rmdir /opt/remnanode 2>/dev/null || true
+
+        # Удаляем неиспользуемые сертификаты
+        nginx_cleanup_unused_certs
+
+        # Закрываем порты
+        ufw delete allow 8443/tcp >/dev/null 2>&1 || true
     ) &
-    show_spinner "Запуск контейнеров"
+    show_spinner "Удаление ноды"
+
+    # ─── Запуск сервисов ───
+    (
+        cd /opt/remnawave && docker compose up -d >/dev/null 2>&1
+        cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+    ) &
+    show_spinner "Запуск сервисов"
 
     show_spinner_timer 15 "Ожидание запуска панели" "Запуск панели"
     tput cnorm 2>/dev/null || true
-
-    if curl -s -f http://127.0.0.1:3000/api/auth/status >/dev/null 2>&1; then
-        print_success "Панель запущена и работает"
-    fi
 
     clear
     echo
@@ -103,7 +131,7 @@ remove_node_from_panel() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}Панель теперь доступна по:${NC}"
-    echo -e "${GREEN}https://${panel_domain}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
+    echo -e "${GREEN}https://${panel_domain}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
     echo
     echo -e "${DARKGRAY}Порт 443 активен, порт 8443 закрыт${NC}"
     echo
