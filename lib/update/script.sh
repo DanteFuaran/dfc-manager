@@ -318,7 +318,10 @@ manage_delete_components() {
                 echo -e "  ${GREEN}✅ Все компоненты были удалены${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
+                stty sane 2>/dev/null || true
+                tput cnorm 2>/dev/null || true
                 show_continue_prompt || true
+                return
                 ;;
             back)         return ;;
             sep)          continue ;;
