@@ -235,8 +235,13 @@ show_arrow_menu() {
         if [ $_read_rc -ne 0 ] && [ -z "$key" ]; then
             _restore_stty
             tput cnorm 2>/dev/null || true
-            kill -INT $$ 2>/dev/null || true
-            return 255
+            handle_interrupt
+        fi
+        # Ctrl+C как символ (если isig выключен)
+        if [[ "$key" == $'\003' ]]; then
+            _restore_stty
+            tput cnorm 2>/dev/null || true
+            handle_interrupt
         fi
 
         # Проверяем escape-последовательность для стрелок
@@ -314,6 +319,10 @@ reading() {
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
+        elif [[ "$char" == $'\x03' ]]; then
+            echo -en "\033[0m"
+            if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
+            handle_interrupt
         elif [[ "$char" == $'\x7f' ]] || [[ "$char" == $'\x08' ]]; then
             if [[ -n "$input" ]]; then
                 input="${input%?}"
@@ -356,6 +365,10 @@ reading_inline() {
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
+        elif [[ "$char" == $'\x03' ]]; then
+            echo -en "\033[0m"
+            if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
+            handle_interrupt
         elif [[ "$char" == $'\x7f' ]] || [[ "$char" == $'\x08' ]]; then
             if [[ -n "$input" ]]; then
                 input="${input%?}"
