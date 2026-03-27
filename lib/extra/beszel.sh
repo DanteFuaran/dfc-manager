@@ -337,6 +337,15 @@ install_beszel() {
         BESZEL_DOMAIN="$_server_ip"
         _is_ip_mode=true
     fi
+
+    # Проверяем что домен указывает на IP этого сервера (только для доменных имён)
+    if [ "$_is_ip_mode" = false ] && ! [[ "$BESZEL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if ! check_domain "$BESZEL_DOMAIN"; then
+            echo
+            show_continue_prompt || return 0
+            return 0
+        fi
+    fi
     echo
 
     # ─── Сертификат ───
