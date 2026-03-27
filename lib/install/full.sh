@@ -36,7 +36,7 @@ installation_full() {
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
-        trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
+        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; echo; echo "Скрипт остановлен пользователем"; echo; exit 130' INT TERM
     fi
 
     # Домены
@@ -396,7 +396,7 @@ installation_panel_with_node() {
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" "${DIR_NODE}" && cd "${DIR_PANEL}"
 
     if [ "$is_fresh_install" = true ]; then
-        trap 'echo; echo -e "${RED}Установка прервана пользователем${NC}"; echo; rm -rf "${DIR_PANEL}" 2>/dev/null; exit 1' INT TERM
+        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; echo; echo "Скрипт остановлен пользователем"; echo; exit 130' INT TERM
     fi
 
     prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
