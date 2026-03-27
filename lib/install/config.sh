@@ -654,6 +654,7 @@ set_real_ip_from unix:;
 server {
     server_name $panel_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen 443 ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
@@ -663,6 +664,21 @@ server {
     access_log /dev/stdout combined if=\$loggable;
 
     add_header Set-Cookie \$set_cookie_header;
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
 
     location / {
         error_page 418 = @unauthorized;
@@ -694,6 +710,7 @@ server {
 server {
     server_name $sub_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen 443 ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
@@ -735,6 +752,7 @@ server {
 server {
     server_name $selfsteal_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen 443 ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
@@ -818,6 +836,7 @@ server {
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen 443 ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
@@ -877,7 +896,12 @@ map \$arg_${cookie_name} \$auth_query {
     "${cookie_value}" 1;
 }
 
-map "\$auth_cookie\$auth_query" \$authorized {
+map \$http_authorization \$is_bearer_auth {
+    default 0;
+    "~*^Bearer \S+" 1;
+}
+
+map "\$auth_cookie\$auth_query\$is_bearer_auth" \$authorized {
     "~1" 1;
     default 0;
 }
@@ -907,6 +931,21 @@ server {
     access_log /dev/stdout combined if=\$loggable;
 
     add_header Set-Cookie \$set_cookie_header;
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
 
     location / {
         if (\$authorized = 0) {
