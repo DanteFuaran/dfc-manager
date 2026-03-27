@@ -151,6 +151,7 @@ installation_panel() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
+    echo
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
         if [ "$with_subpage" = true ]; then
