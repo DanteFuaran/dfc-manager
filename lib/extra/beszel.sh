@@ -333,7 +333,6 @@ install_beszel() {
     while true; do
         reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
         local _domain_rc=$?
-        echo
 
         if [ "$_domain_rc" -eq 2 ]; then
             return 0
@@ -402,7 +401,7 @@ install_beszel() {
             elif [[ "$_nav_key" == "s" || "$_nav_key" == "S" ]]; then
                 tput cnorm 2>/dev/null || true
                 echo
-                local _skip_lines=$((_total_lines + 1))
+                local _skip_lines=$((_total_lines))
                 for (( _l=0; _l<_skip_lines; _l++ )); do
                     tput cuu1 2>/dev/null; tput el 2>/dev/null
                 done
@@ -415,7 +414,6 @@ install_beszel() {
                 break
             fi
         done
-        echo
     done
     echo
 
