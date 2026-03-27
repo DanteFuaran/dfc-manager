@@ -215,36 +215,6 @@ get_cert_acme() {
 
     _ensure_certbot || return 1
 
-    # Проверяем что домен указывает на IP этого сервера
-    local _domain_ip _server_ip
-    _domain_ip=$(resolve_domain_ip "$domain")
-    _server_ip=$(get_server_ip)
-
-    if [ -z "$_domain_ip" ]; then
-        print_error "Домен $domain не разрешается в IP-адрес"
-        echo -e "   ${DARKGRAY}Проверьте A-запись домена${NC}"
-        return 1
-    fi
-
-    local _ip_match=false
-    if [ "$_domain_ip" = "$_server_ip" ]; then
-        _ip_match=true
-    else
-        local _local_ips
-        _local_ips=$(ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1')
-        if [ -n "$_local_ips" ]; then
-            while IFS= read -r _lip; do
-                if [ "$_domain_ip" = "$_lip" ]; then _ip_match=true; break; fi
-            done <<< "$_local_ips"
-        fi
-    fi
-
-    if [ "$_ip_match" = false ]; then
-        print_error "Домен $domain указывает на $_domain_ip, а не на IP сервера $_server_ip"
-        echo -e "   ${DARKGRAY}Проверьте A-запись домена${NC}"
-        return 1
-    fi
-
     local _tmp_log _exit_file
     _tmp_log=$(mktemp)
     _exit_file="${_tmp_log}.exit"
