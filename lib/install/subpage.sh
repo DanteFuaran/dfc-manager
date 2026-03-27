@@ -69,10 +69,16 @@ _installation_subpage_on_panel() {
         if [ -n "$backup_compose" ]; then
             echo "$backup_compose" > /opt/remnawave/docker-compose.yml
         fi
+        if [ -n "$backup_node_compose" ]; then
+            echo "$backup_node_compose" > /opt/remnanode/docker-compose.yml
+        fi
         if [ -n "$backup_nginx" ]; then
             echo "$backup_nginx" > ${DIR_NGINX}nginx.conf
         fi
-        (cd /opt/remnawave && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+        (
+            cd /opt/remnawave && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1
+            [ -n "$backup_node_compose" ] && { cd /opt/remnanode && docker compose up -d >/dev/null 2>&1; } || true
+        ) &
         show_spinner "Восстановление конфигурации"
         (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
         show_spinner "Перезапуск nginx"
@@ -132,14 +138,12 @@ _installation_subpage_on_panel() {
     while true; do
     prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
 
-    echo
-    echo
     unset domains_to_check
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
     if check_if_certificates_needed domains_to_check; then
-        echo
+
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐  Метод получения сертификата" \
@@ -159,7 +163,6 @@ _installation_subpage_on_panel() {
 
         LETSENCRYPT_EMAIL=$(grep -r "email" /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
         if [ -z "$LETSENCRYPT_EMAIL" ]; then
-            echo
             reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
             [[ $? -eq 2 ]] && continue
         else
@@ -173,6 +176,7 @@ _installation_subpage_on_panel() {
             return
         fi
     else
+        echo
         print_success "Сертификат для $SUB_DOMAIN уже существует"
     fi
     break
@@ -199,7 +203,7 @@ _installation_subpage_on_panel() {
 
     # Определяем, есть ли нода (full/panel)
     local has_local_node=false
-    if [ -n "$backup_node_compose" ] || ([ -n "$backup_compose" ] && echo "$backup_compose" | grep -q "remnanode" 2>/dev/null); then
+    if [ -n "$backup_node_compose" ] || is_node_installed; then
         has_local_node=true
     fi
 
@@ -221,7 +225,13 @@ _installation_subpage_on_panel() {
     # Подготовка файлов (перегенерация docker-compose и nginx)
     if [ "$has_local_node" = true ]; then
         local selfsteal_domain node_cert_domain
-        selfsteal_domain=$(grep -B5 'root /var/www/html' ${DIR_NGINX}nginx.conf | grep -oP 'server_name\s+\K[^;]+' | head -1)
+        # Определяем домен ноды по маркеру selfsteal (try_files /index.html)
+        selfsteal_domain=$(
+            awk '/^\s*server_name\s/ && !/server_name\s+_/ {
+                sn = $2; gsub(/;/, "", sn)
+            }
+            /try_files \/index\.html/ && sn != "" { print sn; exit }' "${DIR_NGINX}nginx.conf"
+        )
         node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
         (
