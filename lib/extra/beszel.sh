@@ -542,7 +542,7 @@ install_beszel() {
     # ─── Определяем listen-режим до запуска ensure_nginx ───
     local LISTEN_BLOCK REAL_IP_BLOCK
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
-        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
         REAL_IP_BLOCK=$'\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;'
     else
         if [ "${_is_ip_mode:-false}" = true ]; then
@@ -889,7 +889,7 @@ change_domain_beszel() {
 
     local LISTEN_BLOCK REAL_IP_BLOCK
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
-        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
         REAL_IP_BLOCK=$'\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;'
     else
         LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
