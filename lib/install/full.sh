@@ -268,7 +268,7 @@ installation_full() {
     # 5. Создание config profile с VLESS REALITY
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result
-    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name")
+    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" 8443)
 
     local config_profile_uuid inbound_uuid
     read config_profile_uuid inbound_uuid <<< "$config_result"
@@ -287,7 +287,7 @@ installation_full() {
     fi
 
     # 7. Создание хоста
-    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443; then
         print_error "Не удалось зарегистрировать хост"
     fi
 
@@ -606,7 +606,7 @@ installation_panel_with_node() {
 
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result
-    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name")
+    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" 8443)
 
     local config_profile_uuid inbound_uuid
     read config_profile_uuid inbound_uuid <<< "$config_result"
@@ -623,7 +623,7 @@ installation_panel_with_node() {
         print_error "Не удалось создать ноду"
     fi
 
-    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN"; then
+    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443; then
         print_error "Не удалось зарегистрировать хост"
     fi
 
