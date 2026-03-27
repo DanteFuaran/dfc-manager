@@ -727,13 +727,15 @@ EOF
 change_credentials() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🔐 СБРОС СУПЕРАДМИНА${NC}"
+    echo -e "   ${GREEN}🔐 Сброс суперадмина${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
+    echo -e "       ${YELLOW}⚠️  ВНИМАНИЕ  ⚠️${NC}"
     echo -e "${WHITE}Эта операция удалит текущего суперадмина из базы данных.${NC}"
     echo -e "${WHITE}При следующем входе в панель вам будет предложено${NC}"
     echo -e "${WHITE}создать нового суперадмина.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if ! confirm_action; then
         print_error "Операция отменена"
@@ -742,7 +744,7 @@ change_credentials() {
     fi
 
     echo
-    print_action "Сброс суперадмина..."
+    echo
 
     (
         cd /opt/remnawave
@@ -754,7 +756,7 @@ change_credentials() {
 DELETE FROM admin;
 EOSQL
     then
-        print_success "Суперадмин удалён из базы данных"
+        print_success "Удаление суперадмина из базы"
     else
         print_error "Не удалось удалить суперадмина"
         (
@@ -772,17 +774,17 @@ EOSQL
     ) &
     show_spinner "Запуск панели"
 
-    show_spinner_timer 10 "Ожидание запуска панели" "Запуск панели"
     tput cnorm 2>/dev/null || true
 
     echo
     echo -e "${GREEN}✅ Сброс выполнен успешно!${NC}"
     echo
-    echo -e "${WHITE}При следующем входе в панель вы сможете создать${NC}"
-    echo -e "${WHITE}нового суперадмина с любым логином и паролем.${NC}"
+    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
-    read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
-        echo
+    echo -e "${WHITE}При следующем входе в панель будет создан суперадмин${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return
 }
 
 regenerate_cookies() {
