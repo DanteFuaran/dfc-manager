@@ -230,8 +230,14 @@ show_arrow_menu() {
         echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
         echo
 
-        local key
-        read -rsn1 key 2>/dev/null || key=""
+        local key _read_rc
+        read -rsn1 key 2>/dev/null; _read_rc=$?
+        if [ $_read_rc -ne 0 ] && [ -z "$key" ]; then
+            _restore_stty
+            tput cnorm 2>/dev/null || true
+            kill -INT $$ 2>/dev/null || true
+            return 255
+        fi
 
         # Проверяем escape-последовательность для стрелок
         if [[ "$key" == $'\e' ]]; then
