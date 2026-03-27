@@ -361,6 +361,7 @@ install_beszel() {
         local _chk_pid=$!
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
+        echo
         tput civis 2>/dev/null || true
         while kill -0 $_chk_pid 2>/dev/null; do
             printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
@@ -389,7 +390,7 @@ install_beszel() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
 
-        local _total_lines=$((_out_lines + 4))
+        local _total_lines=$((_out_lines + 5))
         tput civis 2>/dev/null || true
         local _nav_key
         while true; do
@@ -633,7 +634,7 @@ NGINX
 
     # ─── Откат при Ctrl+C ───
     local _BZ_ABORT=false
-    trap '_BZ_ABORT=true' INT
+    trap 'kill $(jobs -p) 2>/dev/null || true; _BZ_ABORT=true' INT
 
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
@@ -731,7 +732,20 @@ YAML
     (
         _beszel_wait_api && _beszel_auto_install_agent
     ) &
-    show_spinner "Подключение агента мониторинга"
+    show_spinner "Подключение агента мониторинга" || true
+    kill $(jobs -p) 2>/dev/null || true
+
+    if [ "$_BZ_ABORT" = true ]; then
+        echo
+        echo -e "${YELLOW}⚠  Установка прервана — откат изменений...${NC}"
+        docker compose -f "${DIR_BESZEL}docker-compose.yml" down --volumes >/dev/null 2>&1 || true
+        rm -rf "${DIR_BESZEL}" 2>/dev/null || true
+        nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
+        rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
+        (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
+        trap - INT
+        return 0
+    fi
 
     # Запускаем/перезапускаем nginx
     (nginx_reload) &
