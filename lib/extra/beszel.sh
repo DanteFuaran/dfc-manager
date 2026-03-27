@@ -330,27 +330,93 @@ install_beszel() {
     _server_ip=$(get_server_ip 2>/dev/null)
     local _is_ip_mode=false
 
-    reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
-    local _domain_rc=$?
-    echo
+    while true; do
+        reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
+        local _domain_rc=$?
+        echo
 
-    if [ "$_domain_rc" -eq 2 ]; then
-        return 0
-    fi
-
-    if [ -z "$BESZEL_DOMAIN" ]; then
-        BESZEL_DOMAIN="$_server_ip"
-        _is_ip_mode=true
-    fi
-
-    # Проверяем что домен указывает на IP этого сервера (только для доменных имён)
-    if [ "$_is_ip_mode" = false ] && ! [[ "$BESZEL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        if ! check_domain "$BESZEL_DOMAIN"; then
-            echo
-            show_continue_prompt || return 0
+        if [ "$_domain_rc" -eq 2 ]; then
             return 0
         fi
-    fi
+
+        if [ -z "$BESZEL_DOMAIN" ]; then
+            BESZEL_DOMAIN="$_server_ip"
+            _is_ip_mode=true
+            break
+        fi
+
+        # IP-адрес — проверка DNS не нужна
+        if [[ "$BESZEL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            _is_ip_mode=true
+            break
+        fi
+
+        # Проверяем домен с спиннером
+        local _chk_out_f _chk_rc_f
+        _chk_out_f=$(mktemp)
+        _chk_rc_f=$(mktemp)
+        (
+            check_domain "$BESZEL_DOMAIN" > "$_chk_out_f" 2>&1
+            echo $? > "$_chk_rc_f"
+        ) &
+        local _chk_pid=$!
+        local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local _si=0
+        tput civis 2>/dev/null || true
+        while kill -0 $_chk_pid 2>/dev/null; do
+            printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
+            _si=$(( (_si+1) % 10 ))
+            sleep 0.08
+        done
+        printf "\r\033[K"
+        wait $_chk_pid 2>/dev/null
+        tput cnorm 2>/dev/null || true
+        local _chk_rc _chk_out
+        _chk_rc=$(cat "$_chk_rc_f" 2>/dev/null)
+        _chk_out=$(cat "$_chk_out_f" 2>/dev/null)
+        rm -f "$_chk_out_f" "$_chk_rc_f"
+
+        if [ "$_chk_rc" = "0" ]; then
+            break
+        fi
+
+        local _out_lines=0
+        if [ -n "$_chk_out" ]; then
+            printf "%s\n" "$_chk_out"
+            _out_lines=$(echo "$_chk_out" | wc -l)
+        fi
+
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+
+        local _total_lines=$((_out_lines + 4))
+        tput civis 2>/dev/null || true
+        local _nav_key
+        while true; do
+            read -s -n 1 _nav_key
+            if [[ "$_nav_key" == $'\x1b' ]]; then
+                tput cnorm 2>/dev/null || true
+                echo
+                return 0
+            elif [[ "$_nav_key" == "s" || "$_nav_key" == "S" ]]; then
+                tput cnorm 2>/dev/null || true
+                echo
+                local _skip_lines=$((_total_lines + 1))
+                for (( _l=0; _l<_skip_lines; _l++ )); do
+                    tput cuu1 2>/dev/null; tput el 2>/dev/null
+                done
+                break 2
+            elif [[ "$_nav_key" == "" ]]; then
+                tput cnorm 2>/dev/null || true
+                for (( _l=0; _l<_total_lines; _l++ )); do
+                    tput cuu1 2>/dev/null; tput el 2>/dev/null
+                done
+                break
+            fi
+        done
+        echo
+    done
     echo
 
     # ─── Сертификат ───
