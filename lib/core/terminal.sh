@@ -60,12 +60,18 @@ cleanup_uninstalled() {
     fi
 }
 
+_DFC_INTERRUPTED=false
+
 handle_interrupt() {
     cleanup_terminal
-    echo
-    echo "Скрипт остановлен пользователем"
-    echo
-    cleanup_uninstalled
+    if [ "$_DFC_INTERRUPTED" = false ]; then
+        _DFC_INTERRUPTED=true
+        echo
+        echo
+        echo -e "${RED}Скрипт остановлен пользователем${NC}"
+        echo
+        cleanup_uninstalled
+    fi
     exit 130
 }
 
