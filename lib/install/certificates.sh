@@ -219,12 +219,14 @@ get_cert_acme() {
     _tmp_log=$(mktemp)
     _exit_file="${_tmp_log}.exit"
 
-    # Открываем порт 80 синхронно — ДО запуска certbot
-    ufw allow 80/tcp >/dev/null 2>&1 || true
-    ufw reload >/dev/null 2>&1 || true
-    # iptables fallback если ufw не управляет правилами
-    iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-    sleep 1
+    # Открываем порт 80 ДО запуска certbot
+    (
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+        ufw reload >/dev/null 2>&1 || true
+        iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+        sleep 2
+    ) &
+    show_spinner "Открытие порта 80" || true
 
     (
         set +e
@@ -237,10 +239,13 @@ get_cert_acme() {
     ) &
     show_spinner "Получение сертификата для $domain"
 
-    # Закрываем порт 80 синхронно — ПОСЛЕ завершения certbot
-    ufw delete allow 80/tcp >/dev/null 2>&1 || true
-    ufw reload >/dev/null 2>&1 || true
-    iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+    # Закрываем порт 80 ПОСЛЕ завершения certbot
+    (
+        ufw delete allow 80/tcp >/dev/null 2>&1 || true
+        ufw reload >/dev/null 2>&1 || true
+        iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+    ) &
+    show_spinner "Закрытие порта 80" || true
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
