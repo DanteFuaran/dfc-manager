@@ -597,7 +597,7 @@ _installation_subpage_standalone() {
 
     # Устанавливаем trap для удаления при прерывании
     if [ "$is_fresh_install" = true ]; then
-        trap 'rm -rf "'"${SUBPAGE_DIR}"'" 2>/dev/null; echo; echo "Скрипт остановлен пользователем"; echo; exit 130' INT TERM
+        trap 'rm -rf "'"${SUBPAGE_DIR}"'" 2>/dev/null; handle_interrupt' INT TERM
     fi
 
     # Запрашиваем URL панели
