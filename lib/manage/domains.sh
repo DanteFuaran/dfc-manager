@@ -508,7 +508,13 @@ _change_sub_domain_local_existing() {
     local current_sub_domain
     current_sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K.*' "${panel_dir}/.env" 2>/dev/null)
     if [ -z "$current_sub_domain" ]; then
-        current_sub_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | sed -n '2p')
+        # Находим домен подписки по маркеру upstream json
+        current_sub_domain=$(
+            awk '/^\s*server_name\s/ && !/server_name\s+_/ {
+                sn = $2; gsub(/;/, "", sn)
+            }
+            /proxy_pass http:\/\/json/ && sn != "" { print sn; exit }' "${DIR_NGINX}nginx.conf"
+        )
     fi
 
     local new_domain
@@ -560,8 +566,8 @@ _change_sub_domain_local_existing() {
     old_sub_cert_domain=$(grep -A5 "server_name.*${current_sub_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/nginx/ssl/\K[^/]+' | head -1)
 
     local start_line end_line
-    start_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '2p' | cut -d: -f1)
-    end_line=$(grep -nP '^\s*server_name\s' "${DIR_NGINX}nginx.conf" | sed -n '3p' | cut -d: -f1)
+    start_line=$(grep -n "server_name ${current_sub_domain}" "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
+    end_line=$(awk -v s="$start_line" 'NR > s && /^\s*server_name\s/ { print NR; exit }' "${DIR_NGINX}nginx.conf")
 
     (
         if [ -n "$old_sub_cert_domain" ] && [ "$old_sub_cert_domain" != "$new_cert_domain" ]; then
@@ -728,7 +734,13 @@ change_node_domain() {
     fi
 
     local current_node_domain
-    current_node_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" | grep -v '^_$' | sed -n '3p')
+    # Определяем домен ноды по маркеру selfsteal (try_files /index.html)
+    current_node_domain=$(
+        awk '/^\s*server_name\s/ && !/server_name\s+_/ {
+            sn = $2; gsub(/;/, "", sn)
+        }
+        /try_files \/index\.html/ && sn != "" { print sn; exit }' "${DIR_NGINX}nginx.conf"
+    )
 
     if [ -z "$current_node_domain" ]; then
         echo -e "${YELLOW}⚠️  Нода не обнаружена в конфигурации nginx.${NC}"
@@ -778,7 +790,7 @@ change_node_domain() {
     old_node_cert_domain=$(grep -A5 "server_name.*${current_node_domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -oP '/etc/nginx/ssl/\K[^/]+' | head -1)
 
     local start_line
-    start_line=$(grep -n "server_name" "${DIR_NGINX}nginx.conf" | grep -v '_' | sed -n '3p' | cut -d: -f1)
+    start_line=$(grep -n "server_name ${current_node_domain}" "${DIR_NGINX}nginx.conf" | head -1 | cut -d: -f1)
 
     if [ -n "$old_node_cert_domain" ] && [ "$old_node_cert_domain" != "$new_cert_domain" ]; then
         if [ -n "$start_line" ]; then
