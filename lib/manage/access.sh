@@ -134,8 +134,6 @@ manage_panel_access() {
             "──────────────────────────────────────" \
             "$_toggle_label" \
             "──────────────────────────────────────" \
-            "🔧  Восстановить конфиг Nginx" \
-            "──────────────────────────────────────" \
             "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
@@ -180,9 +178,7 @@ manage_panel_access() {
                 fi
                 ;;
             8) ;;
-            9) restore_nginx_config ;;
-            10) ;;
-            11) return ;;
+            9) return ;;
         esac
     done
 }
