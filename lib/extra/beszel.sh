@@ -331,7 +331,12 @@ install_beszel() {
     local _is_ip_mode=false
 
     reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
+    local _domain_rc=$?
     echo
+
+    if [ "$_domain_rc" -eq 2 ]; then
+        return 0
+    fi
 
     if [ -z "$BESZEL_DOMAIN" ]; then
         BESZEL_DOMAIN="$_server_ip"
@@ -562,6 +567,10 @@ NGINX
         fi
     fi
 
+    # ─── Откат при Ctrl+C ───
+    local _BZ_ABORT=false
+    trap '_BZ_ABORT=true' INT
+
     # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
     (
         mkdir -p "${DIR_BESZEL}"
@@ -606,6 +615,17 @@ YAML
     ) &
     show_spinner "Подготовка файлов"
 
+    if [ "$_BZ_ABORT" = true ]; then
+        echo
+        echo -e "${YELLOW}⚠  Установка прервана — откат изменений...${NC}"
+        nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
+        rm -rf "${DIR_BESZEL}" 2>/dev/null || true
+        rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
+        (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
+        trap - INT
+        return 0
+    fi
+
     # ─── Запускаем Beszel ───
     local _bz_install_log
     _bz_install_log=$(mktemp)
@@ -613,6 +633,17 @@ YAML
         cd "${DIR_BESZEL}" && docker compose up -d > "$_bz_install_log" 2>&1
     ) &
     if ! show_spinner "Установка Beszel"; then
+        if [ "$_BZ_ABORT" = true ]; then
+            echo
+            echo -e "${YELLOW}⚠  Установка прервана — откат изменений...${NC}"
+            docker compose -f "${DIR_BESZEL}docker-compose.yml" down --volumes >/dev/null 2>&1 || true
+            rm -rf "${DIR_BESZEL}" 2>/dev/null || true
+            nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
+            rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
+            (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
+            trap - INT
+            return 0
+        fi
         echo
         local _bz_err_detail
         _bz_err_detail=$(tail -40 "$_bz_install_log" 2>/dev/null)
@@ -655,6 +686,7 @@ YAML
     echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
+    trap - INT
     show_continue_prompt || return 0
 }
 
