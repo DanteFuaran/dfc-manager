@@ -279,11 +279,17 @@ installation_node_connect() {
     echo -e "  ${GREEN}🎉 Нода зарегистрирована в панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    if [ -n "$pubkey" ]; then
-        echo -e "${YELLOW}⚠️  Сертификат (Секретный ключ) для установки ноды${NC}"
-        echo
-        echo -e "${BLUE}──────────────────────────────────────${NC}"
-        echo
+    local _is_local_node=false
+    if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q "$SELFSTEAL_DOMAIN" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _is_local_node=true
+    fi
+    echo -e "${YELLOW}⚠️  Сертификат (Секретный ключ) для установки ноды${NC}"
+    echo
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo
+    if [ "$_is_local_node" = true ]; then
+        echo -e "${GREEN}Нода успешно подключена!${NC}"
+    elif [ -n "$pubkey" ]; then
         echo -e "${WHITE}${pubkey}${NC}"
         echo
         echo -e "${DARKGRAY}Используйте сертификат для установки ноды на удалённом сервере${NC}"
@@ -453,6 +459,7 @@ installation_node_local() {
                     IFS= read -rsn1 _owk 2>/dev/null
                     if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
                         tput cnorm 2>/dev/null; echo
+                        echo
                         _overwrite_domain=true
                         entity_name="$_existing_name"
                         _input_step=4
@@ -565,10 +572,10 @@ installation_node_local() {
         fi
     else
         echo
+        echo
         print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
     fi
 
-    echo
     echo
 
     local NODE_CERT_DOMAIN
