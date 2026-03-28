@@ -262,7 +262,33 @@ nginx_reload() {
     [ -f "${DIR_NGINX}nginx.conf" ] && nginx_restore_server_blocks
     # Убираем IPv6 директивы если IPv6 не поддерживается ядром
     nginx_strip_ipv6_if_disabled
+    # Убираем дублированные listen директивы
+    _nginx_dedup_listen
+    # Бэкапим конфиг перед запуском
+    cp -f "${DIR_NGINX}nginx.conf" "${DIR_NGINX}nginx.conf.bak" 2>/dev/null || true
+    # Проверяем конфиг перед перезапуском
+    if ! docker run --rm -v "${DIR_NGINX}nginx.conf:/etc/nginx/nginx.conf:ro" \
+         -v "${DIR_NGINX}ssl:/etc/nginx/ssl:ro" nginx:latest nginx -t >/dev/null 2>&1; then
+        # Конфиг невалидный — пробуем откатить
+        if [ -f "${DIR_NGINX}nginx.conf.bak" ]; then
+            cp -f "${DIR_NGINX}nginx.conf.bak" "${DIR_NGINX}nginx.conf" 2>/dev/null || true
+        fi
+    fi
     cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+}
+
+# ─── Убирает дублированные listen директивы в каждом server-блоке ───
+_nginx_dedup_listen() {
+    [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+    local tmp="${DIR_NGINX}nginx.conf.dedup"
+    awk '
+    /^[[:space:]]*server[[:space:]]*\{/ { in_server=1; delete seen }
+    /^[[:space:]]*\}/ { in_server=0 }
+    in_server && /^[[:space:]]*listen[[:space:]]/ {
+        if (seen[$0]++) next
+    }
+    { print }
+    ' "${DIR_NGINX}nginx.conf" > "$tmp" && mv "$tmp" "${DIR_NGINX}nginx.conf"
 }
 
 # ─── Убирает listen [::]: директивы из nginx.conf если IPv6 отключён ───
