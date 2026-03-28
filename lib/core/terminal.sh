@@ -60,21 +60,15 @@ cleanup_uninstalled() {
     fi
 }
 
-_DFC_INTERRUPTED=false
-
 handle_interrupt() {
-    # Блокируем ВСЕ сигналы — исключаем любой повторный вызов
     trap '' INT TERM HUP EXIT
-    # Восстанавливаем терминал в безопасное состояние
     stty sane 2>/dev/null || true
     tput cnorm 2>/dev/null || true
     printf "\033[0m" 2>/dev/null || true
-    if [ "$_DFC_INTERRUPTED" = false ]; then
-        _DFC_INTERRUPTED=true
-        printf '\n\033[0;31mСкрипт остановлен пользователем\033[0m\n\n'
-        cleanup_uninstalled 2>/dev/null || true
-    fi
-    exit 130
+    clear
+    printf '\n\033[0;31mСкрипт остановлен пользователем\033[0m\n\n'
+    cleanup_uninstalled 2>/dev/null || true
+    kill -9 $$ 2>/dev/null
 }
 
 trap cleanup_terminal EXIT
