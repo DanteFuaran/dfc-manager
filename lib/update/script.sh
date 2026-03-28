@@ -35,7 +35,7 @@ _delete_component_panel() {
 _delete_component_node() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}    🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${RED}⚠️  Все данные ноды будут удалены!${NC}"
@@ -73,7 +73,7 @@ _delete_component_node() {
         cd /opt/remnanode 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
-    show_spinner "Удаление ноды Remnawave"
+    show_spinner_prepare "Удаление ноды Remnawave"
     rm -rf /opt/remnanode
 
     # Обновляем nginx: перегенерируем для оставшихся компонентов
@@ -101,11 +101,12 @@ _delete_component_node() {
             nginx_ensure_conf_for_remaining
         fi
     ) &
-    show_spinner "Обновление конфигурации"
+    show_spinner_prepare "Обновление конфигурации"
 
     nginx_cleanup_unused_certs
 
-    print_success "Нода Remnawave удалена"
+    echo
+    print_success "Удаление Remnawave (Нода)"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || true
