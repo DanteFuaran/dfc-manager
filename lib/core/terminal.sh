@@ -70,7 +70,7 @@ handle_interrupt() {
     stty echo echoe icanon 2>/dev/null || true
     tput cnorm 2>/dev/null || true
     printf "\033[0m" 2>/dev/null || true
-    printf '\n\033[0;31mСкрипт остановлен пользователем\033[0m\n\n'
+    printf '\n\n\033[0;31mСкрипт остановлен пользователем\033[0m\n\n'
     cleanup_uninstalled 2>/dev/null || true
     exit 130
 }
