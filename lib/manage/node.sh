@@ -117,7 +117,7 @@ remove_node_from_panel() {
     # ─── Запуск сервисов ───
     (
         cd /opt/remnawave && docker compose up -d >/dev/null 2>&1
-        cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+        nginx_reload
     ) &
     show_spinner "Запуск сервисов"
 
