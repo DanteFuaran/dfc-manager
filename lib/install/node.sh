@@ -101,12 +101,15 @@ installation_node_connect() {
     # ─── Запрашиваем домен и имя ноды ───
     local SELFSTEAL_DOMAIN entity_name
     while true; do
+        tput sc 2>/dev/null || true
         prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
         while true; do
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                tput cuu1 2>/dev/null; tput el 2>/dev/null
+                tput rc 2>/dev/null || true
+                printf "\033[J" 2>/dev/null || true
+                SELFSTEAL_DOMAIN=""
                 break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
@@ -344,12 +347,15 @@ installation_node_local() {
     # ─── Запрашиваем selfsteal домен и имя ноды ───
     local SELFSTEAL_DOMAIN entity_name
     while true; do
+        tput sc 2>/dev/null || true
         prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
         while true; do
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                tput cuu1 2>/dev/null; tput el 2>/dev/null
+                tput rc 2>/dev/null || true
+                printf "\033[J" 2>/dev/null || true
+                SELFSTEAL_DOMAIN=""
                 break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
