@@ -203,15 +203,13 @@ installation_node_connect() {
 
     # ─── Удаляем существующую ноду при перезаписи ───
     if [[ "$_overwrite_domain" == true ]]; then
-        echo
-        print_action "Удаление существующей ноды..."
         if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            echo
             print_error "Не удалось удалить существующую ноду"
             echo
             show_continue_prompt || return 1
             return
         fi
-        print_success "Существующая нода удалена"
     fi
 
     local _cp_resp
@@ -517,15 +515,13 @@ installation_node_local() {
 
     # ─── Удаляем существующую ноду при перезаписи ───
     if [[ "$_overwrite_domain" == true ]]; then
-        echo
-        print_action "Удаление существующей ноды..."
         if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            echo
             print_error "Не удалось удалить существующую ноду"
             echo
             show_continue_prompt || return 1
             return
         fi
-        print_success "Существующая нода удалена"
     fi
 
     local response
