@@ -155,11 +155,43 @@ installation_node_connect() {
     token=$(cat "${DIR_SCRIPT}/token")
 
     # ─── Проверка уникальности ───
-    if ! check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
-        print_error "Домен $SELFSTEAL_DOMAIN уже используется в панели"
+    check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
+    local _cnd_rc=$?
+    if [[ $_cnd_rc -eq 2 ]]; then
         echo
         show_continue_prompt || return 1
         return
+    elif [[ $_cnd_rc -eq 1 ]]; then
+        echo
+        echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        _flush_stdin
+        tput civis 2>/dev/null
+        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+        local _owk
+        while true; do
+            IFS= read -rsn1 _owk 2>/dev/null
+            if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
+                tput cnorm 2>/dev/null; echo
+                break
+            elif [[ "$_owk" == $'\x1b' ]]; then
+                IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
+                if [[ -z "$_ows" ]]; then
+                    tput cnorm 2>/dev/null; echo
+                    return
+                fi
+                IFS= read -rsn1 -t 0.1 2>/dev/null || true
+            fi
+        done
+        echo
+        print_action "Удаление существующей ноды..."
+        if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            print_error "Не удалось удалить существующую ноду"
+            echo
+            show_continue_prompt || return 1
+            return
+        fi
+        print_success "Существующая нода удалена"
     fi
 
     local _cp_resp
@@ -417,11 +449,43 @@ installation_node_local() {
     token=$(cat "${DIR_SCRIPT}/token")
 
     # ─── Проверка уникальности домена/имени в API (до изменения конфигов) ───
-    if ! check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
-        print_error "Домен $SELFSTEAL_DOMAIN уже используется в панели"
+    check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
+    local _cnd_rc=$?
+    if [[ $_cnd_rc -eq 2 ]]; then
         echo
         show_continue_prompt || return 1
         return
+    elif [[ $_cnd_rc -eq 1 ]]; then
+        echo
+        echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        _flush_stdin
+        tput civis 2>/dev/null
+        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+        local _owk
+        while true; do
+            IFS= read -rsn1 _owk 2>/dev/null
+            if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
+                tput cnorm 2>/dev/null; echo
+                break
+            elif [[ "$_owk" == $'\x1b' ]]; then
+                IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
+                if [[ -z "$_ows" ]]; then
+                    tput cnorm 2>/dev/null; echo
+                    return
+                fi
+                IFS= read -rsn1 -t 0.1 2>/dev/null || true
+            fi
+        done
+        echo
+        print_action "Удаление существующей ноды..."
+        if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            print_error "Не удалось удалить существующую ноду"
+            echo
+            show_continue_prompt || return 1
+            return
+        fi
+        print_success "Существующая нода удалена"
     fi
 
     local response
