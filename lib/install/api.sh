@@ -394,6 +394,32 @@ delete_config_profile() {
     fi
 }
 
+delete_node_by_domain() {
+    local domain_url=$1
+    local token=$2
+    local domain=$3
+
+    local response
+    response=$(make_api_request "GET" "$domain_url/api/nodes" "$token")
+    [ -z "$response" ] && return 1
+
+    local node_uuid config_profile_uuid
+    node_uuid=$(echo "$response" | jq -r --arg addr "$domain" \
+        '.response[] | select(.address == $addr) | .uuid' 2>/dev/null)
+    config_profile_uuid=$(echo "$response" | jq -r --arg addr "$domain" \
+        '.response[] | select(.address == $addr) | .configProfile.activeConfigProfileUuid' 2>/dev/null)
+
+    [ -z "$node_uuid" ] && return 1
+
+    make_api_request "DELETE" "$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
+
+    if [ -n "$config_profile_uuid" ] && [ "$config_profile_uuid" != "null" ]; then
+        make_api_request "DELETE" "$domain_url/api/config-profiles/$config_profile_uuid" "$token" >/dev/null 2>&1
+    fi
+
+    return 0
+}
+
 create_node() {
     local domain_url=$1
     local token=$2
