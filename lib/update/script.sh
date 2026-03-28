@@ -42,6 +42,11 @@ _delete_component_node() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if ! confirm_action; then return; fi
+
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     # Извлекаем инфо из nginx.conf до удаления (для перегенерации)
