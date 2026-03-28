@@ -106,7 +106,8 @@ installation_node_connect() {
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                continue
+                tput cuu1 2>/dev/null; tput el 2>/dev/null
+                break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
             if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
@@ -348,7 +349,8 @@ installation_node_local() {
             reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
-                continue
+                tput cuu1 2>/dev/null; tput el 2>/dev/null
+                break
             fi
             if [[ -z "$entity_name" ]]; then continue; fi
             if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
