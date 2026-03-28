@@ -98,43 +98,58 @@ installation_node_connect() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # ─── Запрашиваем домен и имя ноды ───
+    # ─── Запрашиваем домен, имя ноды и авторизуемся ───
     local SELFSTEAL_DOMAIN entity_name
+    local _input_step=1
     while true; do
-        tput sc 2>/dev/null || true
-        prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
-        while true; do
-            reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
-            local _rc_en=$?
-            if [[ $_rc_en -eq 2 ]]; then
-                tput rc 2>/dev/null || true
-                printf "\033[J" 2>/dev/null || true
-                SELFSTEAL_DOMAIN=""
-                break
-            fi
-            if [[ -z "$entity_name" ]]; then continue; fi
-            if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
-                if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                    break 2
-                else
-                    print_error "Название должно быть от 3 до 20 символов"
+        if [[ $_input_step -eq 1 ]]; then
+            tput sc 2>/dev/null || true
+            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
+            _input_step=2
+        fi
+        if [[ $_input_step -eq 2 ]]; then
+            while true; do
+                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
+                local _rc_en=$?
+                if [[ $_rc_en -eq 2 ]]; then
+                    tput rc 2>/dev/null || true
+                    printf "\033[J" 2>/dev/null || true
+                    SELFSTEAL_DOMAIN=""
+                    _input_step=1
+                    break
                 fi
-            else
-                print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
-            fi
-        done
+                if [[ -z "$entity_name" ]]; then continue; fi
+                if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                    if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
+                        _input_step=3
+                        break
+                    else
+                        print_error "Название должно быть от 3 до 20 символов"
+                    fi
+                else
+                    print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
+                fi
+            done
+            [[ $_input_step -ne 3 ]] && continue
+        fi
+        # ─── Авторизация в панели ───
+        local _gpt_rc
+        get_panel_token; _gpt_rc=$?
+        if [[ $_gpt_rc -eq 2 ]]; then
+            # Esc из логина — вернуться к вводу имени
+            tput cuu1 2>/dev/null; tput el 2>/dev/null
+            _input_step=2
+            entity_name=""
+            continue
+        fi
+        if [[ $_gpt_rc -ne 0 ]]; then
+            echo -e "${YELLOW}Авторизация отменена${NC}"
+            echo
+            show_continue_prompt || return 1
+            return
+        fi
+        break
     done
-
-    # ─── Авторизация в панели ───
-    local _gpt_rc
-    get_panel_token; _gpt_rc=$?
-    if [[ $_gpt_rc -eq 2 ]]; then return; fi
-    if [[ $_gpt_rc -ne 0 ]]; then
-        echo -e "${YELLOW}Авторизация отменена${NC}"
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
     local token
     token=$(cat "${DIR_SCRIPT}/token")
 
@@ -344,43 +359,57 @@ installation_node_local() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    # ─── Запрашиваем selfsteal домен и имя ноды ───
+    # ─── Запрашиваем selfsteal домен, имя ноды и авторизуемся ───
     local SELFSTEAL_DOMAIN entity_name
+    local _input_step=1
     while true; do
-        tput sc 2>/dev/null || true
-        prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
-        while true; do
-            reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
-            local _rc_en=$?
-            if [[ $_rc_en -eq 2 ]]; then
-                tput rc 2>/dev/null || true
-                printf "\033[J" 2>/dev/null || true
-                SELFSTEAL_DOMAIN=""
-                break
-            fi
-            if [[ -z "$entity_name" ]]; then continue; fi
-            if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
-                if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                    break 2  # всё введено — выходим из обоих циклов
-                else
-                    print_error "Название должно быть от 3 до 20 символов"
+        if [[ $_input_step -eq 1 ]]; then
+            tput sc 2>/dev/null || true
+            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
+            _input_step=2
+        fi
+        if [[ $_input_step -eq 2 ]]; then
+            while true; do
+                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
+                local _rc_en=$?
+                if [[ $_rc_en -eq 2 ]]; then
+                    tput rc 2>/dev/null || true
+                    printf "\033[J" 2>/dev/null || true
+                    SELFSTEAL_DOMAIN=""
+                    _input_step=1
+                    break
                 fi
-            else
-                print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
-            fi
-        done
+                if [[ -z "$entity_name" ]]; then continue; fi
+                if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
+                    if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
+                        _input_step=3
+                        break
+                    else
+                        print_error "Название должно быть от 3 до 20 символов"
+                    fi
+                else
+                    print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
+                fi
+            done
+            [[ $_input_step -ne 3 ]] && continue
+        fi
+        # ─── Авторизация в панели (до изменения конфигов) ───
+        local _gpt_rc
+        get_panel_token; _gpt_rc=$?
+        if [[ $_gpt_rc -eq 2 ]]; then
+            tput cuu1 2>/dev/null; tput el 2>/dev/null
+            _input_step=2
+            entity_name=""
+            continue
+        fi
+        if [[ $_gpt_rc -ne 0 ]]; then
+            echo -e "${YELLOW}Установка отменена${NC}"
+            echo
+            show_continue_prompt || return 1
+            return
+        fi
+        break
     done
-
-    # ─── Авторизация в панели (до изменения конфигов) ───
-    local _gpt_rc
-    get_panel_token; _gpt_rc=$?
-    if [[ $_gpt_rc -eq 2 ]]; then return; fi
-    if [[ $_gpt_rc -ne 0 ]]; then
-        echo -e "${YELLOW}Установка отменена${NC}"
-        echo
-        show_continue_prompt || return 1
-        return
-    fi
     local token
     token=$(cat "${DIR_SCRIPT}/token")
 
