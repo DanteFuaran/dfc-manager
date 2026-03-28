@@ -12,13 +12,9 @@ parse_version_from_file() {
 
 get_installed_version() {
     local ver=""
-    # Приоритет: /opt/remnawave/version, затем /usr/local/remnawave/version
-    for _vf in "${DIR_PANEL}version" "${DIR_SCRIPT}version"; do
-        if [ -f "$_vf" ]; then
-            ver=$(parse_version_from_file "$_vf")
-            [ -n "$ver" ] && break
-        fi
-    done
+    if [ -f "${DIR_SCRIPT}version" ]; then
+        ver=$(parse_version_from_file "${DIR_SCRIPT}version")
+    fi
     [ -z "$ver" ] && ver="$SCRIPT_VERSION"
     echo "$ver"
 }
