@@ -166,7 +166,8 @@ show_arrow_menu() {
     tput civis 2>/dev/null || true
 
     # Отключаем canonical mode и echo, включаем чтение отдельных символов
-    stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    # -isig: отключаем генерацию сигналов от Ctrl+C — обрабатываем его вручную как $'\003'
+    stty -icanon -echo -isig min 1 time 0 2>/dev/null || true
 
     # Функция восстановления терминала
     _restore_stty() {
