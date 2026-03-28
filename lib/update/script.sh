@@ -72,21 +72,16 @@ _delete_component_node() {
     (
         cd /opt/remnanode 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
-    ) &
-    show_spinner_prepare "Удаление ноды Remnawave"
-    rm -rf /opt/remnanode
+        rm -rf /opt/remnanode
 
-    # Обновляем nginx: перегенерируем для оставшихся компонентов
-    (
+        # Обновляем nginx: перегенерируем для оставшихся компонентов
         if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
             if [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
-                # Панель + subpage остались
                 generate_docker_compose_panel "$_panel_cert" "$_sub_cert"
                 generate_nginx_conf_panel "$_panel_domain" "$_sub_domain" \
                     "$_panel_cert" "$_sub_cert" \
                     "$_cookie_name" "$_cookie_value"
             else
-                # Только панель осталась
                 generate_docker_compose_panel_only "$_panel_cert"
                 generate_nginx_conf_panel_only "$_panel_domain" "$_panel_cert" \
                     "$_cookie_name" "$_cookie_value"
@@ -94,19 +89,15 @@ _delete_component_node() {
             cd /opt/remnawave 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
             nginx_reload
         elif [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
-            # Только subpage осталась
             generate_nginx_conf_subpage "$_sub_domain" "$_sub_cert" "$_sub_dir"
             nginx_reload
         else
             nginx_ensure_conf_for_remaining
         fi
+
+        nginx_cleanup_unused_certs
     ) &
-    show_spinner_prepare "Обновление конфигурации"
-
-    nginx_cleanup_unused_certs
-
-    echo
-    print_success "Удаление Remnawave (Нода)"
+    show_spinner "Удаление Remnawave (Нода)"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || true
