@@ -251,8 +251,10 @@ prompt_domain_with_retry() {
         # Выводим сообщение об ошибке (если есть) после очистки строки спиннера
         local _out_lines=0
         if [ -n "$_check_out" ]; then
+            echo
             printf "%s\n" "$_check_out"
             _out_lines=$(echo "$_check_out" | wc -l)
+            _out_lines=$((_out_lines + 1))
         fi
 
         if [ "$_check_rc" = "0" ]; then
