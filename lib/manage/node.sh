@@ -178,17 +178,45 @@ add_node_to_panel() {
     local SELFSTEAL_DOMAIN=""
     local entity_name=""
     local _step=1
+    local _overwrite_domain=false
 
     while true; do
         if [[ $_step -eq 1 ]]; then
+            _overwrite_domain=false
             reading_inline "Введите selfsteal домен для ноды (например, node.example.com):" SELFSTEAL_DOMAIN
             local _rc_sd=$?
             if [[ $_rc_sd -eq 2 ]]; then
                 return
             fi
             if [[ -z "$SELFSTEAL_DOMAIN" ]]; then continue; fi
-            if check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
+            local _cnd_rc=$?
+            if [[ $_cnd_rc -eq 0 ]]; then
                 _step=2
+            elif [[ $_cnd_rc -eq 1 ]]; then
+                echo
+                echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                _flush_stdin
+                tput civis 2>/dev/null
+                printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+                local _owk
+                while true; do
+                    IFS= read -rsn1 _owk 2>/dev/null
+                    if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
+                        tput cnorm 2>/dev/null; echo
+                        _overwrite_domain=true
+                        _step=2
+                        break
+                    elif [[ "$_owk" == $'\x1b' ]]; then
+                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
+                        if [[ -z "$_ows" ]]; then
+                            tput cnorm 2>/dev/null; echo
+                            return
+                        fi
+                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
+                    fi
+                done
             else
                 echo -e "${YELLOW}Пожалуйста, используйте другой домен${NC}"
             fi
@@ -218,6 +246,18 @@ add_node_to_panel() {
             fi
         fi
     done
+
+    # Если перезаписываем — удаляем существующую ноду
+    if [[ "$_overwrite_domain" == true ]]; then
+        echo
+        print_action "Удаление существующей ноды..."
+        if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            print_error "Не удалось удалить существующую ноду"
+            show_continue_prompt || true
+            return 1
+        fi
+        print_success "Существующая нода удалена"
+    fi
 
     echo
     print_action "Генерация REALITY ключей..."
