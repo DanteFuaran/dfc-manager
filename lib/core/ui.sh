@@ -166,8 +166,7 @@ show_arrow_menu() {
     tput civis 2>/dev/null || true
 
     # Отключаем canonical mode и echo, включаем чтение отдельных символов
-    # -isig: отключаем генерацию сигналов от Ctrl+C — обрабатываем его вручную как $'\003'
-    stty -icanon -echo -isig min 1 time 0 2>/dev/null || true
+    stty -icanon -echo isig min 1 time 0 2>/dev/null || true
 
     # Функция восстановления терминала
     _restore_stty() {
@@ -231,19 +230,8 @@ show_arrow_menu() {
         echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
         echo
 
-        local key _read_rc
-        read -rsn1 key 2>/dev/null; _read_rc=$?
-        if [ $_read_rc -ne 0 ] && [ -z "$key" ]; then
-            _restore_stty
-            tput cnorm 2>/dev/null || true
-            handle_interrupt
-        fi
-        # Ctrl+C как символ (если isig выключен)
-        if [[ "$key" == $'\003' ]]; then
-            _restore_stty
-            tput cnorm 2>/dev/null || true
-            handle_interrupt
-        fi
+        local key
+        read -rsn1 key 2>/dev/null || key=""
 
         # Проверяем escape-последовательность для стрелок
         if [[ "$key" == $'\e' ]]; then
@@ -320,10 +308,6 @@ reading() {
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
-        elif [[ "$char" == $'\x03' ]]; then
-            echo -en "\033[0m"
-            if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
-            handle_interrupt
         elif [[ "$char" == $'\x7f' ]] || [[ "$char" == $'\x08' ]]; then
             if [[ -n "$input" ]]; then
                 input="${input%?}"
@@ -366,10 +350,6 @@ reading_inline() {
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
-        elif [[ "$char" == $'\x03' ]]; then
-            echo -en "\033[0m"
-            if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
-            handle_interrupt
         elif [[ "$char" == $'\x7f' ]] || [[ "$char" == $'\x08' ]]; then
             if [[ -n "$input" ]]; then
                 input="${input%?}"
