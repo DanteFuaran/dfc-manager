@@ -162,7 +162,6 @@ installation_panel() {
             generate_nginx_conf_panel_only "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         fi
-        cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
     ) &
     show_spinner "Подготовка файлов" || true
 
