@@ -136,7 +136,8 @@ installation_node_connect() {
         local _gpt_rc
         get_panel_token; _gpt_rc=$?
         if [[ $_gpt_rc -eq 2 ]]; then
-            # Esc из логина — вернуться к вводу имени
+            # Esc из логина — вернуться к вводу имени (убираем строку логина и строку имени)
+            tput cuu1 2>/dev/null; tput el 2>/dev/null
             tput cuu1 2>/dev/null; tput el 2>/dev/null
             _input_step=2
             entity_name=""
@@ -397,6 +398,8 @@ installation_node_local() {
         local _gpt_rc
         get_panel_token; _gpt_rc=$?
         if [[ $_gpt_rc -eq 2 ]]; then
+            # Esc из логина — вернуться к вводу имени (убираем строку логина и строку имени)
+            tput cuu1 2>/dev/null; tput el 2>/dev/null
             tput cuu1 2>/dev/null; tput el 2>/dev/null
             _input_step=2
             entity_name=""
