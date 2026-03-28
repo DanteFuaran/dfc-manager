@@ -235,7 +235,6 @@ prompt_domain_with_retry() {
         local _check_pid=$!
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
-        echo
         tput civis 2>/dev/null || true
         while kill -0 $_check_pid 2>/dev/null; do
             printf "\r\033[K${GREEN}%s${NC}  Проверка домена" "${_spin[$_si]}"
@@ -264,8 +263,8 @@ prompt_domain_with_retry() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}S${DARKGRAY}: Пропустить   ${BLUE}Esc${DARKGRAY}: Назад${NC}"
 
-        # input_line + error_lines + empty + separator + action_prompt
-        local _total_lines=$((_out_lines + 5))
+        # error_line + error_lines + empty + separator + action_prompt
+        local _total_lines=$((_out_lines + 4))
 
         tput civis 2>/dev/null || true
         local key
