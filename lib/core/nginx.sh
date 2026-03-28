@@ -216,10 +216,13 @@ nginx_restore_server_blocks() {
         grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
         content="${_NGINX_EXTERNAL_BLOCKS[$name]}"
         if $uses_socket; then
-            # Заменяем listen 443 → unix socket
-            content=$(printf '%s\n' "$content" | sed \
-                -e '/listen \[::\]:443/d' \
-                -e 's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+            # Убираем IPv6
+            content=$(printf '%s\n' "$content" | sed '/listen \[::\]:443/d')
+            # Добавляем unix socket listen если отсутствует (не заменяем listen 443 ssl;)
+            if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;|')
+            fi
             # Добавляем proxy_protocol headers если отсутствуют
             if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
                 content=$(printf '%s\n' "$content" | sed '/http2 on;/a\
@@ -227,9 +230,15 @@ nginx_restore_server_blocks() {
     set_real_ip_from unix:;')
             fi
         else
-            # Заменяем unix socket → listen 443
+            # Убираем unix socket и proxy_protocol, добавляем listen 443
+            if ! printf '%s' "$content" | grep -q 'listen 443 ssl;'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    's|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|listen 443 ssl;\n    listen [::]:443 ssl;|')
+            else
+                content=$(printf '%s\n' "$content" | sed \
+                    '/listen unix:\/dev\/shm\/nginx.sock/d')
+            fi
             content=$(printf '%s\n' "$content" | sed \
-                -e 's|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|listen 443 ssl;\n    listen [::]:443 ssl;|' \
                 -e '/real_ip_header proxy_protocol;/d' \
                 -e '/set_real_ip_from unix:;/d')
         fi
