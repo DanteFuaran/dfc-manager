@@ -308,7 +308,7 @@ check_node_domain() {
 
     if [ -z "$response" ]; then
         print_error "Ошибка при проверке домена"
-        return 1
+        return 2
     fi
 
     if echo "$response" | jq -e '.response' >/dev/null 2>&1; then
@@ -316,14 +316,11 @@ check_node_domain() {
         existing_domain=$(echo "$response" | jq -r --arg addr "$domain" \
             '.response[] | select(.address == $addr) | .address' 2>/dev/null)
         if [ -n "$existing_domain" ]; then
-            print_error "Домен уже используется: $domain"
             return 1
         fi
         return 0
     else
-        local error_message
-        error_message=$(echo "$response" | jq -r '.message // "Unknown error"')
-        print_error "Ошибка при проверке домена: $error_message"
-        return 1
+        print_error "Ошибка при проверке домена"
+        return 2
     fi
 }
