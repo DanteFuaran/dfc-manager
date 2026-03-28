@@ -195,7 +195,7 @@ add_node_to_panel() {
                 _step=2
             elif [[ $_cnd_rc -eq 1 ]]; then
                 echo
-                echo -e "${RED}✖ Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${RED}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
