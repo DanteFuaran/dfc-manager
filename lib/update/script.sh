@@ -437,10 +437,7 @@ update_script() {
                 "${remote_version}" "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" \
                 > "${DIR_SCRIPT}version"
         fi
-        # Копируем version файл в директорию панели (рядом с .env)
-        if [ -d "${DIR_PANEL}" ]; then
-            cp -f "${DIR_SCRIPT}version" "${DIR_PANEL}version" 2>/dev/null || true
-        fi
+
         rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
         print_success "Скрипт успешно обновлён до версии v$remote_version"
         echo
