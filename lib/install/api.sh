@@ -411,6 +411,18 @@ delete_node_by_domain() {
 
     [ -z "$node_uuid" ] && return 1
 
+    # Удаляем хосты, привязанные к конфиг-профилю этой ноды
+    if [ -n "$config_profile_uuid" ] && [ "$config_profile_uuid" != "null" ]; then
+        local hosts_response host_uuids
+        hosts_response=$(make_api_request "GET" "$domain_url/api/hosts" "$token")
+        host_uuids=$(echo "$hosts_response" | jq -r --arg cp "$config_profile_uuid" \
+            '.response[] | select(.inbound.configProfileUuid == $cp) | .uuid' 2>/dev/null)
+        while IFS= read -r host_uuid; do
+            [ -z "$host_uuid" ] && continue
+            make_api_request "DELETE" "$domain_url/api/hosts/$host_uuid" "$token" >/dev/null 2>&1
+        done <<< "$host_uuids"
+    fi
+
     make_api_request "DELETE" "$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
 
     if [ -n "$config_profile_uuid" ] && [ "$config_profile_uuid" != "null" ]; then
