@@ -459,7 +459,6 @@ installation_node_local() {
                     IFS= read -rsn1 _owk 2>/dev/null
                     if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
                         tput cnorm 2>/dev/null; echo
-                        echo
                         _overwrite_domain=true
                         entity_name="$_existing_name"
                         _input_step=4
