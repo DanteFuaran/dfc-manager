@@ -61,7 +61,7 @@ cleanup_uninstalled() {
 }
 
 handle_interrupt() {
-    trap '' INT TERM HUP EXIT
+    trap '' INT TERM HUP
     if [ -n "${ORIGINAL_STTY:-}" ]; then
         stty "$ORIGINAL_STTY" 2>/dev/null || stty sane 2>/dev/null || true
     else
