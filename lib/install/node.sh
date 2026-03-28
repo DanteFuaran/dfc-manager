@@ -98,33 +98,26 @@ installation_node_connect() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # ─── Запрашиваем домен, авторизуемся, проверяем и вводим имя ───
+    # ─── Авторизуемся, затем запрашиваем домен и имя ───
     local SELFSTEAL_DOMAIN entity_name
     local _input_step=1
     local _overwrite_domain=false
     while true; do
         if [[ $_input_step -eq 1 ]]; then
-            tput sc 2>/dev/null || true
-            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
-            _input_step=2
-        fi
-        if [[ $_input_step -eq 2 ]]; then
             # ─── Авторизация в панели ───
             local _gpt_rc
             get_panel_token; _gpt_rc=$?
-            if [[ $_gpt_rc -eq 2 ]]; then
-                tput rc 2>/dev/null || true
-                printf "\033[J" 2>/dev/null || true
-                SELFSTEAL_DOMAIN=""
-                _input_step=1
-                continue
-            fi
             if [[ $_gpt_rc -ne 0 ]]; then
                 echo -e "${YELLOW}Авторизация отменена${NC}"
                 echo
                 show_continue_prompt || return 1
                 return
             fi
+            tput sc 2>/dev/null || true
+            _input_step=2
+        fi
+        if [[ $_input_step -eq 2 ]]; then
+            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
             # ─── Проверка домена в панели ───
             local _chk_token
             _chk_token=$(cat "${DIR_SCRIPT}/token")
@@ -160,13 +153,12 @@ installation_node_connect() {
                             tput rc 2>/dev/null || true
                             printf "\033[J" 2>/dev/null || true
                             SELFSTEAL_DOMAIN=""
-                            _input_step=1
                             break
                         fi
                         IFS= read -rsn1 -t 0.1 2>/dev/null || true
                     fi
                 done
-                [[ $_input_step -eq 1 ]] && continue
+                [[ $_input_step -eq 4 ]] || continue
             else
                 _input_step=3
             fi
@@ -179,7 +171,7 @@ installation_node_connect() {
                     tput rc 2>/dev/null || true
                     printf "\033[J" 2>/dev/null || true
                     SELFSTEAL_DOMAIN=""
-                    _input_step=1
+                    _input_step=2
                     break
                 fi
                 if [[ -z "$entity_name" ]]; then continue; fi
