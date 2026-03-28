@@ -755,7 +755,6 @@ _installation_subpage_standalone() {
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
-        cp -f "${DIR_SCRIPT}version" "${SUBPAGE_DIR}/version" 2>/dev/null || true
     ) &
     show_spinner "Подготовка файлов" || true
 
