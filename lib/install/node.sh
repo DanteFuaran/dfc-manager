@@ -98,9 +98,10 @@ installation_node_connect() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    # ─── Запрашиваем домен, имя ноды и авторизуемся ───
+    # ─── Запрашиваем домен, авторизуемся, проверяем и вводим имя ───
     local SELFSTEAL_DOMAIN entity_name
     local _input_step=1
+    local _overwrite_domain=false
     while true; do
         if [[ $_input_step -eq 1 ]]; then
             tput sc 2>/dev/null || true
@@ -108,6 +109,68 @@ installation_node_connect() {
             _input_step=2
         fi
         if [[ $_input_step -eq 2 ]]; then
+            # ─── Авторизация в панели ───
+            local _gpt_rc
+            get_panel_token; _gpt_rc=$?
+            if [[ $_gpt_rc -eq 2 ]]; then
+                tput rc 2>/dev/null || true
+                printf "\033[J" 2>/dev/null || true
+                SELFSTEAL_DOMAIN=""
+                _input_step=1
+                continue
+            fi
+            if [[ $_gpt_rc -ne 0 ]]; then
+                echo -e "${YELLOW}Авторизация отменена${NC}"
+                echo
+                show_continue_prompt || return 1
+                return
+            fi
+            # ─── Проверка домена в панели ───
+            local _chk_token
+            _chk_token=$(cat "${DIR_SCRIPT}/token")
+            check_node_domain "$domain_url" "$_chk_token" "$SELFSTEAL_DOMAIN"
+            local _cnd_rc=$?
+            if [[ $_cnd_rc -eq 2 ]]; then
+                echo
+                show_continue_prompt || return 1
+                return
+            elif [[ $_cnd_rc -eq 1 ]]; then
+                local _existing_name _owk _ows
+                _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
+                    jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
+                echo
+                echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                _flush_stdin
+                tput civis 2>/dev/null
+                printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+                while true; do
+                    IFS= read -rsn1 _owk 2>/dev/null
+                    if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
+                        tput cnorm 2>/dev/null; echo
+                        _overwrite_domain=true
+                        entity_name="$_existing_name"
+                        _input_step=4
+                        break
+                    elif [[ "$_owk" == $'\x1b' ]]; then
+                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
+                        if [[ -z "$_ows" ]]; then
+                            tput cnorm 2>/dev/null; echo
+                            tput rc 2>/dev/null || true
+                            printf "\033[J" 2>/dev/null || true
+                            SELFSTEAL_DOMAIN=""
+                            _input_step=1
+                            break
+                        fi
+                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
+                    fi
+                done
+                [[ $_input_step -eq 1 ]] && continue
+            else
+                _input_step=3
+            fi
+        fi
+        if [[ $_input_step -eq 3 ]]; then
             while true; do
                 reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
                 local _rc_en=$?
@@ -121,7 +184,7 @@ installation_node_connect() {
                 if [[ -z "$entity_name" ]]; then continue; fi
                 if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
                     if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                        _input_step=3
+                        _input_step=4
                         break
                     else
                         print_error "Название должно быть от 3 до 20 символов"
@@ -130,59 +193,15 @@ installation_node_connect() {
                     print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
                 fi
             done
-            [[ $_input_step -ne 3 ]] && continue
-        fi
-        # ─── Авторизация в панели ───
-        local _gpt_rc
-        get_panel_token; _gpt_rc=$?
-        if [[ $_gpt_rc -eq 2 ]]; then
-            # Esc из логина — вернуться к вводу имени (убираем строку логина и строку имени)
-            tput cuu1 2>/dev/null; tput el 2>/dev/null
-            tput cuu1 2>/dev/null; tput el 2>/dev/null
-            _input_step=2
-            entity_name=""
-            continue
-        fi
-        if [[ $_gpt_rc -ne 0 ]]; then
-            echo -e "${YELLOW}Авторизация отменена${NC}"
-            echo
-            show_continue_prompt || return 1
-            return
+            [[ $_input_step -eq 4 ]] || continue
         fi
         break
     done
     local token
     token=$(cat "${DIR_SCRIPT}/token")
 
-    # ─── Проверка уникальности ───
-    check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
-    local _cnd_rc=$?
-    if [[ $_cnd_rc -eq 2 ]]; then
-        echo
-        show_continue_prompt || return 1
-        return
-    elif [[ $_cnd_rc -eq 1 ]]; then
-        echo
-        echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        _flush_stdin
-        tput civis 2>/dev/null
-        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
-        local _owk
-        while true; do
-            IFS= read -rsn1 _owk 2>/dev/null
-            if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
-                tput cnorm 2>/dev/null; echo
-                break
-            elif [[ "$_owk" == $'\x1b' ]]; then
-                IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
-                if [[ -z "$_ows" ]]; then
-                    tput cnorm 2>/dev/null; echo
-                    return
-                fi
-                IFS= read -rsn1 -t 0.1 2>/dev/null || true
-            fi
-        done
+    # ─── Удаляем существующую ноду при перезаписи ───
+    if [[ "$_overwrite_domain" == true ]]; then
         echo
         print_action "Удаление существующей ноды..."
         if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
@@ -392,9 +411,10 @@ installation_node_local() {
     local AUTO_CERT_METHOD
     AUTO_CERT_METHOD=$(detect_cert_method "$panel_domain")
 
-    # ─── Запрашиваем selfsteal домен, имя ноды и авторизуемся ───
+    # ─── Запрашиваем selfsteal домен, авторизуемся, проверяем и вводим имя ───
     local SELFSTEAL_DOMAIN entity_name
     local _input_step=1
+    local _overwrite_domain=false
     while true; do
         if [[ $_input_step -eq 1 ]]; then
             tput sc 2>/dev/null || true
@@ -402,6 +422,68 @@ installation_node_local() {
             _input_step=2
         fi
         if [[ $_input_step -eq 2 ]]; then
+            # ─── Авторизация в панели (до изменения конфигов) ───
+            local _gpt_rc
+            get_panel_token; _gpt_rc=$?
+            if [[ $_gpt_rc -eq 2 ]]; then
+                tput rc 2>/dev/null || true
+                printf "\033[J" 2>/dev/null || true
+                SELFSTEAL_DOMAIN=""
+                _input_step=1
+                continue
+            fi
+            if [[ $_gpt_rc -ne 0 ]]; then
+                echo -e "${YELLOW}Установка отменена${NC}"
+                echo
+                show_continue_prompt || return 1
+                return
+            fi
+            # ─── Проверка домена в панели (до изменения конфигов) ───
+            local _chk_token
+            _chk_token=$(cat "${DIR_SCRIPT}/token")
+            check_node_domain "$domain_url" "$_chk_token" "$SELFSTEAL_DOMAIN"
+            local _cnd_rc=$?
+            if [[ $_cnd_rc -eq 2 ]]; then
+                echo
+                show_continue_prompt || return 1
+                return
+            elif [[ $_cnd_rc -eq 1 ]]; then
+                local _existing_name _owk _ows
+                _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
+                    jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
+                echo
+                echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                _flush_stdin
+                tput civis 2>/dev/null
+                printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+                while true; do
+                    IFS= read -rsn1 _owk 2>/dev/null
+                    if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
+                        tput cnorm 2>/dev/null; echo
+                        _overwrite_domain=true
+                        entity_name="$_existing_name"
+                        _input_step=4
+                        break
+                    elif [[ "$_owk" == $'\x1b' ]]; then
+                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
+                        if [[ -z "$_ows" ]]; then
+                            tput cnorm 2>/dev/null; echo
+                            tput rc 2>/dev/null || true
+                            printf "\033[J" 2>/dev/null || true
+                            SELFSTEAL_DOMAIN=""
+                            _input_step=1
+                            break
+                        fi
+                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
+                    fi
+                done
+                [[ $_input_step -eq 1 ]] && continue
+            else
+                _input_step=3
+            fi
+        fi
+        if [[ $_input_step -eq 3 ]]; then
             while true; do
                 reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
                 local _rc_en=$?
@@ -415,7 +497,7 @@ installation_node_local() {
                 if [[ -z "$entity_name" ]]; then continue; fi
                 if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
                     if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                        _input_step=3
+                        _input_step=4
                         break
                     else
                         print_error "Название должно быть от 3 до 20 символов"
@@ -424,59 +506,15 @@ installation_node_local() {
                     print_error "Допустимы только символы: a-zA-Z0-9 и дефис"
                 fi
             done
-            [[ $_input_step -ne 3 ]] && continue
-        fi
-        # ─── Авторизация в панели (до изменения конфигов) ───
-        local _gpt_rc
-        get_panel_token; _gpt_rc=$?
-        if [[ $_gpt_rc -eq 2 ]]; then
-            # Esc из логина — вернуться к вводу имени (убираем строку логина и строку имени)
-            tput cuu1 2>/dev/null; tput el 2>/dev/null
-            tput cuu1 2>/dev/null; tput el 2>/dev/null
-            _input_step=2
-            entity_name=""
-            continue
-        fi
-        if [[ $_gpt_rc -ne 0 ]]; then
-            echo -e "${YELLOW}Установка отменена${NC}"
-            echo
-            show_continue_prompt || return 1
-            return
+            [[ $_input_step -eq 4 ]] || continue
         fi
         break
     done
     local token
     token=$(cat "${DIR_SCRIPT}/token")
 
-    # ─── Проверка уникальности домена/имени в API (до изменения конфигов) ───
-    check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
-    local _cnd_rc=$?
-    if [[ $_cnd_rc -eq 2 ]]; then
-        echo
-        show_continue_prompt || return 1
-        return
-    elif [[ $_cnd_rc -eq 1 ]]; then
-        echo
-        echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        _flush_stdin
-        tput civis 2>/dev/null
-        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Перезаписать    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
-        local _owk
-        while true; do
-            IFS= read -rsn1 _owk 2>/dev/null
-            if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
-                tput cnorm 2>/dev/null; echo
-                break
-            elif [[ "$_owk" == $'\x1b' ]]; then
-                IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
-                if [[ -z "$_ows" ]]; then
-                    tput cnorm 2>/dev/null; echo
-                    return
-                fi
-                IFS= read -rsn1 -t 0.1 2>/dev/null || true
-            fi
-        done
+    # ─── Удаляем существующую ноду при перезаписи ───
+    if [[ "$_overwrite_domain" == true ]]; then
         echo
         print_action "Удаление существующей ноды..."
         if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
