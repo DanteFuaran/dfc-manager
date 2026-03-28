@@ -139,7 +139,8 @@ installation_node_connect() {
                 _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
                     jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
                 echo
-                echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${RED}✖ Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
                 tput civis 2>/dev/null
@@ -452,7 +453,8 @@ installation_node_local() {
                 _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
                     jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
                 echo
-                echo -e "${YELLOW}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo -e "${RED}✖ Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
                 tput civis 2>/dev/null
