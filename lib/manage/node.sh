@@ -253,14 +253,12 @@ add_node_to_panel() {
 
     # Если перезаписываем — удаляем существующую ноду
     if [[ "$_overwrite_domain" == true ]]; then
-        echo
-        print_action "Удаление существующей ноды..."
         if ! delete_node_by_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            echo
             print_error "Не удалось удалить существующую ноду"
             show_continue_prompt || true
             return 1
         fi
-        print_success "Существующая нода удалена"
     fi
 
     echo
