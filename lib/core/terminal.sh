@@ -62,12 +62,17 @@ cleanup_uninstalled() {
 
 handle_interrupt() {
     trap '' INT TERM HUP EXIT
-    stty sane 2>/dev/null || true
+    if [ -n "${ORIGINAL_STTY:-}" ]; then
+        stty "$ORIGINAL_STTY" 2>/dev/null || stty sane 2>/dev/null || true
+    else
+        stty sane 2>/dev/null || true
+    fi
+    stty echo echoe icanon 2>/dev/null || true
     tput cnorm 2>/dev/null || true
     printf "\033[0m" 2>/dev/null || true
     printf '\n\033[0;31mСкрипт остановлен пользователем\033[0m\n\n'
     cleanup_uninstalled 2>/dev/null || true
-    kill -9 $$ 2>/dev/null
+    exit 130
 }
 
 trap cleanup_terminal EXIT
