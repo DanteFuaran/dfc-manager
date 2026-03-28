@@ -205,6 +205,8 @@ add_node_to_panel() {
                     IFS= read -rsn1 _owk 2>/dev/null
                     if [[ "$_owk" == "" ]] || [[ "$_owk" == $'\n' ]] || [[ "$_owk" == $'\r' ]]; then
                         tput cnorm 2>/dev/null; echo
+                        entity_name=$(make_api_request "GET" "$domain_url/api/nodes" "$token" | \
+                            jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
                         _overwrite_domain=true
                         _step=2
                         break
@@ -221,6 +223,7 @@ add_node_to_panel() {
                 echo -e "${YELLOW}Пожалуйста, используйте другой домен${NC}"
             fi
         else
+            if [[ "$_overwrite_domain" == true ]]; then break; fi
             reading_inline "Введите имя для вашей ноды (например, Germany):" entity_name
             local _rc_en=$?
             if [[ $_rc_en -eq 2 ]]; then
