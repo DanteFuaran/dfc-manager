@@ -273,17 +273,23 @@ nginx_reload() {
     nginx_strip_ipv6_if_disabled
     # Убираем дублированные listen директивы
     _nginx_dedup_listen
-    # Бэкапим конфиг перед запуском
-    cp -f "${DIR_NGINX}nginx.conf" "${DIR_NGINX}nginx.conf.bak" 2>/dev/null || true
-    # Проверяем конфиг перед перезапуском
-    if ! docker run --rm -v "${DIR_NGINX}nginx.conf:/etc/nginx/nginx.conf:ro" \
-         -v "${DIR_NGINX}ssl:/etc/nginx/ssl:ro" nginx:latest nginx -t >/dev/null 2>&1; then
-        # Конфиг невалидный — пробуем откатить
-        if [ -f "${DIR_NGINX}nginx.conf.bak" ]; then
-            cp -f "${DIR_NGINX}nginx.conf.bak" "${DIR_NGINX}nginx.conf" 2>/dev/null || true
-        fi
+    # Удаляем bak если остался от предыдущих версий
+    rm -f "${DIR_NGINX}nginx.conf.bak" 2>/dev/null || true
+    # Проверяем конфиг перед перезапуском (монтируем ssl и letsencrypt)
+    if ! docker run --rm \
+         -v "${DIR_NGINX}nginx.conf:/etc/nginx/nginx.conf:ro" \
+         -v "${DIR_NGINX}ssl:/etc/nginx/ssl:ro" \
+         -v "/etc/letsencrypt:/etc/letsencrypt:ro" \
+         nginx:latest nginx -t >/dev/null 2>&1; then
+        return 1
     fi
-    cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1
+    # Если контейнер уже работает — graceful reload (без downtime)
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
+        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1
+        docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+    else
+        cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1
+    fi
 }
 
 # ─── Убирает дублированные listen директивы в каждом server-блоке ───
