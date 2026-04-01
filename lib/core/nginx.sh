@@ -173,8 +173,8 @@ _nginx_insert_server_block() {
             close(blockfile)
         }
         { print }
-    ' "$conf_file" > "$tmp" && mv "$tmp" "$conf_file"
-    rm -f "$block_file"
+    ' "$conf_file" > "$tmp" && cat "$tmp" > "$conf_file"
+    rm -f "$tmp" "$block_file"
 }
 
 # ─── Добавляет server-блок напрямую в nginx.conf ───
@@ -187,7 +187,9 @@ nginx_add_server_block() {
     fi
     # Удаляем старый блок если есть, затем вставляем свежий
     if grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-        sed -i "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf"
+        local _t; _t=$(mktemp)
+        sed "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf" > "$_t" && cat "$_t" > "${DIR_NGINX}nginx.conf"
+        rm -f "$_t"
     fi
     _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "$content"
     # Обновляем кэш для будущих перегенераций nginx.conf
@@ -199,7 +201,9 @@ nginx_remove_server_block() {
     local name="${1^^}"
     unset "_NGINX_EXTERNAL_BLOCKS[$name]" 2>/dev/null || true
     if [ -f "${DIR_NGINX}nginx.conf" ]; then
-        sed -i "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf"
+        local _t; _t=$(mktemp)
+        sed "/^# BEGIN_${name}_BLOCK/,/^# END_${name}_BLOCK/d" "${DIR_NGINX}nginx.conf" > "$_t" && cat "$_t" > "${DIR_NGINX}nginx.conf"
+        rm -f "$_t"
     fi
 }
 
@@ -302,7 +306,8 @@ _nginx_dedup_listen() {
         if (seen[$0]++) next
     }
     { print }
-    ' "${DIR_NGINX}nginx.conf" > "$tmp" && mv "$tmp" "${DIR_NGINX}nginx.conf"
+    ' "${DIR_NGINX}nginx.conf" > "$tmp" && cat "$tmp" > "${DIR_NGINX}nginx.conf"
+    rm -f "$tmp"
 }
 
 # ─── Убирает listen [::]: директивы из nginx.conf если IPv6 отключён ───
@@ -316,7 +321,9 @@ nginx_strip_ipv6_if_disabled() {
         return 0  # IPv6 работает — ничего не делаем
     fi
     # IPv6 недоступен — удаляем все "listen [::]:..." строки
-    sed -i '/listen \[::\]:/d' "${DIR_NGINX}nginx.conf"
+    local _t; _t=$(mktemp)
+    sed '/listen \[\:\:\]:/d' "${DIR_NGINX}nginx.conf" > "$_t" && cat "$_t" > "${DIR_NGINX}nginx.conf"
+    rm -f "$_t"
 }
 
 # ─── Полностью удаляет nginx ───
