@@ -49,25 +49,27 @@ resolve_domain_ip() {
     local domain="$1"
     local ip=""
 
-    # 1. dig (bind-utils)
+    # 1. dig через публичные DNS (обходим локальный кэш)
     if command -v dig &>/dev/null; then
-        ip=$(dig +short +time=3 +tries=1 "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        ip=$(dig @8.8.8.8 +short +time=3 +tries=1 "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        [ -n "$ip" ] && echo "$ip" && return 0
+        ip=$(dig @1.1.1.1 +short +time=3 +tries=1 "$domain" A 2>/dev/null | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 
-    # 2. nslookup
+    # 2. nslookup через публичный DNS
     if command -v nslookup &>/dev/null; then
-        ip=$(timeout 3 nslookup "$domain" 2>/dev/null | awk '/^Address:/{print $2}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
+        ip=$(timeout 3 nslookup "$domain" 8.8.8.8 2>/dev/null | awk '/^Address:/{print $2}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 
-    # 3. host
+    # 3. host через публичный DNS
     if command -v host &>/dev/null; then
-        ip=$(timeout 3 host -t A "$domain" 2>/dev/null | awk '/has address/{print $NF}' | head -1)
+        ip=$(timeout 3 host -t A "$domain" 8.8.8.8 2>/dev/null | awk '/has address/{print $NF}' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0
     fi
 
-    # 4. getent (всегда доступен на Linux)
+    # 4. getent (локальный резолвер, последний резерв)
     if command -v getent &>/dev/null; then
         ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' | head -1)
         [ -n "$ip" ] && echo "$ip" && return 0

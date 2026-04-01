@@ -1174,17 +1174,6 @@ install_beszel_agent() {
         export DEBIAN_FRONTEND=noninteractive
         local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
 
-        # Ждём освобождения apt/dpkg блокировок (apt.systemd.daily может держать лок)
-        systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
-        local _lock_wait=0
-        while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
-              /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
-              >/dev/null 2>&1; do
-            sleep 2
-            _lock_wait=$(( _lock_wait + 2 ))
-            [ "$_lock_wait" -ge 120 ] && break
-        done
-
         apt-get update -qq >/dev/null 2>&1
         apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
         apt-get install -y -qq $DPKG_OPTS ca-certificates curl ufw wget >/dev/null 2>&1
