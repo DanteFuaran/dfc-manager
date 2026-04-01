@@ -877,7 +877,12 @@ run_speed_test() {
     (
         cd /tmp && \
         curl -sL "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz" -o speedtest.tgz && \
-        tar -xzf speedtest.tgz && \
+        tar -xzf speedtest.tgz
+    ) &
+    show_spinner "Подготовка инструмента тестирования"
+    echo
+    (
+        cd /tmp && \
         ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
     ) &
