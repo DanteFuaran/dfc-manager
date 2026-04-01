@@ -1167,7 +1167,7 @@ run_geolocation() {
     # Запускаем скрипт геолокации в фоне с таймаутом 20 сек
     (
         command -v lscpu >/dev/null 2>&1 || apt-get install -y util-linux >/dev/null 2>&1
-        bash <(curl -fsSL --connect-timeout 8 --max-time 15 "https://storage.umager.ru/ipregion.sh") </dev/null
+        echo "Y" | bash <(curl -fsSL --connect-timeout 8 --max-time 15 "https://storage.umager.ru/ipregion.sh")
     ) > "$tmpfile" 2>&1 &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo

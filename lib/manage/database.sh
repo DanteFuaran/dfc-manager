@@ -302,11 +302,13 @@ db_restore() {
     local backup_dir="${panel_dir}/backups"
     local has_files=false
 
-    # Проверяем наличие бекапов (.tar.gz и .sql.gz)
+    # Проверяем наличие бекапов (.tar.gz, .sql.gz и split-архивов)
     if [ -d "$backup_dir" ]; then
         compgen -G "$backup_dir/*.tar.gz" > /dev/null 2>&1 && has_files=true
         compgen -G "$backup_dir/*.sql.gz" > /dev/null 2>&1 && has_files=true
         compgen -G "$backup_dir/*.sql" > /dev/null 2>&1 && has_files=true
+        compgen -G "$backup_dir/*.tar.gz.part1" > /dev/null 2>&1 && has_files=true
+        compgen -G "$backup_dir/*_part1.tar.gz" > /dev/null 2>&1 && has_files=true
     fi
 
     if [ "$has_files" = false ]; then
@@ -336,7 +338,7 @@ db_restore() {
         cp "$custom_dump_path" "$backup_dir/"
     fi
 
-    # Собираем список бэкапов (.tar.gz и .sql.gz), исключая технические файлы
+    # Собираем список бэкапов (.tar.gz, .sql.gz и split-архивов), исключая технические файлы
     local backup_files=()
     local menu_items=()
     while IFS= read -r file; do
@@ -344,6 +346,36 @@ db_restore() {
         fname=$(basename "$file")
         # Пропускаем технические файлы страховочных бэкапов
         if [[ "$fname" =~ ^pre_ ]]; then
+            continue
+        fi
+        # Обрабатываем split-архивы (part1 + part2)
+        if [[ "$fname" == *.tar.gz.part1 ]] || [[ "$fname" == *_part1.tar.gz ]]; then
+            local _part2_path=""
+            if [[ "$fname" == *.tar.gz.part1 ]]; then
+                _part2_path="${file%.part1}.part2"
+            else
+                _part2_path="${file/_part1.tar.gz/_part2.tar.gz}"
+            fi
+            [ -f "$_part2_path" ] || continue  # нет part2 — пропускаем
+            backup_files+=("SPLIT:${file}:${_part2_path}")
+            local _p1sz _p2sz _total_mb _base_fname
+            _p1sz=$(stat -c%s "$file" 2>/dev/null || echo 0)
+            _p2sz=$(stat -c%s "$_part2_path" 2>/dev/null || echo 0)
+            _total_mb=$(( (_p1sz + _p2sz) / 1024 / 1024 ))
+            if [[ "$fname" == *.tar.gz.part1 ]]; then
+                _base_fname="${fname%.part1}"
+            else
+                _base_fname="${fname/_part1.tar.gz/.tar.gz}"
+            fi
+            if [[ "$_base_fname" =~ ^([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})-([0-9]{2})\.tar\.gz$ ]]; then
+                local _pn _py _pm _pd _ph _pmin
+                _pn="${BASH_REMATCH[1]}"; _py="${BASH_REMATCH[2]}"; _pm="${BASH_REMATCH[3]}"
+                _pd="${BASH_REMATCH[4]}"; _ph="${BASH_REMATCH[5]}"; _pmin="${BASH_REMATCH[6]}"
+                display_label="${_pn} | ${_pd}.${_pm}.${_py} | ${_ph}:${_pmin} | ${_total_mb}M (✂ 2 части)"
+            else
+                display_label="${_base_fname} (${_total_mb}M ✂ 2 части)"
+            fi
+            menu_items+=("📦  ${display_label}")
             continue
         fi
         backup_files+=("$file")
@@ -373,7 +405,7 @@ db_restore() {
             display_label="${fname} (${fsize})"
         fi
         menu_items+=("📄  ${display_label}")
-    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" \) | sort -r)
+    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" -o -name "*.tar.gz.part1" -o -name "*_part1.tar.gz" \) | sort -r)
 
     if [ ${#backup_files[@]} -eq 0 ]; then
         print_error "Файлы бэкапов не найдены"
@@ -396,7 +428,24 @@ db_restore() {
 
     local selected_file="${backup_files[$choice]}"
     local selected_name
-    selected_name=$(basename "$selected_file")
+    local _is_split=false _split_p1="" _split_p2=""
+    # Обработка split-архивов
+    if [[ "$selected_file" == SPLIT:* ]]; then
+        _is_split=true
+        local _sinfo="${selected_file#SPLIT:}"
+        _split_p1="${_sinfo%%:*}"
+        _split_p2="${_sinfo#*:}"
+        local _bfn
+        _bfn=$(basename "$_split_p1")
+        if [[ "$_bfn" == *.tar.gz.part1 ]]; then
+            selected_name="${_bfn%.part1}"
+        else
+            selected_name="${_bfn/_part1.tar.gz/.tar.gz}"
+        fi
+        selected_file="$_split_p1"
+    else
+        selected_name=$(basename "$selected_file")
+    fi
 
     # Определяем формат и извлекаем дамп
     local dump_to_restore=""
@@ -404,16 +453,24 @@ db_restore() {
     local tmp_extract=""
     local is_archive=false
 
-    if [[ "$selected_name" == *.tar.gz ]] && [[ "$selected_name" != dump_* ]]; then
+    if [ "$_is_split" = true ] || { [[ "$selected_name" == *.tar.gz ]] && [[ "$selected_name" != dump_* ]]; }; then
         # Архив Remnawave_*.tar.gz — извлекаем дамп
         is_archive=true
         tmp_extract="/tmp/_rw_restore_$$"
         mkdir -p "$tmp_extract"
 
         (
-            tar -xzf "$selected_file" -C "$tmp_extract" 2>/dev/null
+            if [ "$_is_split" = true ]; then
+                cat "$_split_p1" "$_split_p2" | tar -xz -C "$tmp_extract" 2>/dev/null
+            else
+                tar -xzf "$selected_file" -C "$tmp_extract" 2>/dev/null
+            fi
         ) &
-        show_spinner "Распаковка архива"
+        if [ "$_is_split" = true ]; then
+            show_spinner "Объединение и распаковка частей архива"
+        else
+            show_spinner "Распаковка архива"
+        fi
 
         # Ищем дамп внутри
         dump_to_restore=$(find "$tmp_extract" -maxdepth 1 -name "dump_*.sql.gz" | head -1)
