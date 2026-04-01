@@ -309,6 +309,7 @@ db_restore() {
         compgen -G "$backup_dir/*.sql" > /dev/null 2>&1 && has_files=true
         compgen -G "$backup_dir/*.tar.gz.part1" > /dev/null 2>&1 && has_files=true
         compgen -G "$backup_dir/*_part1.tar.gz" > /dev/null 2>&1 && has_files=true
+        compgen -G "$backup_dir/*.tar.gz.000.part" > /dev/null 2>&1 && has_files=true
     fi
 
     if [ "$has_files" = false ]; then
@@ -378,6 +379,34 @@ db_restore() {
             menu_items+=("📦  ${display_label}")
             continue
         fi
+        # Обрабатываем N-частевые split-архивы (*.tar.gz.000.part ... *.tar.gz.NNN.part)
+        if [[ "$fname" == *.tar.gz.000.part ]]; then
+            local _base_path _base_tgz _base_dir
+            _base_tgz=$(basename "${file%.000.part}")
+            _base_dir=$(dirname "$file")
+            local _all_parts=() _total_sz=0 _pf _psz
+            while IFS= read -r _pf; do
+                _all_parts+=("$_pf")
+                _psz=$(stat -c%s "$_pf" 2>/dev/null || echo 0)
+                _total_sz=$(( _total_sz + _psz ))
+            done < <(find "$_base_dir" -maxdepth 1 -name "${_base_tgz}.*.part" | sort)
+            local _nparts=${#_all_parts[@]}
+            [ "$_nparts" -lt 2 ] && continue
+            local _total_mb=$(( _total_sz / 1024 / 1024 ))
+            backup_files+=("SPLITN:${_base_dir}:${_base_tgz}")
+            # Парсим дату из имени: remnawave_backup_YYYY-MM-DD_HH_MM_SS
+            local _bcore="${_base_tgz%.tar.gz}"
+            if [[ "$_bcore" =~ ^(.+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})_([0-9]{2})_[0-9]{2}$ ]]; then
+                local _spn _spy _spm _spd _sph _spmin
+                _spn="${BASH_REMATCH[1]}"; _spy="${BASH_REMATCH[2]}"; _spm="${BASH_REMATCH[3]}"
+                _spd="${BASH_REMATCH[4]}"; _sph="${BASH_REMATCH[5]}"; _spmin="${BASH_REMATCH[6]}"
+                display_label="${_spn} | ${_spd}.${_spm}.${_spy} | ${_sph}:${_spmin} | ${_total_mb}M (✂ ${_nparts} части)"
+            else
+                display_label="${_base_tgz} (${_total_mb}M ✂ ${_nparts} части)"
+            fi
+            menu_items+=("📦  ${display_label}")
+            continue
+        fi
         backup_files+=("$file")
         fsize=$(du -h "$file" | cut -f1)
         # Формат: Remnawave_2026-03-24_16-48.tar.gz
@@ -405,7 +434,7 @@ db_restore() {
             display_label="${fname} (${fsize})"
         fi
         menu_items+=("📄  ${display_label}")
-    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" -o -name "*.tar.gz.part1" -o -name "*_part1.tar.gz" \) | sort -r)
+    done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" -o -name "*.tar.gz.part1" -o -name "*_part1.tar.gz" -o -name "*.tar.gz.000.part" \) | sort -r)
 
     if [ ${#backup_files[@]} -eq 0 ]; then
         print_error "Файлы бэкапов не найдены"
@@ -429,7 +458,8 @@ db_restore() {
     local selected_file="${backup_files[$choice]}"
     local selected_name
     local _is_split=false _split_p1="" _split_p2=""
-    # Обработка split-архивов
+    local _is_splitn=false _splitn_dir="" _splitn_base="" _splitn_parts=()
+    # Обработка 2-частевых split-архивов
     if [[ "$selected_file" == SPLIT:* ]]; then
         _is_split=true
         local _sinfo="${selected_file#SPLIT:}"
@@ -443,6 +473,16 @@ db_restore() {
             selected_name="${_bfn/_part1.tar.gz/.tar.gz}"
         fi
         selected_file="$_split_p1"
+    # Обработка N-частевых split-архивов (*.tar.gz.000.part ...)
+    elif [[ "$selected_file" == SPLITN:* ]]; then
+        _is_splitn=true
+        local _sninfo="${selected_file#SPLITN:}"
+        _splitn_dir="${_sninfo%%:*}"
+        _splitn_base="${_sninfo#*:}"
+        selected_name="$_splitn_base"
+        while IFS= read -r _snpf; do
+            _splitn_parts+=("$_snpf")
+        done < <(find "$_splitn_dir" -maxdepth 1 -name "${_splitn_base}.*.part" | sort)
     else
         selected_name=$(basename "$selected_file")
     fi
@@ -453,20 +493,24 @@ db_restore() {
     local tmp_extract=""
     local is_archive=false
 
-    if [ "$_is_split" = true ] || { [[ "$selected_name" == *.tar.gz ]] && [[ "$selected_name" != dump_* ]]; }; then
+    if [ "$_is_split" = true ] || [ "$_is_splitn" = true ] || { [[ "$selected_name" == *.tar.gz ]] && [[ "$selected_name" != dump_* ]]; }; then
         # Архив Remnawave_*.tar.gz — извлекаем дамп
         is_archive=true
         tmp_extract="/tmp/_rw_restore_$$"
         mkdir -p "$tmp_extract"
 
         (
-            if [ "$_is_split" = true ]; then
+            if [ "$_is_splitn" = true ]; then
+                cat "${_splitn_parts[@]}" | tar -xz -C "$tmp_extract" 2>/dev/null
+            elif [ "$_is_split" = true ]; then
                 cat "$_split_p1" "$_split_p2" | tar -xz -C "$tmp_extract" 2>/dev/null
             else
                 tar -xzf "$selected_file" -C "$tmp_extract" 2>/dev/null
             fi
         ) &
-        if [ "$_is_split" = true ]; then
+        if [ "$_is_splitn" = true ]; then
+            show_spinner "Объединение и распаковка ${#_splitn_parts[@]} частей архива"
+        elif [ "$_is_split" = true ]; then
             show_spinner "Объединение и распаковка частей архива"
         else
             show_spinner "Распаковка архива"
