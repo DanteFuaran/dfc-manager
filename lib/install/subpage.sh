@@ -276,11 +276,23 @@ _installation_subpage_on_panel() {
         return
     fi
 
-    # Создание API токена для subscription-page (если нет)
-    if [ -z "$existing_api_token" ] || [ "$existing_api_token" = "\$api_token" ]; then
-        create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
-    else
+    # Создание API токена для subscription-page
+    # Валидируем существующий токен перед переиспользованием (при переустановке панели токен мог быть потерян)
+    local token_valid=false
+    if [ -n "$existing_api_token" ] && [ "$existing_api_token" != "\$api_token" ]; then
+        local validate_response
+        validate_response=$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
+            "http://${domain_url}/api/auth/status" \
+            -H "Authorization: Bearer ${existing_api_token}" \
+            -H "X-Forwarded-Proto: https" \
+            -H "X-Forwarded-For: 127.0.0.1" 2>/dev/null)
+        [ "$validate_response" = "200" ] && token_valid=true
+    fi
+
+    if [ "$token_valid" = true ]; then
         sed -i "s|^REMNAWAVE_API_TOKEN=.*$|REMNAWAVE_API_TOKEN=${existing_api_token}|" "${DIR_SUB}.env" 2>/dev/null || true
+    else
+        create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
     fi
 
     (

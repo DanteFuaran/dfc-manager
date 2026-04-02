@@ -544,6 +544,15 @@ create_api_token() {
     local token=$2
     local target_dir=${3:-${DIR_PANEL}}
 
+    # Удаляем существующий токен subscription-page (если есть), чтобы избежать дубликатов
+    local existing_tokens
+    existing_tokens=$(make_api_request "GET" "$domain_url/api/tokens" "$token" 2>/dev/null)
+    local existing_uuid
+    existing_uuid=$(echo "$existing_tokens" | jq -r '.response[]? | select(.tokenName=="subscription-page") | .uuid // empty' 2>/dev/null)
+    if [ -n "$existing_uuid" ]; then
+        make_api_request "DELETE" "$domain_url/api/tokens/$existing_uuid" "$token" >/dev/null 2>&1 || true
+    fi
+
     local request_body='{"tokenName":"subscription-page"}'
     local response
     response=$(make_api_request "POST" "$domain_url/api/tokens" "$token" "$request_body")
