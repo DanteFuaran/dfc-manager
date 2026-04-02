@@ -228,11 +228,7 @@ installation_panel() {
 
     # 2. Создание API токена для subscription-page
     print_action "Создание API токена для страницы подписки..."
-    if [ "$with_subpage" = true ]; then
-        create_api_token "$domain_url" "$token" "${DIR_SUB}"
-    else
-        create_api_token "$domain_url" "$token" "$target_dir"
-    fi
+    create_api_token "$domain_url" "$token" "$target_dir"
 
     if [ "$with_subpage" = true ]; then
         # 3. Перезапуск Docker Compose (с обновлённым docker-compose.yml)

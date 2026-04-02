@@ -313,7 +313,7 @@ services:
         soft: 1048576
         hard: 1048576
     env_file:
-      - .env
+      - /opt/remnawave/.env
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
@@ -338,11 +338,6 @@ networks:
     name: remnawave-network
     external: true
 SUBPAGE_COMPOSE
-
-    if [ ! -f /opt/subscribe-page/.env ]; then
-        echo "REMNAWAVE_API_TOKEN=" > /opt/subscribe-page/.env
-        chmod 600 /opt/subscribe-page/.env 2>/dev/null
-    fi
 
     ensure_nginx
 }
@@ -500,7 +495,7 @@ services:
         soft: 1048576
         hard: 1048576
     env_file:
-      - .env
+      - /opt/remnawave/.env
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
@@ -525,11 +520,6 @@ networks:
     name: remnawave-network
     external: true
 SUBPAGE_COMPOSE
-
-    if [ ! -f /opt/subscribe-page/.env ]; then
-        echo "REMNAWAVE_API_TOKEN=" > /opt/subscribe-page/.env
-        chmod 600 /opt/subscribe-page/.env 2>/dev/null
-    fi
 
     ensure_nginx
 }

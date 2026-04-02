@@ -209,8 +209,7 @@ _installation_subpage_on_panel() {
 
     # Восстанавливаем существующие значения .env (SECRET_KEY в compose и API_TOKEN)
     local existing_api_token
-    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' "${DIR_SUB}.env" 2>/dev/null | head -1)
-    [ -z "$existing_api_token" ] && existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
+    existing_api_token=$(grep -oP '^REMNAWAVE_API_TOKEN=\K\S+' /opt/remnawave/.env 2>/dev/null | head -1)
 
     echo
     # Остановка сервисов
@@ -290,9 +289,9 @@ _installation_subpage_on_panel() {
     fi
 
     if [ "$token_valid" = true ]; then
-        sed -i "s|^REMNAWAVE_API_TOKEN=.*$|REMNAWAVE_API_TOKEN=${existing_api_token}|" "${DIR_SUB}.env" 2>/dev/null || true
+        sed -i "s|^REMNAWAVE_API_TOKEN=.*$|REMNAWAVE_API_TOKEN=${existing_api_token}|" /opt/remnawave/.env 2>/dev/null || true
     else
-        create_api_token "$domain_url" "$token" "${DIR_SUB}" >/dev/null 2>&1 || true
+        create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1 || true
     fi
 
     (

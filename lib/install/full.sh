@@ -302,7 +302,7 @@ installation_full() {
     fi
 
     # 9. Создание API токена для subscription-page
-    create_api_token "$domain_url" "$token" "$sub_dir" >/dev/null 2>&1
+    create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1
 
     printf "${DARKGRAY}  ✔  Обновление конфигураций${NC}\n"
 
