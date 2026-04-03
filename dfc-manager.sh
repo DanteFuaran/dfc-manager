@@ -33,6 +33,16 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         echo -e "${_RED}✖ Ключ доступа не найден. Используйте установщик: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-install/main/install.sh)${_NC}"
         exit 1
     fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${_BLUE}⏳ Устанавливаю git...${_NC}"
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get install -y -q git >/dev/null 2>&1 || { echo -e "${_RED}✖ Не удалось установить git.${_NC}"; exit 1; }
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y -q git >/dev/null 2>&1 || { echo -e "${_RED}✖ Не удалось установить git.${_NC}"; exit 1; }
+        else
+            echo -e "${_RED}✖ git не установлен. Установите его вручную и повторите.${_NC}"; exit 1
+        fi
+    fi
     if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
             "https://oauth2:${DFC_ACCESS_KEY}@github.com/DanteFuaran/dfc-manager.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
