@@ -305,8 +305,8 @@ manage_delete_components() {
                     ( _mt_do_uninstall >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление MTProto" "MTProto удалён"
                 fi
-                ( nginx_teardown 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
-                show_spinner "Удаление Nginx" "Nginx удалён"
+                ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
+                show_spinner "Очистка Nginx" "Nginx очищен"
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "       ${RED}🗑️  Удаление завершено${NC}"
@@ -531,7 +531,8 @@ remove_script_all() {
         docker system prune -af >/dev/null 2>&1 || true
     ) &
     show_spinner "Удаление контейнеров Remnawave"
-    nginx_teardown
+    _nginx_extract_external_blocks 2>/dev/null || true
+    nginx_ensure_conf_for_remaining
     rm -rf "${DIR_PANEL}"
     rm -rf "/opt/remnasubpage"
     rm -rf "/opt/subscribe-page"

@@ -270,7 +270,8 @@ manage_reinstall() {
     ) &
     show_spinner "Удаление контейнеров и данных" || true
 
-    nginx_teardown
+    _nginx_extract_external_blocks 2>/dev/null || true
+    nginx_ensure_conf_for_remaining
 
     (
         rm -rf "$rw_path"
