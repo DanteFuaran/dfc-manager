@@ -173,7 +173,9 @@ get_cert_cloudflare() {
             -d "$domain" -d "*.$domain" \
             --email "$email" --agree-tos --non-interactive \
             --key-type ecdsa > "$_tmp_log" 2>&1
-        echo $? > "$_exit_file"
+        _ec=$?
+        echo $_ec > "$_exit_file"
+        exit $_ec
     ) &
     show_spinner "Получение wildcard сертификата для *.$domain"
 
@@ -283,7 +285,7 @@ get_cert_acme() {
 setup_cloudflare_credentials() {
     reading "Введите Cloudflare API Token:" CF_TOKEN || return 1
 
-    # Проверяем токен
+    # Проверяем токен (существование/не отозван)
     local check
     check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
         -H "Authorization: Bearer $CF_TOKEN" | jq -r '.success' 2>/dev/null)
@@ -292,6 +294,20 @@ setup_cloudflare_credentials() {
         print_error "Cloudflare API Token невалиден"
         return 1
     fi
+
+    # Проверяем наличие прав Zone:DNS (токен может быть валиден, но без нужных разрешений)
+    local zones_resp zones_ok zones_err
+    zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
+        -H "Authorization: Bearer $CF_TOKEN" 2>/dev/null)
+    zones_ok=$(echo "$zones_resp" | jq -r '.success' 2>/dev/null)
+    zones_err=$(echo "$zones_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
+
+    if [ "$zones_ok" != "true" ]; then
+        print_error "Токен не имеет доступа к Zone DNS API (код ошибки: ${zones_err:-неизвестен})"
+        echo -e "   ${DARKGRAY}Для wildcard-сертификата токен должен иметь разрешение: Zone → DNS → Edit${NC}"
+        return 1
+    fi
+
     print_success "Cloudflare API Token подтверждён"
 
     mkdir -p /etc/letsencrypt
