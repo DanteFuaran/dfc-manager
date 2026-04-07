@@ -169,7 +169,7 @@ get_cert_cloudflare() {
         set +e
         certbot certonly --dns-cloudflare \
             --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-            --dns-cloudflare-propagation-seconds 30 \
+            --dns-cloudflare-propagation-seconds 60 \
             -d "$domain" -d "*.$domain" \
             --email "$email" --agree-tos --non-interactive \
             --key-type ecdsa > "$_tmp_log" 2>&1
@@ -285,34 +285,91 @@ get_cert_acme() {
 setup_cloudflare_credentials() {
     reading "Введите Cloudflare API Token:" CF_TOKEN || return 1
 
-    # Проверяем токен (существование/не отозван)
-    local check
-    check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-        -H "Authorization: Bearer $CF_TOKEN" | jq -r '.success' 2>/dev/null)
+    # Определяем тип токена:
+    # Новый API Token (содержит буквы верхнего регистра — cfut_, cf_, etc.)
+    # Старый Global API Key (только hex, строчные буквы и цифры)
+    local _is_api_token=false
+    if [[ "$CF_TOKEN" =~ [A-Z] ]] || [[ "$CF_TOKEN" =~ _ ]]; then
+        _is_api_token=true
+    fi
 
-    if [ "$check" != "true" ]; then
-        print_error "Cloudflare API Token невалиден"
+    local _cf_email=""
+    if [ "$_is_api_token" = false ]; then
+        reading "Введите Cloudflare Email (для Global API Key):" _cf_email || return 1
+    fi
+
+    # Шаг 1: проверяем что токен валиден и не отозван
+    local _auth_header
+    if [ "$_is_api_token" = true ]; then
+        _auth_header="Authorization: Bearer $CF_TOKEN"
+    else
+        _auth_header="X-Auth-Key: $CF_TOKEN"
+    fi
+
+    local check
+    if [ "$_is_api_token" = true ]; then
+        check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "$_auth_header" | jq -r '.success' 2>/dev/null)
+        if [ "$check" != "true" ]; then
+            print_error "Cloudflare API Token невалиден или отозван"
+            return 1
+        fi
+    fi
+
+    # Шаг 2: проверяем доступ к зонам (Zone:Read)
+    local zones_resp zones_ok zone_id
+    if [ "$_is_api_token" = true ]; then
+        zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
+            -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+    else
+        zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
+            -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+    fi
+    zones_ok=$(echo "$zones_resp" | jq -r '.success' 2>/dev/null)
+    zone_id=$(echo "$zones_resp" | jq -r '.result[0].id // empty' 2>/dev/null)
+
+    if [ "$zones_ok" != "true" ]; then
+        local _zones_err
+        _zones_err=$(echo "$zones_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
+        print_error "Токен не имеет доступа к зонам (код ошибки: ${_zones_err:-10000})"
+        echo -e "   ${DARKGRAY}Убедитесь что токен имеет разрешение: Zone → Read${NC}"
         return 1
     fi
 
-    # Проверяем наличие прав Zone:DNS (токен может быть валиден, но без нужных разрешений)
-    local zones_resp zones_ok zones_err
-    zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
-        -H "Authorization: Bearer $CF_TOKEN" 2>/dev/null)
-    zones_ok=$(echo "$zones_resp" | jq -r '.success' 2>/dev/null)
-    zones_err=$(echo "$zones_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
+    # Шаг 3: проверяем доступ к DNS-записям (Zone:DNS:Read → признак наличия DNS-прав)
+    if [ -n "$zone_id" ]; then
+        local dns_resp dns_ok
+        if [ "$_is_api_token" = true ]; then
+            dns_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?per_page=1" \
+                -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+        else
+            dns_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?per_page=1" \
+                -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+        fi
+        dns_ok=$(echo "$dns_resp" | jq -r '.success' 2>/dev/null)
 
-    if [ "$zones_ok" != "true" ]; then
-        print_error "Токен не имеет доступа к Zone DNS API (код ошибки: ${zones_err:-неизвестен})"
-        echo -e "   ${DARKGRAY}Для wildcard-сертификата токен должен иметь разрешение: Zone → DNS → Edit${NC}"
-        return 1
+        if [ "$dns_ok" != "true" ]; then
+            local _dns_err
+            _dns_err=$(echo "$dns_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
+            print_error "Токен не имеет прав на DNS-записи (код ошибки: ${_dns_err:-10000})"
+            echo -e "   ${DARKGRAY}Для wildcard-сертификата создайте токен с разрешением: Zone → DNS → Edit${NC}"
+            echo -e "   ${DARKGRAY}https://dash.cloudflare.com/profile/api-tokens → Create Token → Edit zone DNS${NC}"
+            return 1
+        fi
     fi
 
     print_success "Cloudflare API Token подтверждён"
 
     mkdir -p /etc/letsencrypt
-    cat > /etc/letsencrypt/cloudflare.ini <<EOF
+    if [ "$_is_api_token" = true ]; then
+        cat > /etc/letsencrypt/cloudflare.ini <<EOF
 dns_cloudflare_api_token = $CF_TOKEN
 EOF
+    else
+        cat > /etc/letsencrypt/cloudflare.ini <<EOF
+dns_cloudflare_email = $_cf_email
+dns_cloudflare_api_key = $CF_TOKEN
+EOF
+    fi
     chmod 600 /etc/letsencrypt/cloudflare.ini
 }
