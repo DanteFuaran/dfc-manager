@@ -336,24 +336,39 @@ setup_cloudflare_credentials() {
         return 1
     fi
 
-    # Шаг 3: проверяем доступ к DNS-записям (Zone:DNS:Read → признак наличия DNS-прав)
+    # Шаг 3: проверяем Zone:DNS:Edit — пробуем создать тестовую TXT-запись и сразу удалить
+    # GET /dns_records проверяет только Read, а certbot нужен Edit (POST)
     if [ -n "$zone_id" ]; then
-        local dns_resp dns_ok
+        local create_resp create_ok record_id _dns_write_err
         if [ "$_is_api_token" = true ]; then
-            dns_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?per_page=1" \
-                -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+            create_resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+                -H "$_auth_header" -H "Content-Type: application/json" \
+                --data '{"type":"TXT","name":"_dfc-acme-test","content":"dfc-write-test","ttl":60}' 2>/dev/null)
         else
-            dns_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?per_page=1" \
-                -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
+            create_resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+                -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" \
+                --data '{"type":"TXT","name":"_dfc-acme-test","content":"dfc-write-test","ttl":60}' 2>/dev/null)
         fi
-        dns_ok=$(echo "$dns_resp" | jq -r '.success' 2>/dev/null)
+        create_ok=$(echo "$create_resp" | jq -r '.success' 2>/dev/null)
 
-        if [ "$dns_ok" != "true" ]; then
-            local _dns_err
-            _dns_err=$(echo "$dns_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
-            print_error "Токен не имеет прав на DNS-записи (код ошибки: ${_dns_err:-10000})"
-            echo -e "   ${DARKGRAY}Для wildcard-сертификата создайте токен с разрешением: Zone → DNS → Edit${NC}"
-            echo -e "   ${DARKGRAY}https://dash.cloudflare.com/profile/api-tokens → Create Token → Edit zone DNS${NC}"
+        if [ "$create_ok" = "true" ]; then
+            # Удаляем тестовую запись
+            record_id=$(echo "$create_resp" | jq -r '.result.id // empty' 2>/dev/null)
+            if [ -n "$record_id" ]; then
+                if [ "$_is_api_token" = true ]; then
+                    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+                        -H "$_auth_header" >/dev/null 2>&1
+                else
+                    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+                        -H "X-Auth-Email: $_cf_email" -H "$_auth_header" >/dev/null 2>&1
+                fi
+            fi
+        else
+            _dns_write_err=$(echo "$create_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
+            print_error "Токен не имеет прав на создание DNS-записей (код: ${_dns_write_err:-10000})"
+            echo -e "   ${DARKGRAY}Токен имеет Zone:Read, но НЕТ Zone:DNS:Edit — именно оно нужно certbot${NC}"
+            echo -e "   ${DARKGRAY}Создайте новый токен: dash.cloudflare.com/profile/api-tokens${NC}"
+            echo -e "   ${DARKGRAY}Шаблон: Edit zone DNS → выберите нужную зону${NC}"
             return 1
         fi
     fi
