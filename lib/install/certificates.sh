@@ -312,6 +312,8 @@ setup_cloudflare_credentials() {
             -H "$_auth_header" | jq -r '.success' 2>/dev/null)
         if [ "$check" != "true" ]; then
             print_error "Cloudflare API Token невалиден или отозван"
+            echo
+            show_continue_prompt
             return 1
         fi
     fi
@@ -333,6 +335,8 @@ setup_cloudflare_credentials() {
         _zones_err=$(echo "$zones_resp" | jq -r '.errors[0].code // empty' 2>/dev/null)
         print_error "Токен не имеет доступа к зонам (код ошибки: ${_zones_err:-10000})"
         echo -e "   ${DARKGRAY}Убедитесь что токен имеет разрешение: Zone → Read${NC}"
+        echo
+        show_continue_prompt
         return 1
     fi
 
@@ -369,6 +373,8 @@ setup_cloudflare_credentials() {
             echo -e "   ${DARKGRAY}Токен имеет Zone:Read, но НЕТ Zone:DNS:Edit — именно оно нужно certbot${NC}"
             echo -e "   ${DARKGRAY}Создайте новый токен: dash.cloudflare.com/profile/api-tokens${NC}"
             echo -e "   ${DARKGRAY}Шаблон: Edit zone DNS → выберите нужную зону${NC}"
+            echo
+            show_continue_prompt
             return 1
         fi
     fi
