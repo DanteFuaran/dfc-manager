@@ -756,7 +756,7 @@ change_credentials() {
 DELETE FROM admin;
 EOSQL
     then
-        print_success "Обновление данных суперадмина"
+        echo -e "✅ Обновление данных суперадмина"
     else
         print_error "Не удалось обновить данные суперадмина"
         (
@@ -768,26 +768,23 @@ EOSQL
         return
     fi
 
-    # Запускаем панель и ждём полной готовности Remnawave + NGINX
+    # Запускаем панель и ждём готовности по Docker healthcheck
     (
         cd /opt/remnawave
         docker compose start remnawave >/dev/null 2>&1
 
-        # Ждём пока Remnawave API отвечает (не 502/503)
-        _w=0
-        while [ $_w -lt 120 ]; do
-            _code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
-                "http://127.0.0.1:3000/api/auth/status" \
-                --header 'X-Forwarded-For: 127.0.0.1' \
-                --header 'X-Forwarded-Proto: https' 2>/dev/null)
-            case "$_code" in 200|401|403|404) break ;; esac
-            sleep 2
-            _w=$((_w + 2))
-        done
-
-        # Ждём пока NGINX запущен
+        # Ждём healthy-статуса от Docker healthcheck (интервал 3s, до 60s)
         _w=0
         while [ $_w -lt 60 ]; do
+            _status=$(docker inspect --format='{{.State.Health.Status}}' remnawave 2>/dev/null)
+            [ "$_status" = "healthy" ] && break
+            sleep 3
+            _w=$((_w + 3))
+        done
+
+        # Ждём пока NGINX запущен (обычно уже работает, до 20s)
+        _w=0
+        while [ $_w -lt 20 ]; do
             _running=$(docker inspect --format='{{.State.Running}}' nginx 2>/dev/null || echo "false")
             [ "$_running" = "true" ] && break
             sleep 2
