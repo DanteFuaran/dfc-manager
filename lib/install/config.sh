@@ -276,6 +276,8 @@ services:
     container_name: remnanode
     hostname: remnanode
     restart: always
+    cap_add:
+      - NET_ADMIN
     ulimits:
       nofile:
         soft: 1048576
@@ -1588,6 +1590,8 @@ services:
     container_name: remnanode
     hostname: remnanode
     restart: always
+    cap_add:
+      - NET_ADMIN
     ulimits:
       nofile:
         soft: 1048576
@@ -2175,6 +2179,8 @@ services:
     container_name: remnanode
     hostname: remnanode
     restart: always
+    cap_add:
+      - NET_ADMIN
     ulimits:
       nofile:
         soft: 1048576
