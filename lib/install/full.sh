@@ -212,6 +212,37 @@ installation_full() {
     local token
     token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
 
+    # Если register не сработал (панель уже была настроена ранее) — запросить логин/пароль вручную
+    if [ -z "$token" ]; then
+        echo
+        echo -e "${YELLOW}Панель уже содержит суперадмина. Введите существующие данные для входа.${NC}"
+        echo
+        local _login_username="" _login_password=""
+        while [ -z "$token" ]; do
+            reading_inline "Введите логин панели:" _login_username
+            local _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
+            if [ -z "$_login_username" ]; then continue; fi
+
+            reading_inline "Введите пароль панели:" _login_password
+            _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
+            if [ -z "$_login_password" ]; then continue; fi
+
+            local login_response
+            login_response=$(make_api_request "POST" "$domain_url/api/auth/login" "" \
+                "$(jq -n --arg u "$_login_username" --arg p "$_login_password" '{username: $u, password: $p}')")
+            token=$(echo "$login_response" | jq -r '.response.accessToken // empty' 2>/dev/null)
+
+            if [ -z "$token" ] || [ "$token" = "null" ]; then
+                token=""
+                print_error "Неверный логин или пароль"
+                echo
+            else
+                SUPERADMIN_USERNAME="$_login_username"
+                SUPERADMIN_PASSWORD="$_login_password"
+            fi
+        done
+    fi
+
     if [ -z "$token" ]; then
         print_error "Не удалось получить токен авторизации"
         print_error "Настройте ноду вручную через панель: https://$PANEL_DOMAIN"
@@ -555,6 +586,37 @@ installation_panel_with_node() {
 
     local token
     token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
+
+    # Если register не сработал (панель уже была настроена ранее) — запросить логин/пароль вручную
+    if [ -z "$token" ]; then
+        echo
+        echo -e "${YELLOW}Панель уже содержит суперадмина. Введите существующие данные для входа.${NC}"
+        echo
+        local _login_username="" _login_password=""
+        while [ -z "$token" ]; do
+            reading_inline "Введите логин панели:" _login_username
+            local _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
+            if [ -z "$_login_username" ]; then continue; fi
+
+            reading_inline "Введите пароль панели:" _login_password
+            _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
+            if [ -z "$_login_password" ]; then continue; fi
+
+            local login_response
+            login_response=$(make_api_request "POST" "$domain_url/api/auth/login" "" \
+                "$(jq -n --arg u "$_login_username" --arg p "$_login_password" '{username: $u, password: $p}')")
+            token=$(echo "$login_response" | jq -r '.response.accessToken // empty' 2>/dev/null)
+
+            if [ -z "$token" ] || [ "$token" = "null" ]; then
+                token=""
+                print_error "Неверный логин или пароль"
+                echo
+            else
+                SUPERADMIN_USERNAME="$_login_username"
+                SUPERADMIN_PASSWORD="$_login_password"
+            fi
+        done
+    fi
 
     if [ -z "$token" ]; then
         print_error "Не удалось получить токен авторизации"

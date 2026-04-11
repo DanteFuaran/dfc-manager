@@ -209,32 +209,42 @@ register_remnawave() {
     local max_attempts=5
     local attempt=1
 
+    # Проверяем статус авторизации — если регистрация отключена (уже есть админ),
+    # пропускаем register и пробуем только login со сгенерированными creds
+    local auth_status
+    auth_status=$(make_api_request "GET" "$domain_url/api/auth/status" "" 2>/dev/null)
+    local is_register_allowed
+    is_register_allowed=$(echo "$auth_status" | jq -r '.response.isRegisterAllowed // false' 2>/dev/null)
+
     local register_data
     register_data=$(jq -n --arg u "$username" --arg p "$password" '{username: $u, password: $p}')
     local token=""
 
     while [ $attempt -le $max_attempts ] && [ -z "$token" ]; do
-        local response
-        response=$(curl -s -X POST "http://$domain_url/api/auth/register" \
-            -H "Content-Type: application/json" \
-            -H "X-Forwarded-For: 127.0.0.1" \
-            -H "X-Forwarded-Proto: https" \
-            -d "$register_data" 2>/dev/null)
-
-        token=$(echo "$response" | jq -r '.response.accessToken // empty' 2>/dev/null)
-
-        if [ -z "$token" ]; then
-            # Попытка логина если уже зарегистрирован
-            local login_data='{"username":"'"$username"'","password":"'"$password"'"}'
-            response=$(curl -s -X POST "http://$domain_url/api/auth/login" \
+        if [ "$is_register_allowed" = "true" ]; then
+            local response
+            response=$(curl -s --max-time 10 -X POST "http://$domain_url/api/auth/register" \
                 -H "Content-Type: application/json" \
                 -H "X-Forwarded-For: 127.0.0.1" \
                 -H "X-Forwarded-Proto: https" \
-                -d "$login_data" 2>/dev/null)
+                -d "$register_data" 2>/dev/null)
             token=$(echo "$response" | jq -r '.response.accessToken // empty' 2>/dev/null)
         fi
 
         if [ -z "$token" ]; then
+            # Попытка логина если уже зарегистрирован
+            local response
+            response=$(make_api_request "POST" "$domain_url/api/auth/login" "" \
+                "$(jq -n --arg u "$username" --arg p "$password" '{username: $u, password: $p}')")
+            token=$(echo "$response" | jq -r '.response.accessToken // empty' 2>/dev/null)
+        fi
+
+        if [ -z "$token" ]; then
+            # Если register отключён и login с generated creds не работает —
+            # значит уже есть другой суперадмин, нет смысла повторять
+            if [ "$is_register_allowed" != "true" ]; then
+                break
+            fi
             sleep 3
             ((attempt++))
         fi
