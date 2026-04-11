@@ -96,6 +96,67 @@ restore_nginx_config() {
 }
 
 # ═══════════════════════════════════════════════════
+# СМЕНА ДОМЕНА ТЕЛЕГРАМ БОТА (WEBHOOK_URL в .env панели)
+# ═══════════════════════════════════════════════════
+
+manage_change_bot_domain() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🤖  Сменить домен телеграм бота${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    local rw_env="${DIR_PANEL}.env"
+    if [ ! -f "$rw_env" ]; then
+        print_error "Файл ${rw_env} не найден"
+        echo
+        show_continue_prompt || return 1
+        return 1
+    fi
+
+    # Текущий WEBHOOK_URL
+    local current_url
+    current_url=$(grep -oP '^WEBHOOK_URL=\K\S+' "$rw_env" 2>/dev/null)
+    if [ -n "$current_url" ]; then
+        local current_domain
+        current_domain=$(echo "$current_url" | sed 's|^https\?://||;s|/.*||')
+        echo -e "${DARKGRAY}  Текущий домен бота: ${WHITE}${current_domain}${NC}"
+        echo
+    fi
+
+    local new_domain=""
+    reading_inline "Новый домен бота (без http):" new_domain
+    local rc=$?
+    [ $rc -eq 2 ] && return
+
+    if [ -z "$new_domain" ]; then
+        echo -e "${YELLOW}  Отменено${NC}"
+        echo
+        show_continue_prompt || return 1
+        return
+    fi
+
+    # Очищаем от протокола и слеша
+    new_domain=$(echo "$new_domain" | sed 's|^https\?://||;s|/$||')
+
+    local new_url="https://${new_domain}/api/v1/remnawave"
+
+    sed -i "s|^WEBHOOK_URL=.*|WEBHOOK_URL=${new_url}|" "$rw_env"
+
+    echo
+    echo -e "${GREEN}✅ WEBHOOK_URL обновлён:${NC}"
+    echo -e "${WHITE}${new_url}${NC}"
+    echo
+
+    # Перезапуск панели
+    (cd "${DIR_PANEL}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Перезапуск Remnawave"
+
+    echo
+    show_continue_prompt || return 1
+}
+
+# ═══════════════════════════════════════════════════
 # УПРАВЛЕНИЕ ДОСТУПОМ К ПАНЕЛИ
 # ═══════════════════════════════════════════════════
 
@@ -129,8 +190,9 @@ manage_panel_access() {
             "🌐  Сменить домены" \
             "🍪  Сменить cookie доступа" \
             "🎨  Сменить сайт-заглушку" \
+            "🤖  Сменить домен телеграм бота" \
             "──────────────────────────────────────" \
-            "🔗  Показать ссылку входа" \
+            "🔗  Показать данные панели" \
             "──────────────────────────────────────" \
             "$_toggle_label" \
             "──────────────────────────────────────" \
@@ -143,11 +205,12 @@ manage_panel_access() {
             1) manage_domains ;;
             2) regenerate_cookies || break ;;
             3) manage_random_template ;;
-            4) ;;
-            5)
+            4) manage_change_bot_domain ;;
+            5) ;;
+            6)
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "   ${GREEN}🔗  Cookie-ссылка для входа в панель${NC}"
+                echo -e "   ${GREEN}🔗  Данные панели${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 local COOKIE_NAME COOKIE_VALUE
                 if get_cookie_from_nginx; then
@@ -165,20 +228,48 @@ manage_panel_access() {
                     echo
                     print_error "Не удалось извлечь cookie из nginx.conf"
                 fi
+
+                # Домен панели
+                local _fe_domain
+                _fe_domain=$(grep -oP '^FRONT_END_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null)
+                if [ -n "$_fe_domain" ]; then
+                    echo
+                    echo -e "${GREEN}🌐 Домен панели:${NC}"
+                    echo -e "${WHITE}${_fe_domain}${NC}"
+                fi
+
+                # Домен подписки
+                local _sub_domain
+                _sub_domain=$(grep -oP '^SUB_PUBLIC_DOMAIN=\K\S+' /opt/remnawave/.env 2>/dev/null)
+                if [ -n "$_sub_domain" ]; then
+                    echo
+                    echo -e "${GREEN}📄 Домен страницы подписки:${NC}"
+                    echo -e "${WHITE}${_sub_domain}${NC}"
+                fi
+
+                # Webhook secret
+                local _wh_secret
+                _wh_secret=$(grep -oP '^WEBHOOK_SECRET_HEADER=\K\S+' /opt/remnawave/.env 2>/dev/null)
+                if [ -n "$_wh_secret" ]; then
+                    echo
+                    echo -e "${GREEN}🔑 Вебхук секрет (WEBHOOK_SECRET_HEADER):${NC}"
+                    echo -e "${WHITE}${_wh_secret}${NC}"
+                fi
+
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt
                 ;;
-            6) ;;
-            7)
+            7) ;;
+            8)
                 if [ "$_current_port" = "8443" ]; then
                     switch_panel_port 443 || break
                 else
                     switch_panel_port 8443 || break
                 fi
                 ;;
-            8) ;;
-            9) return ;;
+            9) ;;
+            10) return ;;
         esac
     done
 }
