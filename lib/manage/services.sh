@@ -179,6 +179,18 @@ manage_logs() {
             log_dirs+=("${DIR_NGINX%/}")
         fi
 
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnasale(-|$)'; then
+            local _rs_dir=""
+            for _d in /opt/remnasale; do
+                [ -f "${_d}/docker-compose.yml" ] && _rs_dir="$_d" && break
+            done
+            if [ -n "$_rs_dir" ]; then
+                log_items+=("🤖  Remnasale (Бот)")
+                log_services+=("__remnasale_all__")
+                log_dirs+=("$_rs_dir")
+            fi
+        fi
+
         if [ ${#log_items[@]} -eq 0 ]; then
             clear
             echo -e "${RED}✖  Сервисы remnawave не найдены.${NC}"
@@ -200,17 +212,23 @@ manage_logs() {
 
         local svc="${log_services[$choice]}"
         local dir="${log_dirs[$choice]}"
+        local _display_svc="$svc"
+        [[ "$svc" == "__remnasale_all__" ]] && _display_svc="Remnasale (все контейнеры)"
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}  📋  Логи: ${WHITE}${svc}${NC}"
+        echo -e "${GREEN}  📋  Логи: ${WHITE}${_display_svc}${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${DARKGRAY}Для выхода нажмите Esc или Ctrl+C${NC}"
         echo
 
         # Запускаем docker logs в фоне — чтобы параллельно отслеживать нажатия клавиш
         local _logs_pid=""
-        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
+        if [[ "$svc" == "__remnasale_all__" ]]; then
+            # Все контейнеры compose (remnasale + taskiq-worker + taskiq-scheduler + db)
+            (cd "$dir" && exec docker compose logs -f -t --tail 100 2>&1) &
+            _logs_pid=$!
+        elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
             docker logs -f -t --tail 100 "$svc" 2>&1 &
             _logs_pid=$!
         else
