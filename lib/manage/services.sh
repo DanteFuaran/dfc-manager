@@ -132,7 +132,7 @@ manage_update() {
 
 manage_logs() {
     local rw_path
-    rw_path=$(detect_remnawave_path) || return
+    rw_path=$(detect_remnawave_path) || rw_path=""
 
     # Убиваем любые ранее осиротевшие процессы docker logs
     pkill -f "docker logs -f" 2>/dev/null || true
@@ -143,40 +143,42 @@ manage_logs() {
         # Строим список доступных сервисов
         local -a log_items=() log_services=() log_dirs=()
 
-        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
-            log_items+=("🌊  Remnawave (Панель)")
-            log_services+=("remnawave")
-            log_dirs+=("$rw_path")
-        fi
-
-        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
-            log_items+=("🔗  Remnawave (Нода)")
-            log_services+=("remnanode")
-            if [ -f "/opt/remnanode/docker-compose.yml" ]; then
-                log_dirs+=("/opt/remnanode")
-            else
+        if [ -n "$rw_path" ]; then
+            if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
+                log_items+=("🌊  Remnawave (Панель)")
+                log_services+=("remnawave")
                 log_dirs+=("$rw_path")
             fi
-        fi
 
-        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
-            log_items+=("📄  subscription-page")
-            log_services+=("remnawave-subscription-page")
-            for _sp in /opt/subscribe-page /opt/remnasubpage; do
-                if [ -f "${_sp}/docker-compose.yml" ]; then
-                    log_dirs+=("$_sp")
-                    break
+            if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
+                log_items+=("🔗  Remnawave (Нода)")
+                log_services+=("remnanode")
+                if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+                    log_dirs+=("/opt/remnanode")
+                else
+                    log_dirs+=("$rw_path")
                 fi
-            done
-            if [ ${#log_dirs[@]} -lt ${#log_services[@]} ]; then
-                log_dirs+=("$rw_path")
             fi
-        fi
 
-        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
-            log_items+=("🔀  Nginx")
-            log_services+=("nginx")
-            log_dirs+=("${DIR_NGINX%/}")
+            if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
+                log_items+=("📄  subscription-page")
+                log_services+=("remnawave-subscription-page")
+                for _sp in /opt/subscribe-page /opt/remnasubpage; do
+                    if [ -f "${_sp}/docker-compose.yml" ]; then
+                        log_dirs+=("$_sp")
+                        break
+                    fi
+                done
+                if [ ${#log_dirs[@]} -lt ${#log_services[@]} ]; then
+                    log_dirs+=("$rw_path")
+                fi
+            fi
+
+            if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
+                log_items+=("🔀  Nginx")
+                log_services+=("nginx")
+                log_dirs+=("${DIR_NGINX%/}")
+            fi
         fi
 
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnasale(-|$)'; then
@@ -193,7 +195,7 @@ manage_logs() {
 
         if [ ${#log_items[@]} -eq 0 ]; then
             clear
-            echo -e "${RED}✖  Сервисы remnawave не найдены.${NC}"
+            echo -e "${RED}✖  Сервисы не найдены.${NC}"
             echo
             show_continue_prompt || return 1
             return
