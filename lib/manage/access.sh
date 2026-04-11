@@ -115,19 +115,21 @@ manage_change_bot_domain() {
     fi
 
     # Текущий WEBHOOK_URL
+    local current_domain=""
     local current_url
     current_url=$(grep -oP '^WEBHOOK_URL=\K\S+' "$rw_env" 2>/dev/null)
     if [ -n "$current_url" ]; then
-        local current_domain
         current_domain=$(echo "$current_url" | sed 's|^https\?://||;s|/.*||')
         echo -e "${DARKGRAY}  Текущий домен бота: ${WHITE}${current_domain}${NC}"
         echo
     fi
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo
 
     local new_domain=""
-    reading_inline "Новый домен бота (без http):" new_domain
+    prompt_domain_with_retry "Новый домен бота (без http):" new_domain true
     local rc=$?
-    [ $rc -eq 2 ] && return
+    [ $rc -ne 0 ] && return
 
     if [ -z "$new_domain" ]; then
         echo -e "${YELLOW}  Отменено${NC}"
@@ -136,23 +138,20 @@ manage_change_bot_domain() {
         return
     fi
 
-    # Очищаем от протокола и слеша
     new_domain=$(echo "$new_domain" | sed 's|^https\?://||;s|/$||')
-
     local new_url="https://${new_domain}/api/v1/remnawave"
 
+    echo
     sed -i "s|^WEBHOOK_URL=.*|WEBHOOK_URL=${new_url}|" "$rw_env"
+    echo -e "${GREEN}✅ Обновление домена телеграм бота${NC}"
 
-    echo
-    echo -e "${GREEN}✅ WEBHOOK_URL обновлён:${NC}"
-    echo -e "${WHITE}${new_url}${NC}"
-    echo
-
-    # Перезапуск панели
     (cd "${DIR_PANEL}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Перезапуск Remnawave"
+    if show_spinner "Перезапуск панели Remnawave"; then
+        echo -e "${GREEN}✅ Готово${NC}"
+    fi
 
     echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
 }
 
