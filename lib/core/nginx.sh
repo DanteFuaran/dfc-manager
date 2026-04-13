@@ -20,11 +20,24 @@ DIR_NGINX="/opt/nginx/"
 declare -A _NGINX_EXTERNAL_BLOCKS=() 2>/dev/null || true
 
 # ─── Создаёт /opt/nginx/ с docker-compose.yml если не существует ───
+# Если docker-compose.yml создан внешним установщиком (remnasale-license и т.д.),
+# обновляет его до полной версии, сохраняя кастомные volume-монтирования.
 ensure_nginx() {
-    if [ -f "${DIR_NGINX}docker-compose.yml" ]; then
-        return 0
-    fi
     mkdir -p "${DIR_NGINX}" "${DIR_NGINX}ssl"
+    local _extra_vols=()
+    if [ -f "${DIR_NGINX}docker-compose.yml" ]; then
+        # Уже содержит все нужные volume-ы — ничего делать не надо
+        if grep -q '/dev/shm:/dev/shm' "${DIR_NGINX}docker-compose.yml" 2>/dev/null; then
+            return 0
+        fi
+        # Внешний docker-compose (remnasale-license и т.д.) — сохраняем кастомные volume-ы
+        while IFS= read -r _v; do
+            case "$_v" in
+                *nginx.conf*|*/etc/nginx/ssl*|*letsencrypt*|*/dev/shm*|*/var/www/html:*) ;;
+                *) _extra_vols+=("$_v") ;;
+            esac
+        done < <(grep -E '^\s+-\s+.+:.+' "${DIR_NGINX}docker-compose.yml" 2>/dev/null)
+    fi
     cat > "${DIR_NGINX}docker-compose.yml" <<'COMPOSE'
 services:
   nginx:
@@ -75,6 +88,13 @@ services:
         max-size: '30m'
         max-file: '5'
 COMPOSE
+    # Восстанавливаем кастомные volume-ы из предыдущего compose (remnasale-license site и т.д.)
+    local _v
+    for _v in "${_extra_vols[@]+"${_extra_vols[@]}"}"; do
+        [ -z "$_v" ] && continue
+        grep -qF "$_v" "${DIR_NGINX}docker-compose.yml" 2>/dev/null && continue
+        sed -i "/\/var\/www\/html:\/var\/www\/html/a\\${_v}" "${DIR_NGINX}docker-compose.yml"
+    done
 }
 
 # ─── Извлекает внешние server-блоки из nginx.conf в память перед перезаписью файла ───
@@ -212,9 +232,14 @@ nginx_remove_server_block() {
 # Адаптирует listen-директивы под текущий конфиг (unix socket vs port 443).
 nginx_restore_server_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
-    local name content uses_socket=false
+    local name content uses_socket=false has_port_443=false
     if grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         uses_socket=true
+    fi
+    # Проверяем, есть ли listen 443 в базовом конфиге (панель + нода или только панель).
+    # Если нет (standalone нода) — порт 443 предназначен для xray, внешние блоки не должны на нём слушать.
+    if grep -q 'listen 443 ssl;' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        has_port_443=true
     fi
     for name in "${!_NGINX_EXTERNAL_BLOCKS[@]}"; do
         grep -qF "# BEGIN_${name}_BLOCK" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
@@ -222,10 +247,21 @@ nginx_restore_server_blocks() {
         if $uses_socket; then
             # Убираем IPv6
             content=$(printf '%s\n' "$content" | sed '/listen \[::\]:443/d')
-            # Добавляем unix socket listen если отсутствует (не заменяем listen 443 ssl;)
+            # Добавляем unix socket listen если отсутствует
             if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
-                content=$(printf '%s\n' "$content" | sed \
-                    's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;|')
+                if $has_port_443; then
+                    # Панель + нода: сохраняем listen 443 ssl; наряду с unix socket
+                    content=$(printf '%s\n' "$content" | sed \
+                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;|')
+                else
+                    # Standalone нода: порт 443 для xray — заменяем на unix socket
+                    content=$(printf '%s\n' "$content" | sed \
+                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+                fi
+            fi
+            # Standalone нода: убираем оставшиеся listen 443 ssl; (если были рядом с socket)
+            if ! $has_port_443 && printf '%s' "$content" | grep -q 'listen 443 ssl;'; then
+                content=$(printf '%s\n' "$content" | sed '/listen 443 ssl;/d')
             fi
             # Добавляем proxy_protocol headers если отсутствуют
             if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
