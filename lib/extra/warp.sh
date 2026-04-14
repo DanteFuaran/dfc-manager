@@ -638,8 +638,9 @@ add_warp_to_config() {
     # Открываем порт в UFW на этом сервере
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${warp_port}/tcp" >/dev/null 2>&1 || true
-        echo "${warp_port}" > /etc/wireguard/.warp_port
     fi
+    mkdir -p /etc/wireguard
+    echo "${warp_port}" > /etc/wireguard/.warp_port
 
     echo
     echo -e "${YELLOW}⚠️  Теперь установите WARP на сервере ноды${NC}"
