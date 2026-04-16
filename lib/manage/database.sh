@@ -247,6 +247,20 @@ _db_partial_restore() {
     # Удаляем временную базу
     docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
 
+    # После восстановления нод — чистим оборванные FK на config_profiles
+    if [ "$table_group" = "nodes" ]; then
+        (
+            docker exec remnawave-db psql -U postgres -d postgres -c \
+                "DELETE FROM config_profile_inbounds_to_nodes
+                 WHERE config_profile_inbound_uuid NOT IN (SELECT uuid FROM config_profile_inbounds);" >/dev/null 2>&1
+            docker exec remnawave-db psql -U postgres -d postgres -c \
+                "UPDATE nodes SET active_config_profile_uuid = NULL
+                 WHERE active_config_profile_uuid IS NOT NULL
+                   AND active_config_profile_uuid NOT IN (SELECT uuid FROM config_profiles);" >/dev/null 2>&1
+        ) &
+        show_spinner "Очистка оборванных ссылок на профили"
+    fi
+
     # Запускаем панель и ждём готовности API
     (
         cd "$panel_dir"
