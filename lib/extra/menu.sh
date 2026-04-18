@@ -177,7 +177,6 @@ services:
     restart: unless-stopped
     ports:
       - "${PROXY_PORT}:443"
-      - "127.0.0.1:2398:2398"
     environment:
       - SECRET=${PROXY_SECRET}
       - TAG=${PROXY_TAG}
@@ -482,20 +481,21 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Активные клиенты — HTTP stats-порт 2398 (встроен в telegrammessenger/proxy, -p 2398)
-        _active=$(docker exec "$_MT_CONTAINER" \
-            curl -s --max-time 2 http://127.0.0.1:2398/stats 2>/dev/null \
-            | grep -oP '\bcurrent_connections\b\D+\K\d+' | head -1)
-
-        # Fallback: /proc/net/tcp — считаем ВСЕ ESTABLISHED к порту 443
-        # (дедупликация по IP некорректна: Docker bridge NAT даёт всем один source IP)
-        if [ -z "$_active" ]; then
-            _active=$(docker exec "$_MT_CONTAINER" sh -c \
-                'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' 2>/dev/null \
-                | awk 'FNR>1 && $4=="01" && $2~/:01BB$/{n++} END{print n+0}' \
-                2>/dev/null || echo "0")
-        fi
+        # Считаем подключения к PROXY_PORT прямо на хосте — видим реальные IP клиентов
+        # (Docker DNAT не скрывает source IP на уровне хоста)
+        local _port="${PROXY_PORT:-443}"
+        local _ss_out
+        _ss_out=$(ss -tn state established "( sport = :${_port} )" 2>/dev/null | tail -n +2)
+        _active=$(echo "$_ss_out" | grep -c . || echo 0)
         _active="${_active:-0}"
+
+        # Уникальные IP клиентов (колонка Peer Address, обрезаем порт)
+        local _client_ips
+        _client_ips=$(echo "$_ss_out" \
+            | awk '{print $4}' \
+            | sed 's/:[0-9]*$//' \
+            | sed 's/^\[//; s/\]$//' \
+            | sort -u)
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
@@ -521,6 +521,14 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
+        if [ -n "$_client_ips" ]; then
+            echo
+            echo -e "${BLUE}──────────────────────────────────────${NC}"
+            echo -e " ${DARKGRAY}Подключённые IP:${NC}"
+            while IFS= read -r _ip; do
+                [ -n "$_ip" ] && echo -e "   ${WHITE}${_ip}${NC}"
+            done <<< "$_client_ips"
+        fi
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
