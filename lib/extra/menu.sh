@@ -483,21 +483,21 @@ _mt_do_stats() {
 
         # Считаем подключения к PROXY_PORT прямо на хосте — видим реальные IP клиентов
         # (Docker DNAT не скрывает source IP на уровне хоста)
+        # Формат 'ss -tn state established': Recv-Q Send-Q  LocalAddr:Port  PeerAddr:Port
+        # $3=Local(сервер), $4=Peer(клиент) — фильтруем по $3 (локальный порт = PROXY_PORT)
         local _port="${PROXY_PORT:-443}"
         local _ss_out
-        # awk-фильтр надёжнее встроенного фильтра ss: ищем строки где локальный адрес
-        # (колонка $4) оканчивается на :PROXY_PORT
         _ss_out=$(ss -tn state established 2>/dev/null \
-            | awk -v p=":${_port}" 'NR>1 && $4 ~ p"$"')
-        # awk для счёта: избегаем grep -c (exit code 1 при 0 строках даёт двойной вывод)
-        _active=$(printf '%s\n' "$_ss_out" | awk 'NF{c++} END{print c+0}')
+            | awk -v p=":${_port}" 'NR>1 && $3 ~ p"$"')
 
-        # Уникальные IP клиентов — колонка $5 (Peer Address:Port клиента), обрезаем порт
+        # Уникальные IP клиентов — $4 (Peer Address:Port клиента), обрезаем порт
+        # MTProto открывает 2+ TCP-соединения на клиента — считаем по уникальным IP
         local _client_ips
         _client_ips=$(printf '%s\n' "$_ss_out" \
-            | awk 'NF{print $5}' \
+            | awk 'NF{print $4}' \
             | sed 's/:[0-9]*$//; s/^\[//; s/\]$//' \
             | sort -u)
+        _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
