@@ -177,9 +177,15 @@ services:
     restart: unless-stopped
     ports:
       - "${PROXY_PORT}:443"
+      - "127.0.0.1:2398:2398"
     environment:
       - SECRET=${PROXY_SECRET}
       - TAG=${PROXY_TAG}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 COMPOSE
 }
 
@@ -476,11 +482,20 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Активные клиенты из /proc/net/tcp
-        _active=$(docker exec "$_MT_CONTAINER" sh -c \
-            'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' 2>/dev/null \
-            | awk 'FNR>1 && $4=="01" && $2~/:01BB$/{split($3,a,":"); ip=a[1]; if(!(ip in ips)){ips[ip]=1}} END{n=0; for(k in ips)n++; print n}' \
-            2>/dev/null || echo "0")
+        # Активные клиенты — HTTP stats-порт 2398 (встроен в telegrammessenger/proxy, -p 2398)
+        _active=$(docker exec "$_MT_CONTAINER" \
+            curl -s --max-time 2 http://127.0.0.1:2398/stats 2>/dev/null \
+            | grep -oP '\bcurrent_connections\b\D+\K\d+' | head -1)
+
+        # Fallback: /proc/net/tcp — считаем ВСЕ ESTABLISHED к порту 443
+        # (дедупликация по IP некорректна: Docker bridge NAT даёт всем один source IP)
+        if [ -z "$_active" ]; then
+            _active=$(docker exec "$_MT_CONTAINER" sh -c \
+                'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' 2>/dev/null \
+                | awk 'FNR>1 && $4=="01" && $2~/:01BB$/{n++} END{print n+0}' \
+                2>/dev/null || echo "0")
+        fi
+        _active="${_active:-0}"
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
