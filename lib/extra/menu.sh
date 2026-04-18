@@ -481,17 +481,16 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Считаем подключения к PROXY_PORT прямо на хосте — видим реальные IP клиентов
-        # (Docker DNAT не скрывает source IP на уровне хоста)
-        # Формат 'ss -tn state established': Recv-Q Send-Q  LocalAddr:Port  PeerAddr:Port
-        # $3=Local(сервер), $4=Peer(клиент) — фильтруем по $3 (локальный порт = PROXY_PORT)
-        local _port="${PROXY_PORT:-443}"
+        # Считаем подключения изнутри контейнера — только там видны реальные IP клиентов.
+        # На хосте Docker не создаёт сокеты для проброшенных портов (отдельный net namespace).
+        # Внутри контейнера порт всегда 443 (PROXY_PORT — это только хостовый маппинг).
         local _ss_out
-        _ss_out=$(ss -tn state established 2>/dev/null \
-            | awk -v p=":${_port}" 'NR>1 && $3 ~ p"$"')
+        _ss_out=$(docker exec "$_MT_CONTAINER" \
+            ss -tn state established 2>/dev/null \
+            | awk 'NR>1 && $3 ~ /:443$/')
 
-        # Уникальные IP клиентов — $4 (Peer Address:Port клиента), обрезаем порт
-        # MTProto открывает 2+ TCP-соединения на клиента — считаем по уникальным IP
+        # Уникальные IP клиентов — $4 (Peer Address:Port), обрезаем порт клиента
+        # MTProto открывает несколько TCP-соединений на устройство — считаем по уникальным IP
         local _client_ips
         _client_ips=$(printf '%s\n' "$_ss_out" \
             | awk 'NF{print $4}' \
