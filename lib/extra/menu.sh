@@ -485,16 +485,18 @@ _mt_do_stats() {
         # (Docker DNAT не скрывает source IP на уровне хоста)
         local _port="${PROXY_PORT:-443}"
         local _ss_out
-        _ss_out=$(ss -tn state established "( sport = :${_port} )" 2>/dev/null | tail -n +2)
-        _active=$(echo "$_ss_out" | grep -c . || echo 0)
-        _active="${_active:-0}"
+        # awk-фильтр надёжнее встроенного фильтра ss: ищем строки где локальный адрес
+        # (колонка $4) оканчивается на :PROXY_PORT
+        _ss_out=$(ss -tn state established 2>/dev/null \
+            | awk -v p=":${_port}" 'NR>1 && $4 ~ p"$"')
+        # awk для счёта: избегаем grep -c (exit code 1 при 0 строках даёт двойной вывод)
+        _active=$(printf '%s\n' "$_ss_out" | awk 'NF{c++} END{print c+0}')
 
-        # Уникальные IP клиентов (колонка Peer Address, обрезаем порт)
+        # Уникальные IP клиентов — колонка $5 (Peer Address:Port клиента), обрезаем порт
         local _client_ips
-        _client_ips=$(echo "$_ss_out" \
-            | awk '{print $4}' \
-            | sed 's/:[0-9]*$//' \
-            | sed 's/^\[//; s/\]$//' \
+        _client_ips=$(printf '%s\n' "$_ss_out" \
+            | awk 'NF{print $5}' \
+            | sed 's/:[0-9]*$//; s/^\[//; s/\]$//' \
             | sort -u)
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
