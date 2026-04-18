@@ -498,6 +498,43 @@ _mt_do_stats() {
             | sort -u)
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
+        # Геолокация: кеш /tmp/mtproto_geo — строки вида "IP|Страна, Город"
+        # Новые IP запрашиваем батчем через ip-api.com (бесплатно, без ключа)
+        local _geo_cache="/tmp/mtproto_geo"
+        touch "$_geo_cache" 2>/dev/null || true
+        local _new_ips=""
+        while IFS= read -r _gip; do
+            [ -z "$_gip" ] && continue
+            grep -q "^${_gip}|" "$_geo_cache" 2>/dev/null || _new_ips="${_new_ips} ${_gip}"
+        done <<< "$_client_ips"
+        if [ -n "$_new_ips" ]; then
+            # Формируем JSON-массив и делаем батч-запрос в фоне
+            (
+                local _jarr
+                _jarr=$(echo "$_new_ips" | tr ' ' '\n' | grep -v '^$' \
+                    | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
+                local _resp
+                _resp=$(curl -s --max-time 6 -X POST \
+                    "http://ip-api.com/batch?fields=query,country,city" \
+                    -H "Content-Type: application/json" \
+                    -d "[${_jarr}]" 2>/dev/null)
+                # Парсим: {"query":"1.2.3.4","country":"Russia","city":"Moscow"}
+                echo "$_resp" | grep -oP '\{[^}]+\}' | while read -r _obj; do
+                    local _q _co _ci
+                    _q=$(echo "$_obj"  | grep -oP '"query"\s*:\s*"\K[^"]+')
+                    _co=$(echo "$_obj" | grep -oP '"country"\s*:\s*"\K[^"]+')
+                    _ci=$(echo "$_obj" | grep -oP '"city"\s*:\s*"\K[^"]+')
+                    [ -z "$_q" ] && continue
+                    local _geo_str="—"
+                    [ -n "$_co" ] && _geo_str="${_co}"
+                    [ -n "$_ci" ] && _geo_str="${_geo_str}, ${_ci}"
+                    # Атомарная запись (append): если IP ещё не в кеше — добавляем
+                    grep -q "^${_q}|" "$_geo_cache" 2>/dev/null \
+                        || echo "${_q}|${_geo_str}" >> "$_geo_cache"
+                done
+            ) &
+        fi
+
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
             echo "$_max_sim" > "$_max_file" 2>/dev/null || true
@@ -524,10 +561,14 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         if [ -n "$_client_ips" ]; then
             echo
-            echo -e "${BLUE}──────────────────────────────────────${NC}"
+            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
             echo -e " ${DARKGRAY}Подключённые IP:${NC}"
             while IFS= read -r _ip; do
-                [ -n "$_ip" ] && echo -e "   ${WHITE}${_ip}${NC}"
+                [ -z "$_ip" ] && continue
+                local _geo_str
+                _geo_str=$(grep "^${_ip}|" "$_geo_cache" 2>/dev/null | head -1 | cut -d'|' -f2)
+                [ -z "$_geo_str" ] && _geo_str="..."
+                printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
             done <<< "$_client_ips"
         fi
         echo
