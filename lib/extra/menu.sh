@@ -129,8 +129,8 @@ _mt_check_docker() {
         print_error "Docker не запущен"; return 1
     fi
     if ! command -v sqlite3 &>/dev/null; then
-        (apt-get install -y sqlite3 >/dev/null 2>&1) &
-        show_spinner "Установка sqlite3..." "sqlite3 установлен"
+        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q sqlite3 >/dev/null 2>&1) &
+        show_spinner "Установка необходимых компонентов" "Компоненты установлены"
     fi
 }
 
