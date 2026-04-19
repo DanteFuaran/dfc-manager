@@ -48,7 +48,6 @@ install_packages() {
 
         # Обновление и установка пакетов
         apt-get update -qq >/dev/null 2>&1
-        apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
         apt-get install -y -qq $DPKG_OPTS ca-certificates curl jq ufw wget gnupg unzip nano dialog git \
             certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils \
             coreutils grep gawk logrotate cron bash-completion >/dev/null 2>&1

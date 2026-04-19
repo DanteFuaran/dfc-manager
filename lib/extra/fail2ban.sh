@@ -177,8 +177,9 @@ JAIL_EOF
         local _f2b_log
         _f2b_log=$(mktemp /tmp/f2b_install.XXXXXX)
         (
-            apt-get update -qq 2>&1
-            apt-get install -y -qq fail2ban 2>&1
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold fail2ban >/dev/null 2>&1
         ) > "$_f2b_log" &
         show_spinner "Установка Fail2ban"
 

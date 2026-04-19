@@ -48,8 +48,11 @@ apply_template() {
     
     # Скачиваем шаблон с GitHub (через API, т.к. репо приватный)
     local _api_url="https://api.github.com/repos/DanteFuaran/dfc-manager/contents/templates/${template_id}/index.html?ref=${SCRIPT_BRANCH}"
-    
-    if curl -fsSL -H "Authorization: Bearer ${_DFC_KEY}" -H "Accept: application/vnd.github.v3.raw" \
+
+    local _curl_auth_args=()
+    [ -n "${_DFC_KEY:-}" ] && _curl_auth_args=(-H "Authorization: Bearer ${_DFC_KEY}")
+
+    if curl -fsSL "${_curl_auth_args[@]}" -H "Accept: application/vnd.github.v3.raw" \
         "${_api_url}" -o /var/www/html/index.html; then
         echo "$name" > /var/www/.current_template
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed
