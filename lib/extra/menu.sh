@@ -542,10 +542,15 @@ _mt_do_stats() {
         _up_h=$(( _uptime / 3600 )); _up_m=$(( (_uptime % 3600) / 60 )); _up_s=$(( _uptime % 60 ))
         printf -v _up_str "%02d:%02d:%02d" "$_up_h" "$_up_m" "$_up_s"
 
-        local _net_io="—"
-        local _stats_out
-        _stats_out=$(docker stats --no-stream --format "{{.NetIO}}" "$_MT_CONTAINER" 2>/dev/null || true)
-        [ -n "$_stats_out" ] && _net_io="$_stats_out"
+        # docker stats --no-stream блокирует ~1.5 сек — запускаем в фоне, используем кеш
+        local _net_io_file="/tmp/mtproto_netio"
+        if [ ! -f "$_net_io_file" ]; then touch "$_net_io_file" 2>/dev/null || true; fi
+        local _net_io
+        _net_io=$(cat "$_net_io_file" 2>/dev/null || echo "—")
+        [ -z "$_net_io" ] && _net_io="—"
+        # Обновляем в фоне для следующего цикла
+        ( docker stats --no-stream --format "{{.NetIO}}" "$_MT_CONTAINER" 2>/dev/null \
+            | head -1 > "$_net_io_file" ) &
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1033,20 +1038,18 @@ _mt_do_access() {
                 _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
                 _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 for _ip in "${_all_ips[@]}"; do
-                    local _geo_str _bl_mark _on_mark
+                    local _geo_str
                     _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                     [ -z "$_geo_str" ] && _geo_str="—"
+                    local _line
+                    _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
                     if _mt_ip_is_blocked "$_ip"; then
-                        _bl_mark=" ${RED}(Заблокирован)${NC}"
-                        _on_mark=""
+                        _ip_items+=("${RED}${_line}${NC}")
                     elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
-                        _bl_mark=""
-                        _on_mark=" ${GREEN}(в сети)${NC}"
+                        _ip_items+=("${GREEN}${_line}${NC}")
                     else
-                        _bl_mark=""
-                        _on_mark=""
+                        _ip_items+=("$_line")
                     fi
-                    _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")${_on_mark}${_bl_mark}")
                     _ip_vals+=("$_ip")
                 done
 
@@ -1061,17 +1064,33 @@ _mt_do_access() {
 
                 _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 if [ ${#_subnets_multi[@]} -gt 0 ]; then
-                    _ip_items+=($'\x01'"${DARKGRAY}Список подозрительных подсетей:${NC}"); _ip_vals+=("sep")
+                    _ip_items+=($'\x01'"${DARKGRAY}Подозрительные подсети (онлайн):${NC}"); _ip_vals+=("sep")
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                     for _sn in "${_subnets_multi[@]}"; do
-                        local _cnt="${_subnet_count[$_sn]}" _sn_bl_mark
+                        local _cnt="${_subnet_count[$_sn]}"
+                        local _sn_line
+                        _sn_line=$(printf '%-22s  %s IP из подсети' "$_sn" "$_cnt")
                         if _mt_ip_is_blocked "$_sn"; then
-                            _sn_bl_mark=" ${RED}(Заблокирована)${NC}"
+                            _ip_items+=("${RED}${_sn_line}${NC}")
                         else
-                            _sn_bl_mark=""
+                            _ip_items+=("$_sn_line")
                         fi
-                        _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")${_sn_bl_mark}")
                         _ip_vals+=("$_sn")
+                    done
+                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+                fi
+
+                # Заблокированные подсети из block-файла
+                local -a _blocked_cidrs=()
+                for _b in "${_blocked_list[@]}"; do
+                    [[ "$_b" == */* ]] && _blocked_cidrs+=("$_b")
+                done
+                if [ ${#_blocked_cidrs[@]} -gt 0 ]; then
+                    _ip_items+=($'\x01'"${DARKGRAY}Заблокированные подсети:${NC}"); _ip_vals+=("sep")
+                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+                    for _bn in "${_blocked_cidrs[@]}"; do
+                        _ip_items+=("${RED}${_bn}${NC}")
+                        _ip_vals+=("$_bn")
                     done
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 fi
@@ -1122,13 +1141,16 @@ _mt_do_access() {
             *)
                 if [[ -n "$_sel" ]]; then
                     if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
-                        echo -e "${YELLOW}⚠ Уже в списке: ${_sel}${NC}"
+                        # Уже заблокирован — разблокируем
+                        grep -vxF "$_sel" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
+                        mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
+                        _mt_ipt -D DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
                     else
                         echo "$_sel" >> "$_MT_BLOCK_FILE"
-                        local _port="${PROXY_PORT:-443}"
                         _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sel"
-                        echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
+                        echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
                     fi
                     sleep 1.5
                 fi
