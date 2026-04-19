@@ -343,20 +343,18 @@ _mt_do_install() {
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
+                    if [ -z "$_secret_input" ]; then
+                        # Генерируем секрет и показываем его на той же строке что и промпт
+                        _secret_input=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    fi
                     (( _step++ ))
                 else
                     _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
-            5) # Показать секрет + Telegram TAG
-                local _disp_secret
-                if [ -n "$_secret_input" ]; then
-                    _disp_secret="$_secret_input"
-                else
-                    _disp_secret=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
-                fi
-                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+            5) # Telegram TAG
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
@@ -369,12 +367,8 @@ _mt_do_install() {
         esac
     done
 
-    # Финализация введённых значений
-    if [ -n "$_secret_input" ]; then
-        PROXY_SECRET="$_secret_input"
-    else
-        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
-    fi
+    # Финализация: секрет уже в _secret_input (был введён или сгенерирован на шаге 4)
+    PROXY_SECRET="$_secret_input"
     echo
     echo
 
