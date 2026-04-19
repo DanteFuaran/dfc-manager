@@ -184,6 +184,7 @@ PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
+PROXY_NAME=${PROXY_NAME:-}
 EOF
     # config.toml для mtg:2
     local _pp="false"
@@ -222,51 +223,179 @@ TOML
     if [ -n "${PROXY_TAG:-}" ]; then
         printf '\nadvertise-tag = "%s"\n' "${PROXY_TAG}" >> "${_MT_DIR}/config.toml"
     fi
-    _mt_write_proxy_page
+    _mt_write_proxy_page "${SERVER_IP:-}" "${PROXY_SECRET:-}" "${PROXY_PORT:-}" "${PROXY_NAME:-}"
 }
 
-# Генерирует HTML-страницу для открытия прокси через браузер
-# Кладёт файл в /var/www/html/mtproto.html и добавляет location в nginx если нужно
+# Выпускает SSL-сертификат для домена через certbot standalone (порт 80)
+# Возвращает 0 если сертификат готов (новый или уже существующий), 1 при ошибке
+_mt_issue_cert() {
+    local _domain="${1:-}"
+    # Если это IP — сертификат не нужен
+    if [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 1
+    fi
+    [ -z "$_domain" ] && return 1
+    local _cert_dir="/etc/letsencrypt/live/${_domain}"
+    # Уже есть — ок
+    if [ -f "${_cert_dir}/fullchain.pem" ]; then
+        return 0
+    fi
+    # Открываем порт 80, выпускаем, закрываем
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    certbot certonly --standalone --non-interactive --agree-tos \
+        --register-unsafely-without-email \
+        --preferred-challenges http-01 \
+        --http-01-port 80 \
+        -d "$_domain" >/dev/null 2>&1
+    local _rc=$?
+    if command -v ufw >/dev/null 2>&1; then
+        ufw delete allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    return $_rc
+}
+
+# Находит имя nginx-контейнера
+_mt_nginx_container() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1
+}
+
+# Добавляет домен в nginx: stream map + server block с /connect
+_mt_nginx_add_domain() {
+    local _domain="${1:-}" _secret="${2:-}" _port="${3:-}" _name="${4:-}"
+    [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
+    [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
+
+    local _nginx_conf="/opt/nginx/nginx.conf"
+    local _ssl_dir="/opt/nginx/ssl/${_domain}"
+    local _cert_src="/etc/letsencrypt/live/${_domain}"
+
+    [ -f "${_cert_src}/fullchain.pem" ] || return 1
+
+    # Копируем сертификат в nginx ssl папку
+    mkdir -p "$_ssl_dir"
+    cp "${_cert_src}/fullchain.pem" "${_ssl_dir}/fullchain.pem"
+    cp "${_cert_src}/privkey.pem"   "${_ssl_dir}/privkey.pem"
+
+    # Renewal hook — копирует сертификат и перезагружает nginx
+    local _hook_file="/etc/letsencrypt/renewal-hooks/deploy/mtproto-${_domain}.sh"
+    cat > "$_hook_file" << HOOK
+#!/bin/bash
+# Авторенью: копирует сертификат в nginx ssl и перезагружает nginx
+D="${_domain}"
+mkdir -p /opt/nginx/ssl/\$D
+cp /etc/letsencrypt/live/\$D/fullchain.pem /opt/nginx/ssl/\$D/fullchain.pem
+cp /etc/letsencrypt/live/\$D/privkey.pem   /opt/nginx/ssl/\$D/privkey.pem
+NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
+[ -n "\$NGINX" ] && docker exec "\$NGINX" nginx -s reload 2>/dev/null || true
+HOOK
+    chmod +x "$_hook_file"
+
+    # Добавляем домен в stream map если не добавлен
+    if ! grep -q "${_domain}" "$_nginx_conf"; then
+        sed -i "s|default\s\+127\.0\.0\.1:8445|${_domain}   127.0.0.1:8444;\n        default                 127.0.0.1:8445|" "$_nginx_conf"
+    fi
+
+    # Генерируем HTML-страницу /connect
+    _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
+
+    local _html_path="/var/www/html/mtproto-connect.html"
+    local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
+
+    # Добавляем server block если не добавлен
+    if ! grep -q "$_connect_marker" "$_nginx_conf"; then
+        cat >> "$_nginx_conf" << NGINX_BLOCK
+
+${_connect_marker}
+server {
+    server_name ${_domain};
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
+
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+
+    location = /connect {
+        default_type text/html;
+        alias ${_html_path};
+    }
+
+    location / {
+        return 444;
+    }
+}
+# END_MT_CONNECT_${_domain}
+NGINX_BLOCK
+    else
+        # Обновляем только HTML-файл (server block уже есть)
+        :
+    fi
+
+    # Перезагружаем nginx
+    local _nc; _nc=$(_mt_nginx_container)
+    [ -n "$_nc" ] && docker exec "$_nc" nginx -s reload 2>/dev/null || true
+}
+
+# Генерирует HTML-страницу с лоадером для редиректа в Telegram
 _mt_write_proxy_page() {
-    local _server="${SERVER_IP:-}" _port="${PROXY_PORT:-}" _secret="${PROXY_SECRET:-}"
-    [ -z "$_server" ] || [ -z "$_port" ] || [ -z "$_secret" ] && return 0
-    local _tg_url="tg://proxy?server=${_server}&port=${_port}&secret=${_secret}"
-    cat > /var/www/html/mtproto.html << HTMLEOF
+    local _domain="${1:-${SERVER_IP:-}}"
+    local _secret="${2:-${PROXY_SECRET:-}}"
+    local _port="${3:-${PROXY_PORT:-}}"
+    local _name="${4:-${PROXY_NAME:-}}"
+    [ -z "$_secret" ] || [ -z "$_port" ] || [ -z "$_domain" ] && return 0
+
+    local _display_name="${_name:-MTProto Proxy}"
+    local _tg_url="tg://proxy?server=${_domain}&port=${_port}&secret=${_secret}"
+    local _html_path="/var/www/html/mtproto-connect.html"
+
+    mkdir -p /var/www/html
+    cat > "$_html_path" << HTMLEOF
 <!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="2;url=${_tg_url}">
-<title>MTProto Proxy</title>
+<title>${_display_name}</title>
 <style>
-  body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#17212b;font-family:sans-serif;color:#fff}
-  .box{text-align:center;padding:2rem}
-  .icon{font-size:3rem;margin-bottom:1rem}
-  h2{margin:0 0 .5rem}
-  p{color:#aaa;margin:0 0 1.5rem}
-  a{display:inline-block;padding:.75rem 2rem;background:#2b5278;border-radius:8px;color:#fff;text-decoration:none;font-size:1rem}
-  a:hover{background:#3a6d9e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#17212b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{text-align:center;padding:2.5rem 2rem;max-width:360px;width:100%}
+.loader{width:56px;height:56px;margin:0 auto 1.5rem;position:relative}
+.loader::before,.loader::after{content:'';position:absolute;border-radius:50%}
+.loader::before{width:100%;height:100%;border:3px solid rgba(255,255,255,.12);top:0;left:0}
+.loader::after{width:100%;height:100%;border:3px solid transparent;border-top-color:#5da8d6;top:0;left:0;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.plane{font-size:1.8rem;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
+.sub{color:#7a9db8;font-size:.95rem;margin-bottom:2rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 2rem;background:#2b5278;border-radius:10px;color:#fff;text-decoration:none;font-size:1rem;font-weight:500;transition:background .2s,transform .1s}
+.btn:hover{background:#3a6d9e}
+.btn:active{transform:scale(.97)}
+.btn svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
 <body>
-<div class="box">
-  <div class="icon">✈️</div>
-  <h2>MTProto Proxy</h2>
-  <p>Открываем Telegram...</p>
-  <a href="${_tg_url}">Открыть в Telegram</a>
+<div class="card">
+  <div class="loader"><span class="plane">✈️</span></div>
+  <h1>${_display_name}</h1>
+  <div class="sub">Телеграм прокси</div>
+  <a class="btn" href="${_tg_url}">
+    <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+    Подключиться
+  </a>
 </div>
+<script>
+setTimeout(function(){window.location.href="${_tg_url}"},1200);
+</script>
 </body>
 </html>
 HTMLEOF
-    # Добавить location в nginx test-n если ещё не добавлен
-    if [ -f /opt/nginx/nginx.conf ] && ! grep -q "location = /mtproto" /opt/nginx/nginx.conf; then
-        sed -i '/server_name test-n\.dfc-online\.com/,/^    server_name/{/location = \/ {/{
-i\    location = /mtproto {\n        default_type text/html;\n        alias /var/www/html/mtproto.html;\n    }\n
-}}' /opt/nginx/nginx.conf
-        docker exec remnawave-nginx nginx -s reload 2>/dev/null || \
-        docker exec nginx nginx -s reload 2>/dev/null || true
-    fi
+
+    # Обновляем старую test-n страницу для совместимости
+    [ -f /var/www/html/mtproto.html ] && cp "$_html_path" /var/www/html/mtproto.html 2>/dev/null || true
 }
 
 # Записывает docker-compose.yml
@@ -296,12 +425,13 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
     PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
+    PROXY_NAME=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -427,9 +557,18 @@ _mt_do_install() {
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
-                    break
+                    (( _step++ ))
                 else
                     _mt_erase_lines 2
+                    (( _step-- ))
+                fi
+                ;;
+            6) # Название сервиса для страницы подключения
+                _mt_read_input PROXY_NAME "Название сервиса ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_NAME:-}"
+                if [ $? -eq 0 ]; then
+                    break
+                else
+                    _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
@@ -468,6 +607,16 @@ _mt_do_install() {
         _mt_nginx_stream_write
     fi
 
+    # Выпуск сертификата и настройка /connect страницы
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        (_mt_issue_cert "$SERVER_IP") &
+        show_spinner "Выпуск SSL-сертификата" "SSL-сертификат получен"
+        if _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
+            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "$PROXY_NAME") &
+            show_spinner "Настройка страницы подключения" "Страница подключения готова"
+        fi
+    fi
+
     # UFW
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
@@ -491,6 +640,7 @@ _mt_do_install() {
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+        [ -n "$PROXY_NAME" ] && echo -e " ${DARKGRAY}$(_mpad "Название:" $_cw)${NC} ${WHITE}${PROXY_NAME}${NC}"
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
@@ -500,6 +650,12 @@ _mt_do_install() {
         echo
         echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
         echo
+        # Ссылка страницы подключения (браузер → Telegram)
+        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo -e "${WHITE}🌐 Страница подключения (для пользователей):${NC}"
+            echo -e "   ${CYAN:-\033[0;36m}https://${SERVER_IP}/connect${NC}"
+            echo
+        fi
         local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
         echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
         echo -e "   ${YELLOW}${_raw_s}${NC}"
@@ -556,6 +712,11 @@ _mt_do_config() {
     echo
     echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     echo
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${WHITE}🌐 Страница подключения (для пользователей):${NC}"
+        echo -e "   ${CYAN:-\033[0;36m}https://${SERVER_IP}/connect${NC}"
+        echo
+    fi
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
     echo -e "   ${YELLOW}${_raw_s}${NC}"
