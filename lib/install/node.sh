@@ -942,6 +942,16 @@ EOL
     randomhtml
     echo
 
+    # Если MTProto stream-блок есть в nginx.conf — запускаем nginx ПЕРВЫМ,
+    # чтобы он занял 443 через stream, а Xray использовал только 8443
+    local _mt_stream_present=false
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _mt_stream_present=true
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
+        show_spinner "Запуск nginx" || true
+        sleep 1
+    fi
+
     (
         cd "${NODE_INSTALL_DIR}"
         docker compose up -d >/dev/null 2>&1
@@ -952,8 +962,10 @@ EOL
         return
     fi
 
-    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
+    if ! $_mt_stream_present; then
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
+        show_spinner "Запуск nginx" || true
+    fi
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
     tput cnorm 2>/dev/null || true
@@ -1155,6 +1167,15 @@ installation_node_with_existing_subpage() {
     (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск страницы подписки" || true
 
+    # Если MTProto stream-блок есть — запускаем nginx первым
+    local _mt_stream_present2=false
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _mt_stream_present2=true
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
+        show_spinner "Запуск nginx" || true
+        sleep 1
+    fi
+
     (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
     if ! show_spinner "Подключение ноды"; then
         print_error "Не удалось запустить контейнеры"
@@ -1163,8 +1184,12 @@ installation_node_with_existing_subpage() {
     fi
     echo
 
-    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-    show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+    if ! $_mt_stream_present2; then
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
+        show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+    else
+        show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+    fi
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья

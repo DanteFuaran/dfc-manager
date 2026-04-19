@@ -621,7 +621,30 @@ _mt_do_install() {
     tput civis 2>/dev/null || true
     _mt_block_apply
     if _mt_nginx_available; then
+        # Если порт 443 занят не nginx-ом (например rw-core/Xray) — освобождаем
+        local _port443_owner
+        _port443_owner=$(ss -tlnp 'sport = :443' 2>/dev/null | awk -F'"' '/users:/{print $2}' | head -1)
+        local _node_stopped=false
+        if [ -n "$_port443_owner" ] && [ "$_port443_owner" != "nginx" ]; then
+            if [ -f "/opt/remnanode/docker-compose.yml" ]; then
+                (cd /opt/remnanode && docker compose stop >/dev/null 2>&1) || true
+                _node_stopped=true
+            fi
+        fi
+
         _mt_nginx_stream_write
+
+        # Перезапускаем nginx чтобы подхватить stream-блок
+        local _nc; _nc=$(_mt_nginx_container)
+        if [ -n "$_nc" ]; then
+            docker restart "$_nc" >/dev/null 2>&1 || true
+            sleep 2
+        fi
+
+        # Возвращаем ноду (Xray не получит 443 — его занял nginx stream, но 8443 будет работать)
+        if $_node_stopped; then
+            (cd /opt/remnanode && docker compose start >/dev/null 2>&1) || true
+        fi
     fi
 
     # Выпуск сертификата и настройка /connect страницы
