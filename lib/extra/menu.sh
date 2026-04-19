@@ -846,18 +846,16 @@ _mt_block_apply() {
     while IFS= read -r _entry; do
         [[ "$_entry" =~ ^#|^$ ]] && continue
         # Добавляем только если правила ещё нет
-        iptables -C INPUT -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
-            || iptables -I INPUT -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+        iptables -C DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
+            || iptables -I DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
     done < "$_MT_BLOCK_FILE"
 }
 
 _mt_block_clear_all() {
-    # Снимаем все DROP-правила для нашего порта
+    # Снимаем все DROP-правила из DOCKER-USER для нашего порта
     local _port="${PROXY_PORT:-443}"
-    while iptables -D INPUT -p tcp --dport "$_port" -j DROP 2>/dev/null; do :; done
-    # Убираем и правила с -s (конкретные IP)
-    iptables -S INPUT 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
-        iptables "${_rule/-A/-D}" 2>/dev/null || true
+    iptables -S DOCKER-USER 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
+        iptables ${_rule/-A/-D} 2>/dev/null || true
     done
 }
 
@@ -921,7 +919,7 @@ _mt_do_access() {
             if [ ${#_cur_ips[@]} -eq 0 ]; then
                 _ip_items+=("${DARKGRAY}(нет активных подключений)${NC}"); _ip_vals+=("sep")
             else
-                _ip_items+=("${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
+                _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
                 for _ip in "${_cur_ips[@]}"; do
                     local _geo_str
                     _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
@@ -941,7 +939,7 @@ _mt_do_access() {
 
                 if [ ${#_subnets_multi[@]} -gt 0 ]; then
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
-                    _ip_items+=("${DARKGRAY}Список подозрительных подсетей:${NC}");  _ip_vals+=("sep")
+                    _ip_items+=($'\x01'"${DARKGRAY}Список подозрительных подсетей:${NC}"); _ip_vals+=("sep")
                     for _sn in "${_subnets_multi[@]}"; do
                         local _cnt="${_subnet_count[$_sn]}"
                         _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")")
@@ -982,7 +980,7 @@ _mt_do_access() {
                         else
                             echo "$_new_entry" >> "$_MT_BLOCK_FILE"
                             local _port="${PROXY_PORT:-443}"
-                            iptables -I INPUT -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                            iptables -I DOCKER-USER -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
                             docker exec "$_MT_CONTAINER" ss -K dst "$_new_entry" 2>/dev/null || true
                             echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                         fi
@@ -1000,7 +998,7 @@ _mt_do_access() {
                     else
                         echo "$_sel" >> "$_MT_BLOCK_FILE"
                         local _port="${PROXY_PORT:-443}"
-                        iptables -I INPUT -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                        iptables -I DOCKER-USER -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
                         docker exec "$_MT_CONTAINER" ss -K dst "$_sel" 2>/dev/null || true
                         echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
                     fi
@@ -1042,7 +1040,7 @@ _mt_do_access() {
                     sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" \
                         "$_MT_BLOCK_FILE" 2>/dev/null || true
                     local _port="${PROXY_PORT:-443}"
-                    iptables -D INPUT -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                    iptables -D DOCKER-USER -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
                     sleep 1.2
                     # Обновляем список для следующей итерации
@@ -1099,8 +1097,8 @@ manage_mtproto() {
             _items+=("⬆️   Обновить образ");          _actions+=("update")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             _items+=("📊  Статистика подключений");            _actions+=("stats")
-            _items+=("�  Управление доступом");               _actions+=("access")
-            _items+=("�📄  Конфигурация и ссылка");             _actions+=("config")
+            _items+=("🚫  Управление доступом");               _actions+=("access")
+            _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
             _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             if [ "$_running" = true ]; then
