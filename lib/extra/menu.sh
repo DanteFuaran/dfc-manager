@@ -381,8 +381,11 @@ _mt_do_install() {
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    _mt_db_migrate   # Создаёт БД и мигрирует старые файлы (seen_ips, blocked_ips) если есть
     print_success "Подготовка файлов"
+
+    # База данных
+    (_mt_db_migrate) &
+    show_spinner "Подключение базы..." "Подключение базы"
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
@@ -392,11 +395,8 @@ _mt_do_install() {
     fi
 
     # Тянем образ и запускаем
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
-    show_spinner "Загрузка образа..." "Образ загружен"
-
-    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск MTProto..." "MTProto запущен!"
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск MTProto..." "Запуск MTProto"
     _mt_block_apply
     if _mt_nginx_available; then
         _mt_nginx_stream_write
@@ -409,6 +409,8 @@ _mt_do_install() {
 
     if _mt_running; then
         _mt_save_config
+        print_success "Установка завершена!"
+        echo
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         local _ok_line="✅ MTProto успешно установлен!"
@@ -948,7 +950,7 @@ _MT_NGINX_CONTAINER="remnawave-nginx"      # имя nginx-контейнера
 
 # Инициализация схемы БД (вызывать при установке и при первом обращении)
 _mt_db_init() {
-    sqlite3 "$_MT_DB" <<'SQL'
+    sqlite3 "$_MT_DB" <<'SQL' >/dev/null 2>&1
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS seen_ips (
     ip         TEXT PRIMARY KEY,
