@@ -305,7 +305,9 @@ HOOK
 
     # Добавляем server block если не добавлен
     if ! grep -q "$_connect_marker" "$_nginx_conf"; then
-        cat >> "$_nginx_conf" << NGINX_BLOCK
+        # Записываем block во временный файл, затем вставляем через awk перед маркером закрытия http
+        local _tmpf; _tmpf=$(mktemp)
+        cat > "$_tmpf" << NGINX_BLOCK
 
 ${_connect_marker}
 server {
@@ -329,14 +331,22 @@ server {
 }
 # END_MT_CONNECT_${_domain}
 NGINX_BLOCK
+        awk '/^} # ─── end http ───$/ { while ((getline line < blockfile) > 0) print line; close(blockfile) } { print }' \
+            blockfile="$_tmpf" "$_nginx_conf" > "${_nginx_conf}.tmp" \
+            && mv "${_nginx_conf}.tmp" "$_nginx_conf"
+        rm -f "$_tmpf"
     else
         # Обновляем только HTML-файл (server block уже есть)
         :
     fi
 
-    # Перезагружаем nginx
+    # Перезагружаем nginx (полный рестарт чтобы подхватить новые server blocks)
     local _nc; _nc=$(_mt_nginx_container)
-    [ -n "$_nc" ] && docker exec "$_nc" nginx -s reload 2>/dev/null || true
+    if [ -n "$_nc" ]; then
+        docker exec "$_nc" nginx -t 2>/dev/null \
+            && docker restart "$_nc" >/dev/null 2>&1 \
+            || true
+    fi
 }
 
 # Генерирует HTML-страницу с лоадером для редиректа в Telegram
