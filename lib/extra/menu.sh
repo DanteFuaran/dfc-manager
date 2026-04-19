@@ -385,18 +385,18 @@ _mt_do_install() {
 
     # База данных
     (_mt_db_migrate) &
-    show_spinner "Подключение базы..." "Подключение базы"
+    show_spinner "Подключение базы" "Подключение базы"
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
         (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
          docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        show_spinner "Очистка старого контейнера..." "Старый контейнер удалён"
+        show_spinner "Очистка старого контейнера" "Старый контейнер удалён"
     fi
 
     # Тянем образ и запускаем
     (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск MTProto..." "Запуск MTProto"
+    show_spinner "Запуск MTProto" "Запуск MTProto"
     _mt_block_apply
     if _mt_nginx_available; then
         _mt_nginx_stream_write
@@ -896,7 +896,7 @@ _mt_do_uninstall() {
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
-    show_spinner "Остановка контейнера..." "Остановка контейнера"
+    show_spinner "Остановка контейнера" "Остановка контейнера"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
@@ -907,7 +907,7 @@ _mt_do_uninstall() {
     if _mt_nginx_available; then _mt_nginx_stream_remove; fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
-    show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
+    show_spinner "Удаление остаточных файлов" "Удаление остаточных файлов"
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
@@ -1153,7 +1153,6 @@ content = content.replace('    listen 443 ssl default_server;', '    #mt# listen
 # Insert stream block before http {
 content = re.sub(r'(\nhttp \{)', stream_block + r'\1', content, count=1)
 with open(path, 'w') as f: f.write(content)
-print('ok')
 PYEOF
     docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
 }
@@ -1171,7 +1170,6 @@ content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', con
 content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
 content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
 with open(path, 'w') as f: f.write(content)
-print('ok')
 PYEOF
     docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
 }
