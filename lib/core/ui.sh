@@ -221,7 +221,8 @@ show_arrow_menu() {
                 # Заголовок-секция (не выбирается)
                 echo -e "${DARKGRAY}${options[$i]:1}${NC}"
             elif [ $i -eq $selected ]; then
-                echo -e "${BLUE}▶${NC} ${YELLOW}${options[$i]}${NC}"
+                local _clean_item; _clean_item=$(echo -e "${options[$i]}" | sed 's/\x1b\[[0-9;]*m//g')
+                echo -e "${BLUE}▶${NC} ${YELLOW}${_clean_item}${NC}"
             else
                 echo -e "  ${options[$i]}"
             fi
