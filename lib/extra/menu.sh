@@ -156,6 +156,14 @@ _mt_extract_raw_secret() {
     fi
 }
 
+# Секрет для Telegram ссылок: ee + 32 hex (без домена)
+# ee<32hex><domain_hex> → ee<32hex>
+_mt_link_secret() {
+    local s="${1:-}"
+    local raw; raw=$(_mt_extract_raw_secret "$s")
+    echo "ee${raw}"
+}
+
 # Ищет свободный порт начиная с base
 _mt_find_free_port() {
     local base="${1:-8443}"
@@ -440,9 +448,10 @@ _mt_do_install() {
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
+        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
         echo
-        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
         echo
         local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
         echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
@@ -495,9 +504,10 @@ _mt_do_config() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
+    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     echo
-    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     echo
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
@@ -820,8 +830,8 @@ _mt_do_change_config() {
     fi
 
     echo
-    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo -e " ${DARKGRAY}https:${NC} ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=$(_mt_link_secret "$PROXY_SECRET")${NC}"
+    echo -e " ${DARKGRAY}https:${NC} ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=$(_mt_link_secret "$PROXY_SECRET")${NC}"
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
     echo
