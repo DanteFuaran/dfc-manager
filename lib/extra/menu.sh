@@ -835,8 +835,6 @@ _mt_do_update() {
     _mt_press_enter
 }
 
-}
-
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
 
