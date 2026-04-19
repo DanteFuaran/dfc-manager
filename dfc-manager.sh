@@ -29,10 +29,6 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
-    if [ -z "${DFC_ACCESS_KEY:-}" ]; then
-        echo -e "${_RED}✖ Ключ доступа не найден. Используйте установщик: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-install/main/install.sh)${_NC}"
-        exit 1
-    fi
     if ! command -v git >/dev/null 2>&1; then
         echo -e "${_BLUE}⏳ Устанавливаю git...${_NC}"
         if command -v apt-get >/dev/null 2>&1; then
@@ -44,15 +40,13 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         fi
     fi
     if ! timeout 60 git clone --depth 1 -b "$_BRANCH" \
-            "https://oauth2:${DFC_ACCESS_KEY}@github.com/DanteFuaran/dfc-manager.git" \
+            "https://github.com/DanteFuaran/dfc-manager.git" \
             "${_INSTALL_DIR}" >/dev/null 2>&1; then
-        echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте ключ доступа и соединение с интернетом.${_NC}"
+        echo -e "${_RED}✖ Ошибка клонирования репозитория. Проверьте соединение с интернетом.${_NC}"
         rm -rf "${_INSTALL_DIR}"
         exit 1
     fi
     chmod +x "$_INSTALL_SCRIPT"
-    echo "${DFC_ACCESS_KEY}" > "${_INSTALL_DIR}/.access_key"
-    chmod 600 "${_INSTALL_DIR}/.access_key"
     exec "$_INSTALL_SCRIPT" "$@"
 fi
 
@@ -140,11 +134,8 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
     _UPDATE_FLAG="/tmp/.dfc_upd_$$"
     export _START_TIME=$(date +%s)
     (
-        _api_repo=$(echo "$SCRIPT_REPO" | sed 's|https://github.com/||; s|\.git$||')
-        _auth_hdr=""
-        [ -n "${_DFC_KEY:-}" ] && _auth_hdr="Authorization: token ${_DFC_KEY}"
+        _api_repo="DanteFuaran/dfc-manager"
         _remote_sha=$(curl -sL --max-time 5 \
-            ${_auth_hdr:+-H "$_auth_hdr"} \
             -H "Cache-Control: no-cache" \
             "https://api.github.com/repos/${_api_repo}/commits/${SCRIPT_BRANCH}" 2>/dev/null \
             | grep -m1 '"sha"' | cut -d'"' -f4 2>/dev/null || true)
