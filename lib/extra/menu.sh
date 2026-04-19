@@ -392,8 +392,9 @@ var TG="${_tg_url}",done=false;
 function go(){
   if(done)return;done=true;
   window.location.href=TG;
-  document.addEventListener('visibilitychange',function(){if(document.hidden)window.close();});
-  window.addEventListener('blur',function(){setTimeout(function(){window.close()},400)},{once:true});
+  setTimeout(function(){
+    document.addEventListener('visibilitychange',function(){if(document.hidden)window.close();});
+  },800);
 }
 setTimeout(go,1200);
 document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
