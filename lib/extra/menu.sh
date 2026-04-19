@@ -1378,16 +1378,17 @@ _mt_strip_ip() {
 }
 
 _mt_get_active_ips() {
-    if _mt_nginx_available; then
-        # nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
+    _mt_load_env
+    local _port="${PROXY_PORT:-3128}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        # MTProto за nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
         # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
         ss -tn state established 'sport = :443' 2>/dev/null \
             | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
-        _mt_load_env
-        local _port="${PROXY_PORT:-3128}"
+        # MTProto напрямую на порту _port (обычно 8443)
         ss -tn state established 2>/dev/null \
             | awk -v p=":${_port}$" 'NR>1 && $3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
