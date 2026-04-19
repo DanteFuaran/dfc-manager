@@ -499,6 +499,15 @@ _mt_do_stats() {
             | sort -u)
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
+        # Сохраняем историю виденных IP в файл seen_ips
+        if [ -n "$_client_ips" ]; then
+            touch "$_MT_SEEN_FILE" 2>/dev/null || true
+            while IFS= read -r _gip; do
+                [ -z "$_gip" ] && continue
+                grep -qxF "$_gip" "$_MT_SEEN_FILE" 2>/dev/null || echo "$_gip" >> "$_MT_SEEN_FILE"
+            done <<< "$_client_ips"
+        fi
+
         # Геолокация: кеш /tmp/mtproto_geo — строки вида "IP|Страна, Город"
         # Новые IP запрашиваем батчем через ip-api.com (бесплатно, без ключа)
         local _geo_cache="/tmp/mtproto_geo"
@@ -560,17 +569,53 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
-        if [ -n "$_client_ips" ]; then
+        # Фильтруем заблокированные IP из статистики
+        local _visible_ips=""
+        while IFS= read -r _ip; do
+            [ -z "$_ip" ] && continue
+            grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null && continue
+            _visible_ips+="${_ip}"$'\n'
+        done <<< "$_client_ips"
+        _visible_ips=$(printf '%s' "$_visible_ips" | sed '/^$/d')
+
+        if [ -n "$_visible_ips" ]; then
             echo
             echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
             echo -e " ${DARKGRAY}Подключённые IP:${NC}"
+            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+
+            # Считаем /24 подсети среди видимых IP
+            declare -A _st_subnet_count=()
+            while IFS= read -r _ip; do
+                [ -z "$_ip" ] && continue
+                local _s24
+                _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                _st_subnet_count["$_s24"]=$(( ${_st_subnet_count["$_s24"]:-0} + 1 ))
+            done <<< "$_visible_ips"
+
             while IFS= read -r _ip; do
                 [ -z "$_ip" ] && continue
                 local _geo_str
                 _geo_str=$(grep "^${_ip}|" "$_geo_cache" 2>/dev/null | head -1 | cut -d'|' -f2)
                 [ -z "$_geo_str" ] && _geo_str="..."
                 printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
-            done <<< "$_client_ips"
+            done <<< "$_visible_ips"
+
+            # Подсети с 2+ IP
+            local -a _st_subnets=()
+            for _sn in "${!_st_subnet_count[@]}"; do
+                [ "${_st_subnet_count[$_sn]}" -ge 2 ] && _st_subnets+=("$_sn")
+            done
+            if [ ${#_st_subnets[@]} -gt 0 ]; then
+                IFS=$'\n' _st_subnets=($(printf '%s\n' "${_st_subnets[@]}" | sort))
+                unset IFS
+                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+                echo -e " ${DARKGRAY}Подозрительные подсети:${NC}"
+                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+                for _sn in "${_st_subnets[@]}"; do
+                    printf "   ${YELLOW}%-20s${DARKGRAY}%s IP из подсети${NC}\n" "$_sn" "${_st_subnet_count[$_sn]}"
+                done
+            fi
         fi
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -837,6 +882,7 @@ _mt_do_update() {
 
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
+_MT_SEEN_FILE="${_MT_DIR}/seen_ips"       # история всех виденных клиентских IP
 
 # Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
 _mt_ipt() {
@@ -899,6 +945,15 @@ _mt_do_access() {
             | awk 'NF{print $4}' | sed 's/:[0-9]*$//' | sort -u)
         while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
 
+        # Сохраняем историю виденных IP
+        if [ -n "$_client_ips" ]; then
+            touch "$_MT_SEEN_FILE" 2>/dev/null || true
+            while IFS= read -r _gip; do
+                [ -z "$_gip" ] && continue
+                grep -qxF "$_gip" "$_MT_SEEN_FILE" 2>/dev/null || echo "$_gip" >> "$_MT_SEEN_FILE"
+            done <<< "$_client_ips"
+        fi
+
         local -a _items=() _actions=()
 
         local _add_label="➕  Заблокировать IP или подсеть"
@@ -922,7 +977,7 @@ _mt_do_access() {
 
         case "$_action" in
         add)
-            # Считаем сколько IP из каждой /24 подсети
+            # Текущие подключения — для подсчёта подозрительных подсетей
             declare -A _subnet_count=()
             for _ip in "${_cur_ips[@]}"; do
                 local _s24
@@ -930,20 +985,41 @@ _mt_do_access() {
                 _subnet_count["$_s24"]=$(( ${_subnet_count["$_s24"]:-0} + 1 ))
             done
 
+            # Список IP для отображения: seen_ips (история) ∪ cur_ips (сейчас онлайн), отсортированный
+            local -a _all_ips=()
+            touch "$_MT_SEEN_FILE" 2>/dev/null || true
+            # Читаем seen_ips, добавляем текущие если ещё нет
+            local _combined
+            _combined=$(cat "$_MT_SEEN_FILE" 2>/dev/null; printf '%s\n' "${_cur_ips[@]}")
+            while IFS= read -r _ip; do
+                [[ -z "$_ip" || "$_ip" =~ ^# ]] && continue
+                _all_ips+=("$_ip")
+            done < <(printf '%s\n' "${_combined}" | sort -u)
+
             # Строим список: сначала заголовок + IP-адреса, затем подозрительные подсети
             local -a _ip_items=() _ip_vals=()
 
-            if [ ${#_cur_ips[@]} -eq 0 ]; then
-                _ip_items+=("${DARKGRAY}(нет активных подключений)${NC}"); _ip_vals+=("sep")
+            if [ ${#_all_ips[@]} -eq 0 ]; then
+                _ip_items+=("${DARKGRAY}(нет данных о подключениях)${NC}"); _ip_vals+=("sep")
                 _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             else
                 _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
                 _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
-                for _ip in "${_cur_ips[@]}"; do
-                    local _geo_str
+                for _ip in "${_all_ips[@]}"; do
+                    local _geo_str _bl_mark _on_mark
                     _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                     [ -z "$_geo_str" ] && _geo_str="—"
-                    _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")")
+                    if grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                        _bl_mark=" ${RED}(Заблокирован)${NC}"
+                        _on_mark=""
+                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
+                        _bl_mark=""
+                        _on_mark=" ${GREEN}(в сети)${NC}"
+                    else
+                        _bl_mark=""
+                        _on_mark=""
+                    fi
+                    _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")${_on_mark}${_bl_mark}")
                     _ip_vals+=("$_ip")
                 done
 
@@ -961,8 +1037,13 @@ _mt_do_access() {
                     _ip_items+=($'\x01'"${DARKGRAY}Список подозрительных подсетей:${NC}"); _ip_vals+=("sep")
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                     for _sn in "${_subnets_multi[@]}"; do
-                        local _cnt="${_subnet_count[$_sn]}"
-                        _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")")
+                        local _cnt="${_subnet_count[$_sn]}" _sn_bl_mark
+                        if grep -qxF "$_sn" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                            _sn_bl_mark=" ${RED}(Заблокирована)${NC}"
+                        else
+                            _sn_bl_mark=""
+                        fi
+                        _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")${_sn_bl_mark}")
                         _ip_vals+=("$_sn")
                     done
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
