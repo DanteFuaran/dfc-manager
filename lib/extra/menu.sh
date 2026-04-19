@@ -872,23 +872,17 @@ _mt_do_update() {
 _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
 _MT_SEEN_FILE="${_MT_DIR}/seen_ips"       # история всех виденных клиентских IP
 
-# Возвращает список уникальных IP клиентов у которых keepalive-таймер < 3 минут.
-# Telegram посылает данные каждые 30-60 сек — таймер сбрасывается, значит < 180 сек = живое.
-# Мёртвые соединения накапливают таймер до ~120 мин (TCP keepalive по умолчанию).
+# Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями на порт 443.
+# Исключает соединения в режиме keepalive-пробинга (timer retries > 0) —
+# это соединения где TCP уже посылает пробы без ответа (пользователь скорее всего отключился).
 _mt_get_active_ips() {
     docker exec "$_MT_CONTAINER" ss -tnoe state established 2>/dev/null \
         | awk '
             /^[0-9]/ && $3 ~ /:443$/ {
                 peer = $4; sub(/:[0-9]+$/, "", peer)
-                # Ищем keepalive-таймер в той же строке
-                if (match($0, /keepalive,([0-9]+)(min|sec)/, m)) {
-                    val = int(m[1])
-                    if (m[2] == "min") val = val * 60
-                    if (val < 180) print peer
-                } else {
-                    # Нет таймера — соединение активно прямо сейчас
-                    print peer
-                }
+                # timer:(keepalive,X,Y) — Y > 0 означает что пробы уже посылаются без ответа
+                if (match($0, /keepalive,[^,]+,([0-9]+)\)/, m) && int(m[1]) > 0) next
+                print peer
             }
         ' | sort -u
 }
