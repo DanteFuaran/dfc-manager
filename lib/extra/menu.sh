@@ -397,6 +397,7 @@ function go(){
   },800);
 }
 setTimeout(go,1200);
+setTimeout(function(){window.close()},10000);
 document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
 </script>
 </body>
