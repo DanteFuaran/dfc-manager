@@ -34,7 +34,7 @@ manage_extra_settings() {
 # MTPROTO — УПРАВЛЕНИЕ
 # ═══════════════════════════════════════════════════
 _MT_CONTAINER="mtproto-proxy"
-_MT_IMAGE="telegrammessenger/proxy:latest"
+_MT_IMAGE="nineseconds/mtg:2"
 _MT_DIR="/opt/mtproto"
 _MT_ENV="${_MT_DIR}/.env"
 
