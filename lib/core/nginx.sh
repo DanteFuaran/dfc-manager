@@ -19,6 +19,12 @@ DIR_NGINX="/opt/nginx/"
 # В памяти: внешние server-блоки, сохранённые перед перегенерацией nginx.conf
 declare -A _NGINX_EXTERNAL_BLOCKS=() 2>/dev/null || true
 
+# В памяти: MTProto stream-блок (BEGIN_MTPROTO_STREAM...END_MTPROTO_STREAM)
+_NGINX_MTPROTO_STREAM=""
+
+# В памяти: MTProto connect server-блоки (BEGIN_MT_CONNECT_domain...END_MT_CONNECT_domain)
+declare -A _NGINX_MT_CONNECT_BLOCKS=() 2>/dev/null || true
+
 # ─── Создаёт /opt/nginx/ с docker-compose.yml если не существует ───
 # Если docker-compose.yml создан внешним установщиком (remnasale-license и т.д.),
 # обновляет его до полной версии, сохраняя кастомные volume-монтирования.
@@ -99,6 +105,7 @@ COMPOSE
 
 # ─── Извлекает внешние server-блоки из nginx.conf в память перед перезаписью файла ───
 # Все блоки BEGIN_*_BLOCK кроме BEGIN_SUB_BLOCK ситаются внешними (Beszel и др.).
+# Также сохраняет MTProto stream-блок и MT_CONNECT server-блоки.
 _nginx_extract_external_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0  # если файл отсутствует — ничего извлекать
     local k; for k in "${!_NGINX_EXTERNAL_BLOCKS[@]}"; do unset "_NGINX_EXTERNAL_BLOCKS[$k]"; done
@@ -121,6 +128,26 @@ _nginx_extract_external_blocks() {
             *)
                 [ "$in_block" -eq 1 ] && buf+="${line}"$'\n' ;;
         esac
+    done < "${DIR_NGINX}nginx.conf"
+
+    # Сохраняем MTProto stream-блок (идёт перед http {})
+    _NGINX_MTPROTO_STREAM=""
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _NGINX_MTPROTO_STREAM=$(awk '/# BEGIN_MTPROTO_STREAM/,/# END_MTPROTO_STREAM/' "${DIR_NGINX}nginx.conf")
+    fi
+
+    # Сохраняем MT_CONNECT server-блоки (идут внутри http {})
+    local k2; for k2 in "${!_NGINX_MT_CONNECT_BLOCKS[@]}"; do unset "_NGINX_MT_CONNECT_BLOCKS[$k2]"; done
+    local in_mt=0 mt_domain="" mt_buf=""
+    while IFS= read -r line; do
+        if [[ "$line" == "# BEGIN_MT_CONNECT_"* ]]; then
+            in_mt=1; mt_domain="${line#\# BEGIN_MT_CONNECT_}"; mt_buf=""
+        elif [[ "$line" == "# END_MT_CONNECT_"* ]]; then
+            [ "$in_mt" -eq 1 ] && _NGINX_MT_CONNECT_BLOCKS["$mt_domain"]="${mt_buf%$'\n'}"
+            in_mt=0; mt_domain=""
+        elif [ "$in_mt" -eq 1 ]; then
+            mt_buf+="${line}"$'\n'
+        fi
     done < "${DIR_NGINX}nginx.conf"
 }
 
@@ -164,6 +191,47 @@ http {
 NGINX
     # Restore saved server blocks (e.g. Beszel) into new minimal conf
     nginx_restore_server_blocks
+}
+
+# ─── Восстанавливает MTProto stream-блок перед http {} ───
+# Вызывается после каждой перегенерации nginx.conf (из _nginx_http_header в config.sh).
+_nginx_restore_stream_block() {
+    [ -z "${_NGINX_MTPROTO_STREAM:-}" ] && return 0
+    [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && return 0
+    local tmp stream_file
+    tmp=$(mktemp); stream_file=$(mktemp)
+    printf '%s\n' "$_NGINX_MTPROTO_STREAM" > "$stream_file"
+    awk -v sf="$stream_file" '
+        /^http \{/ {
+            while ((getline line < sf) > 0) print line
+            close(sf)
+            print ""
+        }
+        { print }
+    ' "${DIR_NGINX}nginx.conf" > "$tmp" && cat "$tmp" > "${DIR_NGINX}nginx.conf"
+    rm -f "$tmp" "$stream_file"
+}
+
+# ─── Восстанавливает MT_CONNECT server-блоки внутри http {} ───
+# Вызывается из nginx_restore_server_blocks.
+_nginx_restore_mt_connect_blocks() {
+    [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+    local domain content tmp block_file
+    for domain in "${!_NGINX_MT_CONNECT_BLOCKS[@]}"; do
+        grep -qF "# BEGIN_MT_CONNECT_${domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
+        content="${_NGINX_MT_CONNECT_BLOCKS[$domain]}"
+        tmp=$(mktemp); block_file=$(mktemp)
+        printf '# BEGIN_MT_CONNECT_%s\n%s\n# END_MT_CONNECT_%s\n' "$domain" "$content" "$domain" > "$block_file"
+        awk -v bf="$block_file" '
+            /end http/ {
+                while ((getline line < bf) > 0) print line
+                close(bf)
+            }
+            { print }
+        ' "${DIR_NGINX}nginx.conf" > "$tmp" && cat "$tmp" > "${DIR_NGINX}nginx.conf"
+        rm -f "$tmp" "$block_file"
+    done
 }
 
 # ─── Копирует сертификат из letsencrypt в /opt/nginx/ssl/{domain}/ ───
@@ -285,6 +353,8 @@ nginx_restore_server_blocks() {
         _NGINX_EXTERNAL_BLOCKS["$name"]="$content"
         _nginx_insert_server_block "${DIR_NGINX}nginx.conf" "$name" "$content"
     done
+    # Восстанавливаем MT_CONNECT server-блоки (MTProto connect pages)
+    _nginx_restore_mt_connect_blocks
 }
 
 # ─── Проверяет, есть ли пользователи nginx (Remnawave, Beszel и т.д.) ───

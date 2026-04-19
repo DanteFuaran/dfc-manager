@@ -569,6 +569,8 @@ http {
     client_max_body_size 1m;
 
 NGINX_HTTP_HEAD
+    # Восстанавливаем MTProto stream-блок (идёт перед http {}) если был в предыдущем конфиге
+    _nginx_restore_stream_block
 }
 
 # ─── Nginx: Панель + Нода (Full) ───
