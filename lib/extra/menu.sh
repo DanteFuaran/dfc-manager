@@ -145,6 +145,17 @@ _mt_generate_fake_tls_secret() {
     printf 'ee%s%s' "$random_hex" "$domain_hex"
 }
 
+# Извлекает «сырой» 32-символьный секрет (16 байт hex) из FakeTLS-обёртки
+# ee<32hex><domain_hex> → <32hex>
+_mt_extract_raw_secret() {
+    local s="${1:-}"
+    if [[ "$s" =~ ^[Ee]{2} ]] && [ ${#s} -gt 34 ]; then
+        echo "${s:2:32}"
+    else
+        echo "$s"
+    fi
+}
+
 # Ищет свободный порт начиная с base
 _mt_find_free_port() {
     local base="${1:-8443}"
@@ -415,8 +426,14 @@ _mt_do_install() {
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+        echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo
+        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo
+        local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+        echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
+        echo -e "   ${YELLOW}${_raw_s}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -464,8 +481,14 @@ _mt_do_config() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+    echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo
+    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo
+    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
+    echo -e "   ${YELLOW}${_raw_s}${NC}"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -786,7 +809,10 @@ _mt_do_change_config() {
     fi
 
     echo
-    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}https:${NC} ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
     echo
     _mt_press_enter
 }
@@ -837,38 +863,38 @@ _mt_do_restart() {
 
 _mt_do_uninstall() {
     _mt_load_env
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
+
     if ! _mt_installed; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
         echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
         _mt_press_enter; return
     fi
 
-    echo -e "    ${YELLOW}MTProto будет удалён с сервера${NC}"
-    echo
+    local _del_items=("✅  Да, удалить" "❌  Нет, не удалять")
+    local _del_actions=("yes" "no")
+    MENU_ESC_LABEL="Отмена"
+    show_arrow_menu "🗑️  Удаление MTProto" "${_del_items[@]}"
+    local _choice=$?
+    unset MENU_ESC_LABEL
+    [[ $_choice -eq 255 ]] && return
+    local _act="${_del_actions[$_choice]:-no}"
+    [[ "$_act" != "yes" ]] && return
+
+    clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
-            "")      break ;;
-        esac
-    done
-    tput cnorm 2>/dev/null || true
-    echo
+    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     (if [ -d "$_MT_DIR" ]; then
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
-    show_spinner "Остановка контейнера..." "Контейнер остановлен"
+    show_spinner "Остановка контейнера..." "Остановка контейнера"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
