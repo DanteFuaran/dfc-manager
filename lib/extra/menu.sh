@@ -959,8 +959,8 @@ _mt_do_access() {
 
     # Синхронизируем iptables с файлом: если файл пустой — снимаем все DROP-правила (тихо)
     local _file_entries
-    _file_entries=$(grep -cEv '^#|^$' "$_MT_BLOCK_FILE" 2>/dev/null || echo 0)
-    if [ "$_file_entries" -eq 0 ]; then
+    _file_entries=$(grep -Ev '^#|^$' "$_MT_BLOCK_FILE" 2>/dev/null | wc -l)
+    if [ "${_file_entries:-0}" -eq 0 ]; then
         _mt_block_clear_all 2>/dev/null
     fi
 
@@ -1109,9 +1109,9 @@ _mt_do_access() {
         _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                           _ip_vals+=("back")
 
-        # Заголовок: без цветовых переменных в строке (иначе show_arrow_menu думает что есть \n)
-        local _title="🚫 Управление доступом"
-        [ ${#_cur_ips[@]} -gt 0 ] && _title="🚫 Управление доступом\n   (${#_cur_ips[@]} онлайн)"
+        # Заголовок: центрированный с статистикой
+        local _blk_total=${#_blocked_list[@]}
+        local _title="🚫 Управление доступом\n• Онлайн: ${#_cur_ips[@]}\n• Заблокировано: ${_blk_total}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
