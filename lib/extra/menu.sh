@@ -218,8 +218,10 @@ disabled = false
 idle = "30s"
 interval = "10s"
 count = 3
-$([ -n "${PROXY_TAG:-}" ] && echo "\nadvertise-tag = \"${PROXY_TAG}\"")
 TOML
+    if [ -n "${PROXY_TAG:-}" ]; then
+        printf '\nadvertise-tag = "%s"\n' "${PROXY_TAG}" >> "${_MT_DIR}/config.toml"
+    fi
 }
 
 # Записывает docker-compose.yml
