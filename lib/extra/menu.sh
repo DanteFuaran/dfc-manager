@@ -1059,8 +1059,8 @@ _mt_do_access() {
 
                 local _to_remove="${_bl_list[$_rc]:-}"
                 if [[ -n "$_to_remove" ]]; then
-                    sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[/&]/\&/g')$/d" \
-                        "$_MT_BLOCK_FILE" 2>/dev/null || true
+                    grep -vxF "$_to_remove" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" \
+                        && mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
                     _mt_ipt -D DOCKER-USER -s "$_to_remove" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
                     sleep 1.2
