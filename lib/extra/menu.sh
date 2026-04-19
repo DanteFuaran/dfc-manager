@@ -838,24 +838,43 @@ _mt_do_update() {
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
 
+# Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
+_mt_ipt() {
+    if command -v iptables-legacy >/dev/null 2>&1 && \
+       iptables-legacy -n -L DOCKER >/dev/null 2>&1; then
+        iptables-legacy "$@"
+    else
+        iptables "$@"
+    fi
+}
+
+# Сбросить текущие соединения с IP (использует conntrack если доступен)
+_mt_kill_src() {
+    local _src="$1"
+    if command -v conntrack >/dev/null 2>&1; then
+        conntrack -D -s "$_src" >/dev/null 2>&1 || true
+    fi
+}
+
 _mt_block_apply() {
-    # Применяем все заблокированные записи из файла через iptables
+    # Применяем все заблокированные записи из файла через iptables-legacy (DOCKER-USER)
     # Вызывается при старте контейнера и из меню
     local _port="${PROXY_PORT:-443}"
     [ ! -f "$_MT_BLOCK_FILE" ] && return
+    # Убедимся что DOCKER-USER существует
+    _mt_ipt -N DOCKER-USER 2>/dev/null || true
     while IFS= read -r _entry; do
         [[ "$_entry" =~ ^#|^$ ]] && continue
-        # Добавляем только если правила ещё нет
-        iptables -C DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
-            || iptables -I DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
+            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
     done < "$_MT_BLOCK_FILE"
 }
 
 _mt_block_clear_all() {
     # Снимаем все DROP-правила из DOCKER-USER для нашего порта
     local _port="${PROXY_PORT:-443}"
-    iptables -S DOCKER-USER 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
-        iptables ${_rule/-A/-D} 2>/dev/null || true
+    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
+        _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
     done
 }
 
@@ -980,8 +999,8 @@ _mt_do_access() {
                         else
                             echo "$_new_entry" >> "$_MT_BLOCK_FILE"
                             local _port="${PROXY_PORT:-443}"
-                            iptables -I DOCKER-USER -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
-                            docker exec "$_MT_CONTAINER" ss -K dst "$_new_entry" 2>/dev/null || true
+                            _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                            _mt_kill_src "$_new_entry"
                             echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                         fi
                     else
@@ -998,8 +1017,8 @@ _mt_do_access() {
                     else
                         echo "$_sel" >> "$_MT_BLOCK_FILE"
                         local _port="${PROXY_PORT:-443}"
-                        iptables -I DOCKER-USER -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
-                        docker exec "$_MT_CONTAINER" ss -K dst "$_sel" 2>/dev/null || true
+                        _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                        _mt_kill_src "$_sel"
                         echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
                     fi
                     sleep 1.5
@@ -1040,7 +1059,7 @@ _mt_do_access() {
                     sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" \
                         "$_MT_BLOCK_FILE" 2>/dev/null || true
                     local _port="${PROXY_PORT:-443}"
-                    iptables -D DOCKER-USER -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                    _mt_ipt -D DOCKER-USER -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
                     sleep 1.2
                     # Обновляем список для следующей итерации
