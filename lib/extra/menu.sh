@@ -388,8 +388,15 @@ h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
   </a>
 </div>
 <script>
-setTimeout(function(){window.location.href="${_tg_url}"},1200);
-document.getElementById('btn').addEventListener('click',function(){setTimeout(function(){window.close()},600)});
+var TG="${_tg_url}",done=false;
+function go(){
+  if(done)return;done=true;
+  window.location.href=TG;
+  document.addEventListener('visibilitychange',function(){if(document.hidden)window.close();});
+  window.addEventListener('blur',function(){setTimeout(function(){window.close()},400)},{once:true});
+}
+setTimeout(go,1200);
+document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
 </script>
 </body>
 </html>
