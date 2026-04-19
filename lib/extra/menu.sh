@@ -625,7 +625,7 @@ _mt_do_stats() {
             while IFS= read -r _ip; do
                 [ -z "$_ip" ] && continue
                 local _geo_str
-                _geo_str=$(grep "^${_ip}|" "$_geo_cache" 2>/dev/null | head -1 | cut -d'|' -f2)
+                _geo_str=$(_mt_db_geo_get "$_ip")
                 [ -z "$_geo_str" ] && _geo_str="..."
                 printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
             done <<< "$_visible_ips"
@@ -1013,20 +1013,20 @@ _mt_db_migrate() {
 }
 
 # Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями к MTProto.
-# При nginx: смотрим хостовые соединения на порт 8445 (nginx→mtg gate).
-# Без nginx: смотрим ss внутри контейнера на порт 3128.
+# При nginx: смотрим хостовые соединения на порт 443 (реальные клиентские IP).
+# Без nginx: смотрим ss на хосте на порт PROXY_PORT.
 _mt_get_active_ips() {
     if _mt_nginx_available; then
-        # nginx stream route: клиенты идут 443→8445→3128
-        # На порту 8445 видны реальные IP клиентов (до proxy_protocol)
-        ss -tn state established 2>/dev/null \
-            | awk '$3 ~ /:8445$/ { peer=$4; sub(/:[0-9]+$/,"",peer); print peer }' \
+        # nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
+        # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
+        ss -tn state established 'sport = :443' 2>/dev/null \
+            | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | sort -u
     else
         _mt_load_env
         local _port="${PROXY_PORT:-3128}"
         ss -tn state established 2>/dev/null \
-            | awk -v p=":${_port}$" '$3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
+            | awk -v p=":${_port}$" 'NR>1 && $3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | sort -u
     fi
 }
