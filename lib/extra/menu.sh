@@ -382,13 +382,14 @@ h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
   <div class="loader"><span class="plane">✈️</span></div>
   <h1>${_display_name}</h1>
   <div class="sub">Телеграм прокси</div>
-  <a class="btn" href="${_tg_url}">
+  <a class="btn" id="btn" href="${_tg_url}">
     <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
     Подключиться
   </a>
 </div>
 <script>
-setTimeout(function(){window.location.href="${_tg_url}";setTimeout(function(){window.close()},500)},1200);
+setTimeout(function(){window.location.href="${_tg_url}"},1200);
+document.getElementById('btn').addEventListener('click',function(){setTimeout(function(){window.close()},600)});
 </script>
 </body>
 </html>
