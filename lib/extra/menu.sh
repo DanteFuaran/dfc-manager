@@ -619,10 +619,9 @@ _mt_do_install() {
 
     # Выпуск сертификата и настройка /connect страницы
     if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        (_mt_issue_cert "$SERVER_IP") &
-        show_spinner "Выпуск SSL-сертификата" "SSL-сертификат получен"
-        if _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
-            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "$PROXY_NAME") &
+        _mt_issue_cert "$SERVER_IP" &
+        if show_spinner "Выпуск SSL-сертификата" "SSL-сертификат получен"; then
+            _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "$PROXY_NAME" &
             show_spinner "Настройка страницы подключения" "Страница подключения готова"
         fi
     fi
