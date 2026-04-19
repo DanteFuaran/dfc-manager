@@ -482,21 +482,9 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Считаем подключения изнутри контейнера — только там видны реальные IP клиентов.
-        # На хосте Docker не создаёт сокеты для проброшенных портов (отдельный net namespace).
-        # Внутри контейнера порт всегда 443 (PROXY_PORT — это только хостовый маппинг).
-        local _ss_out
-        _ss_out=$(docker exec "$_MT_CONTAINER" \
-            ss -tn state established 2>/dev/null \
-            | awk 'NR>1 && $3 ~ /:443$/')
-
-        # Уникальные IP клиентов — $4 (Peer Address:Port), обрезаем порт клиента
-        # MTProto открывает несколько TCP-соединений на устройство — считаем по уникальным IP
+        # Активные клиенты: только IP с keepalive-таймером < 3 минут (Telegram посылает данные каждые ~60 сек)
         local _client_ips
-        _client_ips=$(printf '%s\n' "$_ss_out" \
-            | awk 'NF{print $4}' \
-            | sed 's/:[0-9]*$//; s/^\[//; s/\]$//' \
-            | sort -u)
+        _client_ips=$(_mt_get_active_ips)
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
         # Сохраняем историю виденных IP в файл seen_ips
@@ -884,6 +872,27 @@ _mt_do_update() {
 _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
 _MT_SEEN_FILE="${_MT_DIR}/seen_ips"       # история всех виденных клиентских IP
 
+# Возвращает список уникальных IP клиентов у которых keepalive-таймер < 3 минут.
+# Telegram посылает данные каждые 30-60 сек — таймер сбрасывается, значит < 180 сек = живое.
+# Мёртвые соединения накапливают таймер до ~120 мин (TCP keepalive по умолчанию).
+_mt_get_active_ips() {
+    docker exec "$_MT_CONTAINER" ss -tnoe state established 2>/dev/null \
+        | awk '
+            /^[0-9]/ && $3 ~ /:443$/ {
+                peer = $4; sub(/:[0-9]+$/, "", peer)
+                # Ищем keepalive-таймер в той же строке
+                if (match($0, /keepalive,([0-9]+)(min|sec)/, m)) {
+                    val = int(m[1])
+                    if (m[2] == "min") val = val * 60
+                    if (val < 180) print peer
+                } else {
+                    # Нет таймера — соединение активно прямо сейчас
+                    print peer
+                }
+            }
+        ' | sort -u
+}
+
 # Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
 _mt_ipt() {
     if command -v iptables-legacy >/dev/null 2>&1 && \
@@ -966,10 +975,7 @@ _mt_do_access() {
         done < "$_MT_BLOCK_FILE"
 
         local _ss_out _client_ips _cur_ips=()
-        _ss_out=$(docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
-            | awk 'NR>1 && $3 ~ /:443$/')
-        _client_ips=$(printf '%s\n' "$_ss_out" \
-            | awk 'NF{print $4}' | sed 's/:[0-9]*$//' | sort -u)
+        _client_ips=$(_mt_get_active_ips)
         while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
 
         # Сохраняем историю виденных IP
