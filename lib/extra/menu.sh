@@ -222,6 +222,51 @@ TOML
     if [ -n "${PROXY_TAG:-}" ]; then
         printf '\nadvertise-tag = "%s"\n' "${PROXY_TAG}" >> "${_MT_DIR}/config.toml"
     fi
+    _mt_write_proxy_page
+}
+
+# Генерирует HTML-страницу для открытия прокси через браузер
+# Кладёт файл в /var/www/html/mtproto.html и добавляет location в nginx если нужно
+_mt_write_proxy_page() {
+    local _server="${SERVER_IP:-}" _port="${PROXY_PORT:-}" _secret="${PROXY_SECRET:-}"
+    [ -z "$_server" ] || [ -z "$_port" ] || [ -z "$_secret" ] && return 0
+    local _tg_url="tg://proxy?server=${_server}&port=${_port}&secret=${_secret}"
+    cat > /var/www/html/mtproto.html << HTMLEOF
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="2;url=${_tg_url}">
+<title>MTProto Proxy</title>
+<style>
+  body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#17212b;font-family:sans-serif;color:#fff}
+  .box{text-align:center;padding:2rem}
+  .icon{font-size:3rem;margin-bottom:1rem}
+  h2{margin:0 0 .5rem}
+  p{color:#aaa;margin:0 0 1.5rem}
+  a{display:inline-block;padding:.75rem 2rem;background:#2b5278;border-radius:8px;color:#fff;text-decoration:none;font-size:1rem}
+  a:hover{background:#3a6d9e}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="icon">✈️</div>
+  <h2>MTProto Proxy</h2>
+  <p>Открываем Telegram...</p>
+  <a href="${_tg_url}">Открыть в Telegram</a>
+</div>
+</body>
+</html>
+HTMLEOF
+    # Добавить location в nginx test-n если ещё не добавлен
+    if [ -f /opt/nginx/nginx.conf ] && ! grep -q "location = /mtproto" /opt/nginx/nginx.conf; then
+        sed -i '/server_name test-n\.dfc-online\.com/,/^    server_name/{/location = \/ {/{
+i\    location = /mtproto {\n        default_type text/html;\n        alias /var/www/html/mtproto.html;\n    }\n
+}}' /opt/nginx/nginx.conf
+        docker exec remnawave-nginx nginx -s reload 2>/dev/null || \
+        docker exec nginx nginx -s reload 2>/dev/null || true
+    fi
 }
 
 # Записывает docker-compose.yml
