@@ -135,7 +135,7 @@ _mt_check_docker() {
 }
 
 # Генерирует Fake TLS secret (ee-формат: ee + 16 случайных байт + hex(domain))
-# Совместим с nineseconds/mtg:1 и другими modern-реализациями
+# Совместим с nineseconds/mtg:2 и другими modern-реализациями
 _mt_generate_fake_tls_secret() {
     local domain="${1:-google.com}"
     local domain_hex
@@ -156,7 +156,7 @@ _mt_find_free_port() {
     echo "10443"
 }
 
-# Сохраняет конфиг в .env
+# Сохраняет конфиг в .env и config.toml
 _mt_save_config() {
     mkdir -p "$_MT_DIR"
     cat > "$_MT_ENV" << EOF
@@ -166,6 +166,36 @@ SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
 EOF
+    # config.toml для mtg:2
+    local _pp="false"
+    _mt_nginx_available && _pp="true"
+    cat > "${_MT_DIR}/config.toml" << TOML
+# mtg v2 configuration
+# Managed by dfc-manager
+
+secret = "${PROXY_SECRET}"
+bind-to = "0.0.0.0:3128"
+
+proxy-protocol-listener = ${_pp}
+
+prefer-ip = "prefer-ipv4"
+
+[defense.anti-replay]
+enabled = true
+max-size = "1mib"
+error-rate = 0.001
+
+[network.timeout]
+tcp = "5s"
+http = "10s"
+idle = "5m"
+
+[network.keep-alive]
+disabled = false
+idle = "30s"
+interval = "10s"
+count = 3
+TOML
 }
 
 # Записывает docker-compose.yml
@@ -174,16 +204,14 @@ _mt_write_compose() {
     cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
 services:
   mtproto-proxy:
-    image: nineseconds/mtg:1
+    image: nineseconds/mtg:2
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
       - "127.0.0.1:3128:3128"
-    command: run -b 0.0.0.0:3128 ${PROXY_SECRET} ${PROXY_TAG}
-    sysctls:
-      - net.ipv4.tcp_keepalive_time=30
-      - net.ipv4.tcp_keepalive_intvl=10
-      - net.ipv4.tcp_keepalive_probes=3
+    volumes:
+      - ./config.toml:/config.toml:ro
+    command: run /config.toml
     logging:
       driver: "json-file"
       options:
@@ -984,12 +1012,23 @@ _mt_db_migrate() {
     fi
 }
 
-# Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями на порт 443.
-# TCP keepalive в контейнере = 30с → мёртвые соединения закрываются за ~60с.
+# Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями к MTProto.
+# При nginx: смотрим хостовые соединения на порт 8445 (nginx→mtg gate).
+# Без nginx: смотрим ss внутри контейнера на порт 3128.
 _mt_get_active_ips() {
-    docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
-        | awk 'NR>1 && $3 ~ /:443$/ { peer=$4; sub(/:[0-9]+$/,"",peer); print peer }' \
-        | sort -u
+    if _mt_nginx_available; then
+        # nginx stream route: клиенты идут 443→8445→3128
+        # На порту 8445 видны реальные IP клиентов (до proxy_protocol)
+        ss -tn state established 2>/dev/null \
+            | awk '$3 ~ /:8445$/ { peer=$4; sub(/:[0-9]+$/,"",peer); print peer }' \
+            | sort -u
+    else
+        _mt_load_env
+        local _port="${PROXY_PORT:-3128}"
+        ss -tn state established 2>/dev/null \
+            | awk -v p=":${_port}$" '$3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
+            | sort -u
+    fi
 }
 
 # Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
@@ -1052,7 +1091,7 @@ stream_block = f"""\n# BEGIN_MTPROTO_STREAM
 stream {{
     map $ssl_preread_server_name $mt_upstream {{
 {map_entries}
-        default                 127.0.0.1:3128;
+        default                 127.0.0.1:8445;
     }}
 
     server {{
@@ -1061,10 +1100,17 @@ stream {{
         proxy_pass $mt_upstream;
     }}
 
-    # HTTP gate: прозрачная передача с proxy_protocol для сохранения реального IP
+    # HTTP gate: proxy_protocol для сохранения реального IP → nginx http
     server {{
         listen 127.0.0.1:8444;
         proxy_pass unix:/dev/shm/nginx.sock;
+        proxy_protocol on;
+    }}
+
+    # MTG gate: proxy_protocol для передачи реального IP → mtg:2
+    server {{
+        listen 127.0.0.1:8445;
+        proxy_pass 127.0.0.1:3128;
         proxy_protocol on;
     }}
 }}
