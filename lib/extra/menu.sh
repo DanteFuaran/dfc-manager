@@ -210,6 +210,7 @@ disabled = false
 idle = "30s"
 interval = "10s"
 count = 3
+$([ -n "${PROXY_TAG:-}" ] && echo "\nadvertise-tag = \"${PROXY_TAG}\"")
 TOML
 }
 
@@ -375,7 +376,7 @@ _mt_do_install() {
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    print_success "Подготовка файлов"
+    printf "${GREEN}\u2705${NC} ${WHITE}Подготовка файлов${NC}\n"
 
     # База данных
     (_mt_db_migrate) &
@@ -391,6 +392,7 @@ _mt_do_install() {
     # Тянем образ и запускаем
     (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск MTProto" "Запуск MTProto"
+    tput civis 2>/dev/null || true
     _mt_block_apply
     if _mt_nginx_available; then
         _mt_nginx_stream_write
