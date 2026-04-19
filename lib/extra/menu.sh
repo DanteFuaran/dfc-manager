@@ -178,7 +178,7 @@ services:
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "${PROXY_PORT}:3128"
+      - "127.0.0.1:3128:3128"
     command: run -b 0.0.0.0:3128 ${PROXY_SECRET} ${PROXY_TAG}
     sysctls:
       - net.ipv4.tcp_keepalive_time=30
@@ -350,6 +350,9 @@ _mt_do_install() {
     (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск MTProto..." "MTProto запущен!"
     _mt_block_apply
+    if _mt_nginx_available; then
+        _mt_nginx_stream_write
+    fi
 
     # UFW
     if command -v ufw >/dev/null 2>&1; then
@@ -835,6 +838,8 @@ _mt_do_uninstall() {
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
+    _mt_block_clear_all 2>/dev/null || true
+    if _mt_nginx_available; then _mt_nginx_stream_remove; fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
     show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
@@ -875,6 +880,8 @@ _mt_do_update() {
 
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_DB="${_MT_DIR}/mtproto.db"             # SQLite-база всех данных MTProto
+_MT_NGINX_CONF="/opt/nginx/nginx.conf"     # nginx конфиг (stream-блок MTProto)
+_MT_NGINX_CONTAINER="remnawave-nginx"      # имя nginx-контейнера
 
 # Инициализация схемы БД (вызывать при установке и при первом обращении)
 _mt_db_init() {
@@ -998,22 +1005,99 @@ _mt_kill_src() {
     fi
 }
 
+# Перезагружает nginx контейнер (применяет изменения конфига)
+_mt_nginx_reload() {
+    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
+    docker exec "$_nc" nginx -s reload 2>/dev/null || true
+}
+
+# Проверяет доступность nginx контейнера
+_mt_nginx_available() {
+    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${_nc}$"
+}
+
+# Пишет stream-блок в nginx.conf и убирает прямые listen 443 из http-блоков
+_mt_nginx_stream_write() {
+    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
+    local _conf="${_MT_NGINX_CONF:-/opt/nginx/nginx.conf}"
+    _mt_load_env
+    local _domain="${FAKE_DOMAIN:-ya.ru}"
+    [ ! -f "$_conf" ] && return
+
+    # Удаляем старый stream-блок если есть
+    python3 - "$_conf" "$_domain" <<'PYEOF'
+import sys, re
+path, domain = sys.argv[1], sys.argv[2]
+with open(path) as f: content = f.read()
+# Remove old mtproto stream block
+content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
+# Restore any commented-out listen 443
+content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
+content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
+# Build stream block
+stream_block = f"""\n# BEGIN_MTPROTO_STREAM
+stream {{
+    map $ssl_preread_server_name $mt_upstream {{
+        {domain}  127.0.0.1:3128;
+        default   127.0.0.1:8444;
+    }}
+
+    server {{
+        listen 443;
+        ssl_preread on;
+        proxy_pass $mt_upstream;
+    }}
+
+    # HTTP gate: прозрачная передача с proxy_protocol для сохранения реального IP
+    server {{
+        listen 127.0.0.1:8444;
+        proxy_pass unix:/dev/shm/nginx.sock;
+        proxy_protocol on;
+    }}
+}}
+# END_MTPROTO_STREAM"""
+# Comment out direct 443 listen in http blocks
+content = content.replace('    listen 443 ssl;', '    #mt# listen 443 ssl;')
+content = content.replace('    listen 443 ssl default_server;', '    #mt# listen 443 ssl default_server;')
+# Insert stream block before http {
+content = re.sub(r'(\nhttp \{)', stream_block + r'\1', content, count=1)
+with open(path, 'w') as f: f.write(content)
+print('ok')
+PYEOF
+    docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
+}
+
+# Удаляет stream-блок из nginx.conf, восстанавливает прямые listen 443
+_mt_nginx_stream_remove() {
+    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
+    local _conf="${_MT_NGINX_CONF:-/opt/nginx/nginx.conf}"
+    [ ! -f "$_conf" ] && return
+    python3 - "$_conf" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f: content = f.read()
+content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
+content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
+content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
+with open(path, 'w') as f: f.write(content)
+print('ok')
+PYEOF
+    docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
+}
+
 _mt_block_apply() {
-    # Применяем все заблокированные записи из БД через iptables (DOCKER-USER)
-    # Вызывается при старте контейнера и из меню
-    # ВАЖНО: в DOCKER-USER пакеты уже прошли DNAT, поэтому dport = внутренний порт контейнера (3128),
-    # а не внешний PROXY_PORT. Маппинг: ${PROXY_PORT}:3128 в docker-compose.
+    # Блокировка через iptables INPUT на порту 443 (работает до nginx, на уровне хоста)
     _mt_db_ensure
-    _mt_ipt -N DOCKER-USER 2>/dev/null || true
     while IFS= read -r _entry; do
         [ -z "$_entry" ] && continue
-        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport 3128 -j DROP 2>/dev/null \
-            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+        _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
     done < <(_mt_db_blocked_list)
 }
 
 _mt_block_clear_all() {
-    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-p tcp --dport 3128 -j DROP" | while read -r _rule; do
+    _mt_ipt -S INPUT 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
         _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
     done
 }
@@ -1228,7 +1312,7 @@ _mt_do_access() {
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
                         _mt_db_blocked_add "$_new_entry"
-                        _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                        _mt_ipt -I INPUT -s "$_new_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_new_entry"
                         echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                     fi
@@ -1284,11 +1368,11 @@ _mt_do_access() {
                     # Блок/разблок всей подсети как CIDR
                     if _mt_ip_is_blocked "$_sn_cidr"; then
                         _mt_db_blocked_rm "$_sn_cidr"
-                        _mt_ipt -D DOCKER-USER -s "$_sn_cidr" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                        _mt_ipt -D INPUT -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Подсеть разблокирована: ${_sn_cidr}${NC}"
                     else
                         _mt_db_blocked_add "$_sn_cidr"
-                        _mt_ipt -I DOCKER-USER -s "$_sn_cidr" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                        _mt_ipt -I INPUT -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sn_cidr"
                         echo -e "${GREEN}✅ Подсеть заблокирована: ${_sn_cidr}${NC}"
                     fi
@@ -1299,11 +1383,11 @@ _mt_do_access() {
                     local _sip="${_sn_ips[$_sc]}"
                     if _mt_ip_is_blocked "$_sip"; then
                         _mt_db_blocked_rm "$_sip"
-                        _mt_ipt -D DOCKER-USER -s "$_sip" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                        _mt_ipt -D INPUT -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
                     else
                         _mt_db_blocked_add "$_sip"
-                        _mt_ipt -I DOCKER-USER -s "$_sip" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                        _mt_ipt -I INPUT -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sip"
                         echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
                     fi
@@ -1319,11 +1403,11 @@ _mt_do_access() {
             if [[ -n "$_sel" ]]; then
                 if _mt_ip_is_blocked "$_sel"; then
                     _mt_db_blocked_rm "$_sel"
-                    _mt_ipt -D DOCKER-USER -s "$_sel" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                    _mt_ipt -D INPUT -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
                 else
                     _mt_db_blocked_add "$_sel"
-                    _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 3128 -j DROP 2>/dev/null || true
+                    _mt_ipt -I INPUT -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     _mt_kill_src "$_sel"
                     echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
                 fi
