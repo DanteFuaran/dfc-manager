@@ -345,9 +345,12 @@ _mt_do_install() {
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$_secret_input" ]; then
-                        # Генерируем секрет и показываем его на той же строке что и промпт
-                        _secret_input=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+                        # Генерируем секрет и показываем сырой (без ee-обёртки)
+                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
                         printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
+                        # Пользователь ввёл полный FakeTLS секрет — извлекаем сырой
+                        _secret_input="${_secret_input:2:32}"
                     fi
                     (( _step++ ))
                 else
@@ -368,15 +371,17 @@ _mt_do_install() {
         esac
     done
 
-    # Финализация: секрет уже в _secret_input (был введён или сгенерирован на шаге 4)
-    PROXY_SECRET="$_secret_input"
+    # Финализация: собираем полный FakeTLS секрет из сырого + домен
+    local _domain_hex
+    _domain_hex=$(printf '%s' "$FAKE_DOMAIN" | xxd -ps | tr -d '\n')
+    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     echo
     echo
 
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    printf "${GREEN}\u2705${NC} ${WHITE}Подготовка файлов${NC}\n"
+    printf "${GREEN}\u2705${NC} Подготовка файлов\n"
 
     # База данных
     (_mt_db_migrate) &
@@ -761,16 +766,16 @@ _mt_do_change_config() {
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
-                if [ $? -eq 0 ]; then (( _step++ ))
+                if [ $? -eq 0 ]; then
+                    if [ -z "$_secret_input" ]; then
+                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
+                        _secret_input="${_secret_input:2:32}"
+                    fi
+                    (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            5) # Показать секрет + Telegram TAG
-                local _disp_secret
-                if [ -n "$_secret_input" ]; then
-                    _disp_secret="$_secret_input"
-                else
-                    _disp_secret=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
-                fi
-                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+            5) # Telegram TAG
                 echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
@@ -778,11 +783,9 @@ _mt_do_change_config() {
         esac
     done
 
-    if [ -n "$_secret_input" ]; then
-        PROXY_SECRET="$_secret_input"
-    else
-        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
-    fi
+    local _domain_hex
+    _domain_hex=$(printf '%s' "$NEW_FAKE_DOMAIN" | xxd -ps | tr -d '\n')
+    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     SERVER_IP="$NEW_SERVER_IP"
     PROXY_PORT="$NEW_PROXY_PORT"
     FAKE_DOMAIN="$NEW_FAKE_DOMAIN"

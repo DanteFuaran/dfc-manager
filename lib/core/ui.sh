@@ -61,9 +61,9 @@ show_spinner() {
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r\033[K${GREEN}\u2705${NC} ${WHITE}%b${NC}\n" "$done_msg"
+        printf "\r\033[K${GREEN}\u2705${NC} %b\n" "$done_msg"
     else
-        printf "\r\033[K${RED}\u2716${NC} ${WHITE}%b${NC}\n" "$done_msg"
+        printf "\r\033[K${RED}\u2716${NC} %b\n" "$done_msg"
     fi
     tput cnorm 2>/dev/null || true
     return $exit_code
