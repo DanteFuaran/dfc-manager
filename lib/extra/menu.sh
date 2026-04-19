@@ -960,7 +960,7 @@ _mt_do_stats() {
                 [ -z "$_ip" ] && continue
                 local _geo_str
                 _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] && _geo_str="..."
+                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str="..."
                 printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
             done <<< "$_visible_ips"
 
@@ -1290,7 +1290,7 @@ _mt_db_ensure() { [ -f "$_MT_DB" ] || _mt_db_init; }
 
 # ── seen_ips ──────────────────────────────────────────────────────────────
 _mt_db_seen_add() {
-    local _ip="$1"
+    local _ip; _ip=$(_mt_strip_ip "$1")
     sqlite3 "$_MT_DB" \
         "INSERT INTO seen_ips(ip) VALUES('$_ip')
          ON CONFLICT(ip) DO UPDATE SET last_seen=strftime('%s','now');" 2>/dev/null || true
@@ -1322,6 +1322,13 @@ _mt_db_stat_set() { sqlite3 "$_MT_DB" "INSERT OR REPLACE INTO stats(key,value) V
 _mt_db_migrate() {
     _mt_db_init
     local _ip _e _esc _geo _q _co _ci
+    # Очистка IPv6-mapped адресов из БД (::ffff:x.x.x.x → x.x.x.x)
+    if sqlite3 "$_MT_DB" "SELECT ip FROM seen_ips WHERE ip LIKE '%::ffff:%' OR ip LIKE '[%';" 2>/dev/null | grep -q .; then
+        sqlite3 "$_MT_DB" <<'SQL' 2>/dev/null || true
+UPDATE seen_ips SET ip = REPLACE(REPLACE(REPLACE(ip, '[', ''), ']', ''), '::ffff:', '')
+WHERE ip LIKE '%::ffff:%' OR ip LIKE '[%';
+SQL
+    fi
     # seen_ips
     if [ -f "${_MT_DIR}/seen_ips" ]; then
         while IFS= read -r _ip; do
@@ -1362,18 +1369,28 @@ _mt_db_migrate() {
 # Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями к MTProto.
 # При nginx: смотрим хостовые соединения на порт 443 (реальные клиентские IP).
 # Без nginx: смотрим ss на хосте на порт PROXY_PORT.
+_mt_strip_ip() {
+    # Убираем квадратные скобки и ::ffff: префикс IPv4-mapped IPv6
+    local _ip="$1"
+    _ip="${_ip#[}"; _ip="${_ip%]}"
+    _ip="${_ip#::ffff:}"; _ip="${_ip#::FFFF:}"
+    echo "$_ip"
+}
+
 _mt_get_active_ips() {
     if _mt_nginx_available; then
         # nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
         # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
         ss -tn state established 'sport = :443' 2>/dev/null \
             | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
+            | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
         _mt_load_env
         local _port="${PROXY_PORT:-3128}"
         ss -tn state established 2>/dev/null \
             | awk -v p=":${_port}$" 'NR>1 && $3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
+            | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     fi
 }
@@ -1610,7 +1627,7 @@ _mt_do_access() {
                 [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
                 local _geo_str
                 _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] && _geo_str="—"
+                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
                 local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
                 if _mt_ip_is_blocked "$_ip"; then
                     _ip_items+=("${RED}${_line}${NC}")
