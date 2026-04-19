@@ -1388,11 +1388,16 @@ _mt_get_active_ips() {
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
-        # MTProto напрямую на порту _port (обычно 8443)
-        ss -tn state established 2>/dev/null \
-            | awk -v p=":${_port}$" 'NR>1 && $3 ~ p { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
-            | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
-            | sort -u
+        # Docker DNAT: хостовой ss не видит соединения на порту контейнера.
+        # Используем nsenter в network namespace контейнера — mtg слушает на 3128 внутри.
+        local _pid
+        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
+        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
+            nsenter -t "$_pid" -n ss -tn state established 'sport = :3128' 2>/dev/null \
+                | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
+                | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
+                | sort -u
+        fi
     fi
 }
 

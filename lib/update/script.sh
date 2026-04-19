@@ -326,6 +326,20 @@ manage_delete_components() {
     done
 }
 
+# Создаёт wrapper-скрипты вместо симлинков — исправляет ошибку
+# "shell-init: error retrieving current directory" когда CWD пересоздана Docker'ом
+_install_bin_wrappers() {
+    ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager 2>/dev/null || true
+    for _cmd in dfc rw; do
+        cat > "/usr/local/bin/${_cmd}" << 'WRAP'
+#!/bin/sh
+cd /opt 2>/dev/null || cd / 2>/dev/null || true
+exec /usr/local/dfc-manager/dfc-manager.sh "$@"
+WRAP
+        chmod +x "/usr/local/bin/${_cmd}"
+    done
+}
+
 install_script() {
     mkdir -p "${DIR_SCRIPT}"
 
@@ -334,9 +348,7 @@ install_script() {
     # Уже установлен — только актуализируем симлинки
     if [ -d "${DIR_SCRIPT}lib" ]; then
         chmod +x "${DIR_SCRIPT}dfc-manager.sh"
-        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
-        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
-        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
+        _install_bin_wrappers
         return
     fi
 
@@ -348,9 +360,7 @@ install_script() {
     fi
 
     chmod +x "${DIR_SCRIPT}dfc-manager.sh"
-    ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
-    ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
-    ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
+    _install_bin_wrappers
 }
 
 update_script() {
@@ -421,9 +431,7 @@ update_script() {
         mkdir -p "$(dirname "${DIR_SCRIPT%/}")"
         git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" "${DIR_SCRIPT%/}" >/dev/null 2>&1
         chmod +x "${DIR_SCRIPT}dfc-manager.sh"
-        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager
-        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc
-        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw
+        _install_bin_wrappers
     ) &
     show_spinner "Загрузка обновлений"
 

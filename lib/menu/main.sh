@@ -56,9 +56,7 @@ main_menu() {
                     { [ "$has_panel" = true ] || [ "$has_node" = true ] || [ "$has_subpage" = true ]; } && is_installed=true
 
                     if [ "$is_installed" = true ]; then
-                        ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager 2>/dev/null || true
-                        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
-                        ln -sf /usr/local/bin/dfc-manager /usr/local/bin/rw 2>/dev/null || true
+                        _install_bin_wrappers
                     fi
 
                     local _c_panel _c_sub _c_node
