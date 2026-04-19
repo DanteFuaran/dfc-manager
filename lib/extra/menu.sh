@@ -933,13 +933,15 @@ _mt_ip_is_blocked() {
     [ ! -f "$_MT_BLOCK_FILE" ] && return 1
     # Точное совпадение
     grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null && return 0
+    # CIDR-аргумент: проверяем только точным совпадением (уже выше), не идём в цикл
+    [[ "$_ip" == */* ]] && return 1
     # Проверяем покрытие CIDR: читаем строки вида x.x.x.x/yy
     while IFS= read -r _entry; do
         [[ "$_entry" =~ ^#|^$|^[^0-9] ]] && continue
         [[ "$_entry" != */* ]] && continue
         local _net _pfx _ip_int _net_int _mask
         _net="${_entry%/*}"; _pfx="${_entry#*/}"
-        _ip_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_ip//./ })" 2>/dev/null) || continue
+        _ip_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_ip//./ } 2>/dev/null)" 2>/dev/null) || continue
         _net_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net//./ })" 2>/dev/null) || continue
         _mask=$(( 0xFFFFFFFF << (32 - _pfx) & 0xFFFFFFFF ))
         [ $(( _ip_int & _mask )) -eq $(( _net_int & _mask )) ] && return 0
@@ -1061,10 +1063,15 @@ _mt_do_access() {
                     printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" && (( _on_cnt++ )) || true
                     _mt_ip_is_blocked "$_ip" && (( _bl_cnt++ )) || true
                 done
-                local _info="${_total} IP"
-                [ "$_on_cnt" -gt 0 ] && _info+=" / ${_on_cnt} онлайн"
-                [ "$_bl_cnt" -gt 0 ] && _info+=" / ${_bl_cnt} заблок."
-                local _sn_line; _sn_line=$(printf '%-22s  %s' "$_sn" "$_info")
+                # Гео — берём у первого IP в этой подсети с данными
+                local _sn_geo="—"
+                for _gip in "${_all_ips[@]}"; do
+                    local _g24; _g24=$(echo "$_gip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                    [ "$_g24" != "$_sn" ] && continue
+                    local _gg; _gg=$(grep "^${_gip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
+                    if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
+                done
+                local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
                 # Цвет: красный если CIDR заблокирована, зелёный если есть онлайн, иначе обычный
                 if _mt_ip_is_blocked "$_sn"; then
                     _ip_items+=("${RED}${_sn_line}${NC}")
