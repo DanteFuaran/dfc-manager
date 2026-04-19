@@ -188,7 +188,8 @@ PROXY_NAME=${PROXY_NAME:-}
 EOF
     # config.toml для mtg:2
     local _pp="false"
-    _mt_nginx_available && _pp="true"
+    # PROXY protocol только при работе через nginx stream (порт 443)
+    _mt_nginx_available && [ "${PROXY_PORT:-}" = "443" ] && _pp="true"
     cat > "${_MT_DIR}/config.toml" << TOML
 # Конфигурация MTProto прокси (mtg v2) — управляется dfc-manager
 
@@ -292,8 +293,8 @@ NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
 HOOK
     chmod +x "$_hook_file"
 
-    # Добавляем домен в stream map если не добавлен
-    if ! grep -q "${_domain}" "$_nginx_conf"; then
+    # Добавляем домен в stream map если есть stream-блок и домен не добавлен
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null && ! grep -q "${_domain}.*127.0.0.1:8444" "$_nginx_conf"; then
         sed -i "s|default\s\+127\.0\.0\.1:8445|${_domain}   127.0.0.1:8444;\n        default                 127.0.0.1:8445|" "$_nginx_conf"
     fi
 
@@ -418,14 +419,19 @@ HTMLEOF
 # Записывает docker-compose.yml
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
+    local _port_map="127.0.0.1:3128:3128"
+    # Если порт ≠ 443 и нет nginx stream — mtg слушает напрямую на PROXY_PORT
+    if [ "${PROXY_PORT:-443}" != "443" ]; then
+        _port_map="0.0.0.0:${PROXY_PORT}:3128"
+    fi
+    cat > "${_MT_DIR}/docker-compose.yml" << COMPOSE
 services:
   mtproto-proxy:
     image: nineseconds/mtg:2
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3128:3128"
+      - "${_port_map}"
     volumes:
       - ./config.toml:/config.toml:ro
     command: run /config.toml
@@ -515,14 +521,9 @@ _mt_do_install() {
                     done
                 done
                 ;;
-            2) # Порт — пропускаем если nginx доступен (порт 443 через nginx stream)
-                if _mt_nginx_available; then
-                    PROXY_PORT="443"
-                    (( _step++ ))
-                    continue
-                fi
-                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
-                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+            2) # Порт MTProto
+                local _port_default="${PROXY_PORT:-8443}"
+                _mt_read_input PROXY_PORT "Порт MTProto ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
                     if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
                         (( _step++ ))
@@ -620,7 +621,7 @@ _mt_do_install() {
     show_spinner "Запуск MTProto" "Запуск MTProto"
     tput civis 2>/dev/null || true
     _mt_block_apply
-    if _mt_nginx_available; then
+    if _mt_nginx_available && [ "${PROXY_PORT:-}" = "443" ]; then
         # Если порт 443 занят не nginx-ом (например rw-core/Xray) — освобождаем
         local _port443_owner
         _port443_owner=$(ss -tlnp 'sport = :443' 2>/dev/null | awk -F'"' '/users:/{print $2}' | head -1)
@@ -1106,6 +1107,17 @@ _mt_do_change_config() {
     (cd "$_MT_DIR" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Перезапуск MTProto..." "MTProto перезапущен!"
     _mt_block_apply
+
+    # Управление nginx stream: добавляем если 443, удаляем если нет
+    if _mt_nginx_available; then
+        if [ "${PROXY_PORT}" = "443" ]; then
+            _mt_nginx_stream_write
+        else
+            _mt_nginx_stream_remove
+        fi
+        local _nc; _nc=$(_mt_nginx_container)
+        [ -n "$_nc" ] && docker restart "$_nc" >/dev/null 2>&1 || true
+    fi
 
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
