@@ -451,7 +451,7 @@ _mt_do_install() {
         echo
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
         local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
-        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
+        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
         echo
@@ -507,7 +507,7 @@ _mt_do_config() {
     echo
     echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
     local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
-    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
+    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo
     echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     echo
@@ -833,7 +833,7 @@ _mt_do_change_config() {
 
     echo
     local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
-    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
+    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo -e " ${DARKGRAY}https:${NC} ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
