@@ -269,7 +269,12 @@ _mt_do_install() {
                     done
                 done
                 ;;
-            2) # Порт
+            2) # Порт — пропускаем если nginx доступен (порт 443 через nginx stream)
+                if _mt_nginx_available; then
+                    PROXY_PORT="443"
+                    (( _step++ ))
+                    break
+                fi
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
@@ -1022,25 +1027,32 @@ _mt_nginx_stream_write() {
     local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
     local _conf="${_MT_NGINX_CONF:-/opt/nginx/nginx.conf}"
     _mt_load_env
-    local _domain="${FAKE_DOMAIN:-ya.ru}"
     [ ! -f "$_conf" ] && return
 
     # Удаляем старый stream-блок если есть
-    python3 - "$_conf" "$_domain" <<'PYEOF'
+    python3 - "$_conf" <<'PYEOF'
 import sys, re
-path, domain = sys.argv[1], sys.argv[2]
+path = sys.argv[1]
 with open(path) as f: content = f.read()
 # Remove old mtproto stream block
 content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
 # Restore any commented-out listen 443
 content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
 content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
+# Collect all HTTP server_names (exclude _ and empty)
+http_domains = re.findall(r'server_name\s+([^;]+);', content)
+domain_set = set()
+for entry in http_domains:
+    for d in entry.split():
+        if d != '_' and '.' in d:
+            domain_set.add(d)
+map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_set))
 # Build stream block
 stream_block = f"""\n# BEGIN_MTPROTO_STREAM
 stream {{
     map $ssl_preread_server_name $mt_upstream {{
-        {domain}  127.0.0.1:3128;
-        default   127.0.0.1:8444;
+{map_entries}
+        default                 127.0.0.1:3128;
     }}
 
     server {{
