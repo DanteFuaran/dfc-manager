@@ -573,7 +573,7 @@ _mt_do_stats() {
         local _visible_ips=""
         while IFS= read -r _ip; do
             [ -z "$_ip" ] && continue
-            grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null && continue
+            _mt_ip_is_blocked "$_ip" && continue
             _visible_ips+="${_ip}"$'\n'
         done <<< "$_client_ips"
         _visible_ips=$(printf '%s' "$_visible_ips" | sed '/^$/d')
@@ -922,6 +922,26 @@ _mt_block_clear_all() {
     done
 }
 
+# Проверяет, заблокирован ли IP (точно или через CIDR в blocked_ips)
+_mt_ip_is_blocked() {
+    local _ip="$1"
+    [ ! -f "$_MT_BLOCK_FILE" ] && return 1
+    # Точное совпадение
+    grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null && return 0
+    # Проверяем покрытие CIDR: читаем строки вида x.x.x.x/yy
+    while IFS= read -r _entry; do
+        [[ "$_entry" =~ ^#|^$|^[^0-9] ]] && continue
+        [[ "$_entry" != */* ]] && continue
+        local _net _pfx _ip_int _net_int _mask
+        _net="${_entry%/*}"; _pfx="${_entry#*/}"
+        _ip_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_ip//./ })" 2>/dev/null) || continue
+        _net_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net//./ })" 2>/dev/null) || continue
+        _mask=$(( 0xFFFFFFFF << (32 - _pfx) & 0xFFFFFFFF ))
+        [ $(( _ip_int & _mask )) -eq $(( _net_int & _mask )) ] && return 0
+    done < "$_MT_BLOCK_FILE"
+    return 1
+}
+
 _mt_do_access() {
     if ! _mt_installed; then
         echo -e "${RED}✖ MTProto не установлен${NC}"; _mt_press_enter; return
@@ -930,11 +950,11 @@ _mt_do_access() {
     mkdir -p "$_MT_DIR"
     touch "$_MT_BLOCK_FILE" 2>/dev/null || true
 
-    # Синхронизируем iptables с файлом: если файл пустой — снимаем все DROP-правила
+    # Синхронизируем iptables с файлом: если файл пустой — снимаем все DROP-правила (тихо)
     local _file_entries
     _file_entries=$(grep -cEv '^#|^$' "$_MT_BLOCK_FILE" 2>/dev/null || echo 0)
     if [ "$_file_entries" -eq 0 ]; then
-        _mt_block_clear_all
+        _mt_block_clear_all 2>/dev/null
     fi
 
     while true; do
@@ -1016,7 +1036,7 @@ _mt_do_access() {
                     local _geo_str _bl_mark _on_mark
                     _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                     [ -z "$_geo_str" ] && _geo_str="—"
-                    if grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                    if _mt_ip_is_blocked "$_ip"; then
                         _bl_mark=" ${RED}(Заблокирован)${NC}"
                         _on_mark=""
                     elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
@@ -1045,7 +1065,7 @@ _mt_do_access() {
                     _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                     for _sn in "${_subnets_multi[@]}"; do
                         local _cnt="${_subnet_count[$_sn]}" _sn_bl_mark
-                        if grep -qxF "$_sn" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                        if _mt_ip_is_blocked "$_sn"; then
                             _sn_bl_mark=" ${RED}(Заблокирована)${NC}"
                         else
                             _sn_bl_mark=""
