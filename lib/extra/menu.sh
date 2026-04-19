@@ -316,7 +316,7 @@ _mt_do_install() {
                 if _mt_nginx_available; then
                     PROXY_PORT="443"
                     (( _step++ ))
-                    break
+                    continue
                 fi
                 local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
@@ -886,7 +886,7 @@ _mt_do_uninstall() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+    echo -e "${RED}         🗑️  Удаление MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
