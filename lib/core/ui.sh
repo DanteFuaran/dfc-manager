@@ -219,7 +219,7 @@ show_arrow_menu() {
                 echo -e "${DARKGRAY}${options[$i]}${NC}"
             elif [[ "${options[$i]}" == $'\x01'* ]]; then
                 # Заголовок-секция (не выбирается)
-                echo -e "  ${DARKGRAY}${options[$i]:1}${NC}"
+                echo -e "${DARKGRAY}${options[$i]:1}${NC}"
             elif [ $i -eq $selected ]; then
                 echo -e "${BLUE}▶${NC} ${YELLOW}${options[$i]}${NC}"
             else

@@ -935,8 +935,10 @@ _mt_do_access() {
 
             if [ ${#_cur_ips[@]} -eq 0 ]; then
                 _ip_items+=("${DARKGRAY}(нет активных подключений)${NC}"); _ip_vals+=("sep")
+                _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             else
                 _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
+                _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 for _ip in "${_cur_ips[@]}"; do
                     local _geo_str
                     _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
@@ -954,18 +956,19 @@ _mt_do_access() {
                 IFS=$'\n' _subnets_multi=($(printf '%s\n' "${_subnets_multi[@]}" | sort))
                 unset IFS
 
+                _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 if [ ${#_subnets_multi[@]} -gt 0 ]; then
-                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                     _ip_items+=($'\x01'"${DARKGRAY}Список подозрительных подсетей:${NC}"); _ip_vals+=("sep")
+                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                     for _sn in "${_subnets_multi[@]}"; do
                         local _cnt="${_subnet_count[$_sn]}"
                         _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")")
                         _ip_vals+=("$_sn")
                     done
+                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
                 fi
             fi
 
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             _ip_items+=("✏️   Ввести IP или CIDR вручную");          _ip_vals+=("manual")
             _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             _ip_items+=("⬅️   Назад");                               _ip_vals+=("back")
@@ -1059,11 +1062,12 @@ _mt_do_access() {
 
                 local _to_remove="${_bl_list[$_rc]:-}"
                 if [[ -n "$_to_remove" ]]; then
-                    grep -vxF "$_to_remove" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" \
-                        && mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
+                    grep -vxF "$_to_remove" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
+                    mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
                     _mt_ipt -D DOCKER-USER -s "$_to_remove" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
-                    sleep 1.2
+                    read -rsn1 -t 1.2 _dummy 2>/dev/null || true
+                    _flush_stdin
                     _bl_list=()
                     while IFS= read -r _e; do
                         [[ "$_e" =~ ^#|^$ ]] && continue
