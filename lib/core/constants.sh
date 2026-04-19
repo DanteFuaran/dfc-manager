@@ -12,15 +12,13 @@ SCRIPT_VERSION="0.0.81"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
 _DFC_KEY=""
-[ -f "${DIR_SCRIPT}.access_key" ] && _DFC_KEY=$(cat "${DIR_SCRIPT}.access_key" | tr -d '[:space:]')
-[ -n "$_DFC_KEY" ] && SCRIPT_REPO="https://oauth2:${_DFC_KEY}@github.com/DanteFuaran/dfc-manager.git"
-# Синхронизируем git remote с актуальным токеном (чтобы автообновление работало после смены токена)
-if [ -n "$_DFC_KEY" ] && command -v git >/dev/null 2>&1 && [ -d "${DIR_SCRIPT}.git" ]; then
+# Синхронизируем git remote на публичный URL (на случай если осталась старая запись с токеном)
+if command -v git >/dev/null 2>&1 && [ -d "${DIR_SCRIPT}.git" ]; then
     _cur_remote=$(git -C "${DIR_SCRIPT%/}" remote get-url origin 2>/dev/null || true)
-    _want_remote="https://oauth2:${_DFC_KEY}@github.com/DanteFuaran/dfc-manager.git"
-    [ "$_cur_remote" != "$_want_remote" ] && \
-        git -C "${DIR_SCRIPT%/}" remote set-url origin "$_want_remote" 2>/dev/null || true
-    unset _cur_remote _want_remote
+    _pub_remote="https://github.com/DanteFuaran/dfc-manager.git"
+    [ "$_cur_remote" != "$_pub_remote" ] && \
+        git -C "${DIR_SCRIPT%/}" remote set-url origin "$_pub_remote" 2>/dev/null || true
+    unset _cur_remote _pub_remote
 fi
 _vf="${DIR_SCRIPT}version"
 if [ -f "$_vf" ]; then
