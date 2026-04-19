@@ -170,26 +170,30 @@ EOF
     local _pp="false"
     _mt_nginx_available && _pp="true"
     cat > "${_MT_DIR}/config.toml" << TOML
-# mtg v2 configuration
-# Managed by dfc-manager
+# Конфигурация MTProto прокси (mtg v2) — управляется dfc-manager
 
 secret = "${PROXY_SECRET}"
 bind-to = "0.0.0.0:3128"
 
+# PROXY protocol от nginx для получения реальных IP клиентов
 proxy-protocol-listener = ${_pp}
 
+# Предпочтение IPv4/IPv6 для связи с Telegram
 prefer-ip = "prefer-ipv4"
 
+# Защита от replay-атак
 [defense.anti-replay]
 enabled = true
 max-size = "1mib"
 error-rate = 0.001
 
+# Таймауты сети
 [network.timeout]
 tcp = "5s"
 http = "10s"
 idle = "5m"
 
+# TCP Keep-Alive (быстрое обнаружение отключённых клиентов)
 [network.keep-alive]
 disabled = false
 idle = "30s"
