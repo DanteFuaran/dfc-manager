@@ -331,7 +331,7 @@ server {
 }
 # END_MT_CONNECT_${_domain}
 NGINX_BLOCK
-        awk '/^} # ─── end http ───$/ { while ((getline line < blockfile) > 0) print line; close(blockfile) } { print }' \
+        awk '/end http/ { while ((getline line < blockfile) > 0) print line; close(blockfile) } { print }' \
             blockfile="$_tmpf" "$_nginx_conf" > "${_nginx_conf}.tmp" \
             && mv "${_nginx_conf}.tmp" "$_nginx_conf"
         rm -f "$_tmpf"
