@@ -857,23 +857,21 @@ _mt_kill_src() {
 }
 
 _mt_block_apply() {
-    # Применяем все заблокированные записи из файла через iptables-legacy (DOCKER-USER)
+    # Применяем все заблокированные записи из файла через iptables (DOCKER-USER)
     # Вызывается при старте контейнера и из меню
-    local _port="${PROXY_PORT:-443}"
+    # ВАЖНО: в DOCKER-USER пакеты уже прошли DNAT, поэтому dport = внутренний порт контейнера (443),
+    # а не внешний PROXY_PORT. Маппинг: ${PROXY_PORT}:443 в docker-compose.
     [ ! -f "$_MT_BLOCK_FILE" ] && return
-    # Убедимся что DOCKER-USER существует
     _mt_ipt -N DOCKER-USER 2>/dev/null || true
     while IFS= read -r _entry; do
         [[ "$_entry" =~ ^#|^$ ]] && continue
-        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
-            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
     done < "$_MT_BLOCK_FILE"
 }
 
 _mt_block_clear_all() {
-    # Снимаем все DROP-правила из DOCKER-USER для нашего порта
-    local _port="${PROXY_PORT:-443}"
-    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
+    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
         _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
     done
 }
@@ -999,7 +997,7 @@ _mt_do_access() {
                         else
                             echo "$_new_entry" >> "$_MT_BLOCK_FILE"
                             local _port="${PROXY_PORT:-443}"
-                            _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                            _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
                             _mt_kill_src "$_new_entry"
                             echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                         fi
@@ -1017,7 +1015,7 @@ _mt_do_access() {
                     else
                         echo "$_sel" >> "$_MT_BLOCK_FILE"
                         local _port="${PROXY_PORT:-443}"
-                        _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                        _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sel"
                         echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
                     fi
@@ -1043,7 +1041,13 @@ _mt_do_access() {
             while true; do
                 local -a _rm_items=()
                 for _b in "${_bl_list[@]}"; do
-                    _rm_items+=("🔴  ${_b}")
+                    local _bl_geo
+                    _bl_geo=$(grep "^${_b}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
+                    if [[ -n "$_bl_geo" ]]; then
+                        _rm_items+=("$(printf '🔴  %-22s  %s' "$_b" "$_bl_geo")")
+                    else
+                        _rm_items+=("🔴  ${_b}")
+                    fi
                 done
                 _rm_items+=("──────────────────────────────────────")
                 _rm_items+=("⬅️   Назад")
@@ -1051,18 +1055,15 @@ _mt_do_access() {
                 show_arrow_menu "📋 Черный список — Enter для разблокировки:" "${_rm_items[@]}"
                 local _rc=$?
                 [[ $_rc -eq 255 ]] && break
-                # Разделитель или Назад — индексы начиная с ${#_bl_list[@]}
                 [[ $_rc -ge ${#_bl_list[@]} ]] && break
 
                 local _to_remove="${_bl_list[$_rc]:-}"
                 if [[ -n "$_to_remove" ]]; then
-                    sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" \
+                    sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[/&]/\&/g')$/d" \
                         "$_MT_BLOCK_FILE" 2>/dev/null || true
-                    local _port="${PROXY_PORT:-443}"
-                    _mt_ipt -D DOCKER-USER -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                    _mt_ipt -D DOCKER-USER -s "$_to_remove" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
                     sleep 1.2
-                    # Обновляем список для следующей итерации
                     _bl_list=()
                     while IFS= read -r _e; do
                         [[ "$_e" =~ ^#|^$ ]] && continue
