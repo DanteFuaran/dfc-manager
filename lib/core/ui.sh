@@ -217,6 +217,9 @@ show_arrow_menu() {
             if [[ "${options[$i]}" =~ ^[─━═\s]*$ ]]; then
                 # Разделители без отступа - вровень с рамкой
                 echo -e "${DARKGRAY}${options[$i]}${NC}"
+            elif [[ "${options[$i]}" == $'\x01'* ]]; then
+                # Заголовок-секция (не выбирается)
+                echo -e "  ${DARKGRAY}${options[$i]:1}${NC}"
             elif [ $i -eq $selected ]; then
                 echo -e "${BLUE}▶${NC} ${YELLOW}${options[$i]}${NC}"
             else
@@ -245,8 +248,8 @@ show_arrow_menu() {
                         if [ $selected -lt 0 ]; then
                             selected=$((num_options - 1))
                         fi
-                        # Пропускаем разделители вверх
-                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]]; do
+                        # Пропускаем разделители и заголовки вверх
+                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]]; do
                             ((selected--))
                             if [ $selected -lt 0 ]; then
                                 selected=$((num_options - 1))
@@ -258,8 +261,8 @@ show_arrow_menu() {
                         if [ $selected -ge $num_options ]; then
                             selected=0
                         fi
-                        # Пропускаем разделители вниз
-                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]]; do
+                        # Пропускаем разделители и заголовки вниз
+                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]]; do
                             ((selected++))
                             if [ $selected -ge $num_options ]; then
                                 selected=0
@@ -281,6 +284,16 @@ show_arrow_menu() {
             fi
 
             if [ "$key_code" -eq 10 ] || [ "$key_code" -eq 13 ]; then
+                # Заголовки-секции нельзя выбрать — обрабатываем как нажатие вниз
+                if [[ "${options[$selected]}" == $'\x01'* ]]; then
+                    ((selected++))
+                    [ $selected -ge $num_options ] && selected=0
+                    while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]]; do
+                        ((selected++))
+                        [ $selected -ge $num_options ] && selected=0
+                    done
+                    continue
+                fi
                 # Восстанавливаем stty, курсор оставляем скрытым (следующий экран сам скроет/покажет)
                 _restore_stty
                 tput civis 2>/dev/null || true
