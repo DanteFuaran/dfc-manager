@@ -388,7 +388,7 @@ h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
   </a>
 </div>
 <script>
-setTimeout(function(){window.location.href="${_tg_url}"},1200);
+setTimeout(function(){window.location.href="${_tg_url}";setTimeout(function(){window.close()},500)},1200);
 </script>
 </body>
 </html>
@@ -645,10 +645,7 @@ _mt_do_install() {
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-        local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-        echo
-        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
         echo
         # Ссылка страницы подключения (браузер → Telegram)
         if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -707,10 +704,7 @@ _mt_do_config() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-    local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo
-    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     echo
     if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo -e "${WHITE}🌐 Страница подключения (для пользователей):${NC}"
@@ -1038,9 +1032,7 @@ _mt_do_change_config() {
     fi
 
     echo
-    local _lsecret; _lsecret=$(_mt_link_secret "$PROXY_SECRET")
     echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo -e " ${DARKGRAY}https:${NC} ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${_lsecret}${NC}"
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
     echo
