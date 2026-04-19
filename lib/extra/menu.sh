@@ -907,22 +907,49 @@ _mt_do_access() {
 
         case "$_action" in
         add)
-            # Строим список: текущие подключённые IP + /24 подсети + ручной ввод
-            local -a _ip_items=() _ip_vals=()
+            # Считаем сколько IP из каждой /24 подсети
+            declare -A _subnet_count=()
             for _ip in "${_cur_ips[@]}"; do
-                local _geo_str
-                _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
-                [ -z "$_geo_str" ] && _geo_str="—"
-                _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")")
-                _ip_vals+=("$_ip")
-                local _subnet24
-                _subnet24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
-                _ip_items+=("$(printf '%-22s  вся /24 подсеть' "$_subnet24")")
-                _ip_vals+=("$_subnet24")
+                local _s24
+                _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                _subnet_count["$_s24"]=$(( ${_subnet_count["$_s24"]:-0} + 1 ))
             done
+
+            # Строим список: сначала заголовок + IP-адреса, затем подозрительные подсети
+            local -a _ip_items=() _ip_vals=()
+
             if [ ${#_cur_ips[@]} -eq 0 ]; then
                 _ip_items+=("${DARKGRAY}(нет активных подключений)${NC}"); _ip_vals+=("sep")
+            else
+                _ip_items+=("${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
+                for _ip in "${_cur_ips[@]}"; do
+                    local _geo_str
+                    _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
+                    [ -z "$_geo_str" ] && _geo_str="—"
+                    _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")")
+                    _ip_vals+=("$_ip")
+                done
+
+                # Подсети с 2+ IP
+                local -a _subnets_multi=()
+                for _sn in "${!_subnet_count[@]}"; do
+                    [ "${_subnet_count[$_sn]}" -ge 2 ] && _subnets_multi+=("$_sn")
+                done
+                # Сортируем подсети
+                IFS=$'\n' _subnets_multi=($(printf '%s\n' "${_subnets_multi[@]}" | sort))
+                unset IFS
+
+                if [ ${#_subnets_multi[@]} -gt 0 ]; then
+                    _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+                    _ip_items+=("${DARKGRAY}Список подозрительных подсетей:${NC}");  _ip_vals+=("sep")
+                    for _sn in "${_subnets_multi[@]}"; do
+                        local _cnt="${_subnet_count[$_sn]}"
+                        _ip_items+=("$(printf '%-22s  %s IP из этой подсети' "$_sn" "$_cnt")")
+                        _ip_vals+=("$_sn")
+                    done
+                fi
             fi
+
             _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             _ip_items+=("✏️   Ввести IP или CIDR вручную");          _ip_vals+=("manual")
             _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
