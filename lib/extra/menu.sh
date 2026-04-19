@@ -130,17 +130,15 @@ _mt_check_docker() {
     fi
 }
 
-# Генерирует Fake TLS secret на основе домена
+# Генерирует Fake TLS secret (ee-формат: ee + 16 случайных байт + hex(domain))
+# Совместим с nineseconds/mtg:1 и другими modern-реализациями
 _mt_generate_fake_tls_secret() {
     local domain="${1:-google.com}"
     local domain_hex
     domain_hex=$(printf '%s' "$domain" | xxd -ps | tr -d '\n')
-    local domain_len=${#domain_hex}
-    local needed=$(( 30 - domain_len ))
-    [ "$needed" -lt 0 ] && needed=0
-    local random_hex=""
-    [ "$needed" -gt 0 ] && random_hex=$(openssl rand -hex 15 2>/dev/null | cut -c1-"$needed")
-    printf 'ee%s%s' "$domain_hex" "$random_hex"
+    local random_hex
+    random_hex=$(openssl rand -hex 16 2>/dev/null)
+    printf 'ee%s%s' "$random_hex" "$domain_hex"
 }
 
 # Ищет свободный порт начиная с base
@@ -172,14 +170,12 @@ _mt_write_compose() {
     cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
 services:
   mtproto-proxy:
-    image: telegrammessenger/proxy:latest
+    image: nineseconds/mtg:1
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "${PROXY_PORT}:443"
-    environment:
-      - SECRET=${PROXY_SECRET}
-      - TAG=${PROXY_TAG}
+      - "${PROXY_PORT}:3128"
+    command: run -b 0.0.0.0:3128 ${PROXY_SECRET} ${PROXY_TAG}
     sysctls:
       - net.ipv4.tcp_keepalive_time=30
       - net.ipv4.tcp_keepalive_intvl=10
@@ -910,19 +906,19 @@ _mt_kill_src() {
 _mt_block_apply() {
     # Применяем все заблокированные записи из файла через iptables (DOCKER-USER)
     # Вызывается при старте контейнера и из меню
-    # ВАЖНО: в DOCKER-USER пакеты уже прошли DNAT, поэтому dport = внутренний порт контейнера (443),
-    # а не внешний PROXY_PORT. Маппинг: ${PROXY_PORT}:443 в docker-compose.
+    # ВАЖНО: в DOCKER-USER пакеты уже прошли DNAT, поэтому dport = внутренний порт контейнера (3128),
+    # а не внешний PROXY_PORT. Маппинг: ${PROXY_PORT}:3128 в docker-compose.
     [ ! -f "$_MT_BLOCK_FILE" ] && return
     _mt_ipt -N DOCKER-USER 2>/dev/null || true
     while IFS= read -r _entry; do
         [[ "$_entry" =~ ^#|^$ ]] && continue
-        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
-            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport 3128 -j DROP 2>/dev/null \
+            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport 3128 -j DROP 2>/dev/null || true
     done < "$_MT_BLOCK_FILE"
 }
 
 _mt_block_clear_all() {
-    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
+    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-p tcp --dport 3128 -j DROP" | while read -r _rule; do
         _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
     done
 }
@@ -1141,7 +1137,7 @@ _mt_do_access() {
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
                         echo "$_new_entry" >> "$_MT_BLOCK_FILE"
-                        _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_new_entry"
                         echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                     fi
@@ -1198,11 +1194,11 @@ _mt_do_access() {
                     if _mt_ip_is_blocked "$_sn_cidr"; then
                         grep -vxF "$_sn_cidr" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
                         mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
-                        _mt_ipt -D DOCKER-USER -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt -D DOCKER-USER -s "$_sn_cidr" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Подсеть разблокирована: ${_sn_cidr}${NC}"
                     else
                         echo "$_sn_cidr" >> "$_MT_BLOCK_FILE"
-                        _mt_ipt -I DOCKER-USER -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt -I DOCKER-USER -s "$_sn_cidr" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sn_cidr"
                         echo -e "${GREEN}✅ Подсеть заблокирована: ${_sn_cidr}${NC}"
                     fi
@@ -1214,11 +1210,11 @@ _mt_do_access() {
                     if _mt_ip_is_blocked "$_sip"; then
                         grep -vxF "$_sip" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
                         mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
-                        _mt_ipt -D DOCKER-USER -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt -D DOCKER-USER -s "$_sip" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
                     else
                         echo "$_sip" >> "$_MT_BLOCK_FILE"
-                        _mt_ipt -I DOCKER-USER -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt -I DOCKER-USER -s "$_sip" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sip"
                         echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
                     fi
@@ -1235,11 +1231,11 @@ _mt_do_access() {
                 if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
                     grep -vxF "$_sel" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
                     mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
-                    _mt_ipt -D DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                    _mt_ipt -D DOCKER-USER -s "$_sel" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
                 else
                     echo "$_sel" >> "$_MT_BLOCK_FILE"
-                    _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                    _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 3128 -j DROP 2>/dev/null || true
                     _mt_kill_src "$_sel"
                     echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
                 fi
