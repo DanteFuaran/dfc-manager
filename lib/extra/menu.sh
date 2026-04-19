@@ -870,34 +870,13 @@ _mt_do_access() {
     touch "$_MT_BLOCK_FILE" 2>/dev/null || true
 
     while true; do
-        clear
-        echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-        echo -e "${RED}       🚫 Управление доступом MTProto${NC}"
-        echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-        echo
-
-        # Показываем список заблокированных
+        # Считываем заблокированных и текущие подключения для счётчиков
         local _blocked_list=()
         while IFS= read -r _e; do
             [[ "$_e" =~ ^#|^$ ]] && continue
             _blocked_list+=("$_e")
         done < "$_MT_BLOCK_FILE"
 
-        if [ ${#_blocked_list[@]} -eq 0 ]; then
-            echo -e " ${DARKGRAY}Заблокированных записей нет${NC}"
-        else
-            echo -e " ${DARKGRAY}Заблокировано (${#_blocked_list[@]}):${NC}"
-            for _b in "${_blocked_list[@]}"; do
-                echo -e "   ${RED}✖${NC} ${WHITE}${_b}${NC}"
-            done
-        fi
-        echo
-        echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
-
-        local -a _items=() _actions=()
-        _items+=("➕  Заблокировать IP или подсеть"); _actions+=("add")
-
-        # Показываем сейчас подключённых — можно заблокировать прямо отсюда
         local _ss_out _client_ips _cur_ips=()
         _ss_out=$(docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
             | awk 'NR>1 && $3 ~ /:443$/')
@@ -905,13 +884,18 @@ _mt_do_access() {
             | awk 'NF{print $4}' | sed 's/:[0-9]*$//' | sort -u)
         while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
 
-        if [ ${#_cur_ips[@]} -gt 0 ]; then
-            _items+=("🔌  Заблокировать из подключённых"); _actions+=("block_current")
-        fi
+        local -a _items=() _actions=()
+
+        local _add_label="➕  Заблокировать IP или подсеть"
+        [ ${#_cur_ips[@]} -gt 0 ] && _add_label="➕  Заблокировать IP или подсеть  ${DARKGRAY}(${#_cur_ips[@]} онлайн)${NC}"
+        _items+=("$_add_label"); _actions+=("add")
+
+        local _bl_label="📋  Черный список"
+        [ ${#_blocked_list[@]} -gt 0 ] && _bl_label="📋  Черный список  ${DARKGRAY}(${#_blocked_list[@]})${NC}"
+        _items+=("$_bl_label"); _actions+=("blacklist")
 
         if [ ${#_blocked_list[@]} -gt 0 ]; then
-            _items+=("✅  Разблокировать запись");         _actions+=("remove")
-            _items+=("🗑️   Очистить весь список");          _actions+=("clear")
+            _items+=("🗑️   Очистить весь список"); _actions+=("clear")
         fi
         _items+=("──────────────────────────────────────"); _actions+=("sep")
         _items+=("⬅️   Назад");                             _actions+=("back")
@@ -923,93 +907,126 @@ _mt_do_access() {
 
         case "$_action" in
         add)
-            clear
-            echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-            echo -e "${RED}       🚫 Заблокировать IP / подсеть${NC}"
-            echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-            echo
-            echo -e " ${DARKGRAY}Примеры:${NC}"
-            echo -e "   ${WHITE}1.2.3.4${NC}          ${DARKGRAY}— конкретный IP${NC}"
-            echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть (256 адресов)${NC}"
-            echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть (65535 адресов)${NC}"
-            echo
-            local _new_entry=""
-            _mt_read_input _new_entry "IP или CIDR:" ""
-            _new_entry=$(echo "$_new_entry" | tr -d ' ')
-            if [[ -n "$_new_entry" ]]; then
-                # Базовая валидация
-                if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
-                    if grep -qxF "$_new_entry" "$_MT_BLOCK_FILE" 2>/dev/null; then
-                        echo -e "${YELLOW}⚠ Уже в списке${NC}"
-                    else
-                        echo "$_new_entry" >> "$_MT_BLOCK_FILE"
-                        local _port="${PROXY_PORT:-443}"
-                        iptables -I INPUT -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
-                        echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
-                        # Сбрасываем существующие соединения с этого IP/подсети
-                        docker exec "$_MT_CONTAINER" ss -K dst "$_new_entry" 2>/dev/null || true
-                    fi
-                else
-                    echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR (1.2.3.4 или 1.2.3.0/24)${NC}"
-                fi
-                sleep 1.5
-            fi
-            ;;
-        block_current)
-            # Показываем список текущих подключений для выбора
+            # Строим список: текущие подключённые IP + /24 подсети + ручной ввод
             local -a _ip_items=() _ip_vals=()
             for _ip in "${_cur_ips[@]}"; do
                 local _geo_str
                 _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                 [ -z "$_geo_str" ] && _geo_str="—"
-                _ip_items+=("$(printf '%-20s %s' "$_ip" "$_geo_str")")
+                _ip_items+=("$(printf '%-22s  %s' "$_ip" "$_geo_str")")
                 _ip_vals+=("$_ip")
-                # Также предлагаем /24 подсеть
                 local _subnet24
                 _subnet24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
-                _ip_items+=("$(printf '%-20s %s' "$_subnet24" "вся /24 подсеть")")
+                _ip_items+=("$(printf '%-22s  вся /24 подсеть' "$_subnet24")")
                 _ip_vals+=("$_subnet24")
             done
+            if [ ${#_cur_ips[@]} -eq 0 ]; then
+                _ip_items+=("${DARKGRAY}(нет активных подключений)${NC}"); _ip_vals+=("sep")
+            fi
             _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
-            _ip_items+=("⬅️   Назад"); _ip_vals+=("back")
+            _ip_items+=("✏️   Ввести IP или CIDR вручную");          _ip_vals+=("manual")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            _ip_items+=("⬅️   Назад");                               _ip_vals+=("back")
 
-            show_arrow_menu "Выберите что заблокировать:" "${_ip_items[@]}"
+            show_arrow_menu "➕ Выберите что заблокировать:" "${_ip_items[@]}"
             local _ic=$?
             [[ $_ic -eq 255 ]] && continue
             local _sel="${_ip_vals[$_ic]:-sep}"
-            if [[ "$_sel" != "sep" && "$_sel" != "back" && -n "$_sel" ]]; then
-                if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
-                    echo -e "${YELLOW}⚠ Уже в списке: ${_sel}${NC}"
-                else
-                    echo "$_sel" >> "$_MT_BLOCK_FILE"
-                    local _port="${PROXY_PORT:-443}"
-                    iptables -I INPUT -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
-                    docker exec "$_MT_CONTAINER" ss -K dst "$_sel" 2>/dev/null || true
-                    echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
-                fi
-                sleep 1.5
-            fi
-            ;;
-        remove)
-            [ ${#_blocked_list[@]} -eq 0 ] && continue
-            local -a _rm_items=()
-            for _b in "${_blocked_list[@]}"; do _rm_items+=("$_b"); done
-            _rm_items+=("──────────────────────────────────────")
-            _rm_items+=("⬅️   Назад")
 
-            show_arrow_menu "Выберите для разблокировки:" "${_rm_items[@]}"
-            local _rc=$?
-            [[ $_rc -eq 255 ]] && continue
-            local _to_remove="${_blocked_list[$_rc]:-}"
-            if [ -n "$_to_remove" ]; then
-                # Удаляем из файла
-                sed -i "/^$(echo "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" "$_MT_BLOCK_FILE" 2>/dev/null || true
-                # Удаляем iptables правило
-                local _port="${PROXY_PORT:-443}"
-                iptables -D INPUT -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
-                echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
-                sleep 1.5
+            case "$_sel" in
+            manual)
+                clear
+                echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+                echo -e "${RED}       🚫 Заблокировать IP / подсеть${NC}"
+                echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+                echo
+                echo -e " ${DARKGRAY}Примеры:${NC}"
+                echo -e "   ${WHITE}1.2.3.4${NC}          ${DARKGRAY}— конкретный IP${NC}"
+                echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть (256 адресов)${NC}"
+                echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть (65535 адресов)${NC}"
+                echo
+                local _new_entry=""
+                _mt_read_input _new_entry "IP или CIDR:" ""
+                _new_entry=$(echo "$_new_entry" | tr -d ' ')
+                if [[ -n "$_new_entry" ]]; then
+                    if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+                        if grep -qxF "$_new_entry" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                            echo -e "${YELLOW}⚠ Уже в списке${NC}"
+                        else
+                            echo "$_new_entry" >> "$_MT_BLOCK_FILE"
+                            local _port="${PROXY_PORT:-443}"
+                            iptables -I INPUT -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                            docker exec "$_MT_CONTAINER" ss -K dst "$_new_entry" 2>/dev/null || true
+                            echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
+                        fi
+                    else
+                        echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR (1.2.3.4 или 1.2.3.0/24)${NC}"
+                    fi
+                    sleep 1.5
+                fi
+                ;;
+            sep|back) ;;
+            *)
+                if [[ -n "$_sel" ]]; then
+                    if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                        echo -e "${YELLOW}⚠ Уже в списке: ${_sel}${NC}"
+                    else
+                        echo "$_sel" >> "$_MT_BLOCK_FILE"
+                        local _port="${PROXY_PORT:-443}"
+                        iptables -I INPUT -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                        docker exec "$_MT_CONTAINER" ss -K dst "$_sel" 2>/dev/null || true
+                        echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
+                    fi
+                    sleep 1.5
+                fi
+                ;;
+            esac
+            ;;
+        blacklist)
+            # Читаем актуальный список для подменю (может обновляться после разблокировки)
+            local -a _bl_list=()
+            while IFS= read -r _e; do
+                [[ "$_e" =~ ^#|^$ ]] && continue
+                _bl_list+=("$_e")
+            done < "$_MT_BLOCK_FILE"
+
+            if [ ${#_bl_list[@]} -eq 0 ]; then
+                _items=()
+                show_arrow_menu "📋 Черный список пуст" "──────────────────────────────────────" "⬅️   Назад"
+                continue
             fi
+
+            while true; do
+                local -a _rm_items=()
+                for _b in "${_bl_list[@]}"; do
+                    _rm_items+=("🔴  ${_b}")
+                done
+                _rm_items+=("──────────────────────────────────────")
+                _rm_items+=("⬅️   Назад")
+
+                show_arrow_menu "📋 Черный список — Enter для разблокировки:" "${_rm_items[@]}"
+                local _rc=$?
+                [[ $_rc -eq 255 ]] && break
+                # Разделитель или Назад — индексы начиная с ${#_bl_list[@]}
+                [[ $_rc -ge ${#_bl_list[@]} ]] && break
+
+                local _to_remove="${_bl_list[$_rc]:-}"
+                if [[ -n "$_to_remove" ]]; then
+                    sed -i "/^$(printf '%s' "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" \
+                        "$_MT_BLOCK_FILE" 2>/dev/null || true
+                    local _port="${PROXY_PORT:-443}"
+                    iptables -D INPUT -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                    echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
+                    sleep 1.2
+                    # Обновляем список для следующей итерации
+                    _bl_list=()
+                    while IFS= read -r _e; do
+                        [[ "$_e" =~ ^#|^$ ]] && continue
+                        _bl_list+=("$_e")
+                    done < "$_MT_BLOCK_FILE"
+                    [ ${#_bl_list[@]} -eq 0 ] && break
+                fi
+            done
             ;;
         clear)
             _mt_block_clear_all
