@@ -180,6 +180,10 @@ services:
     environment:
       - SECRET=${PROXY_SECRET}
       - TAG=${PROXY_TAG}
+    sysctls:
+      - net.ipv4.tcp_keepalive_time=30
+      - net.ipv4.tcp_keepalive_intvl=10
+      - net.ipv4.tcp_keepalive_probes=3
     logging:
       driver: "json-file"
       options:
@@ -878,18 +882,11 @@ _MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись 
 _MT_SEEN_FILE="${_MT_DIR}/seen_ips"       # история всех виденных клиентских IP
 
 # Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями на порт 443.
-# Исключает соединения в режиме keepalive-пробинга (timer retries > 0) —
-# это соединения где TCP уже посылает пробы без ответа (пользователь скорее всего отключился).
+# TCP keepalive в контейнере = 30с → мёртвые соединения закрываются за ~60с.
 _mt_get_active_ips() {
-    docker exec "$_MT_CONTAINER" ss -tnoe state established 2>/dev/null \
-        | awk '
-            /^[0-9]/ && $3 ~ /:443$/ {
-                peer = $4; sub(/:[0-9]+$/, "", peer)
-                # timer:(keepalive,X,Y) — Y > 0 означает что пробы уже посылаются без ответа
-                if (match($0, /keepalive,[^,]+,([0-9]+)\)/, m) && int(m[1]) > 0) next
-                print peer
-            }
-        ' | sort -u
+    docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
+        | awk 'NR>1 && $3 ~ /:443$/ { peer=$4; sub(/:[0-9]+$/,"",peer); print peer }' \
+        | sort -u
 }
 
 # Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
