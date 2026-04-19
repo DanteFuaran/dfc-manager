@@ -402,9 +402,6 @@ var TG="${_tg_url}",done=false;
 function go(){
   if(done)return;done=true;
   window.location.href=TG;
-  setTimeout(function(){
-    document.addEventListener('visibilitychange',function(){if(document.hidden)window.close();});
-  },800);
 }
 setTimeout(go,1200);
 setTimeout(function(){window.close()},10000);
@@ -868,6 +865,45 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Активных клиентов:" $_cw)${NC} ${GREEN}${_active}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
+
+        # Трафик за сегодня
+        local _today; _today=$(date +%Y-%m-%d)
+        local _saved_day; _saved_day=$(_mt_db_stat_get "traffic_day")
+        # Парсим текущий NetIO в байты
+        _mt_parse_netio_bytes() {
+            local _s="$1"; local _total=0
+            for _part in $(echo "$_s" | tr '/' ' '); do
+                _part=$(echo "$_part" | tr -d ' ')
+                local _num _unit _bytes
+                _num=$(echo "$_part" | grep -oP '[0-9]+(\.[0-9]+)?')
+                _unit=$(echo "$_part" | grep -oP '[a-zA-Z]+')
+                _bytes=$(awk -v n="$_num" -v u="$_unit" 'BEGIN{
+                    if(u=="B")  b=n;
+                    else if(u=="kB") b=n*1000;
+                    else if(u=="MB") b=n*1000000;
+                    else if(u=="GB") b=n*1000000000;
+                    else b=n; printf "%d", b}')
+                _total=$(( _total + _bytes ))
+            done
+            echo "$_total"
+        }
+        local _cur_bytes; _cur_bytes=$(_mt_parse_netio_bytes "$_net_io")
+        if [ "$_saved_day" != "$_today" ]; then
+            # Новый день — сохраняем baseline
+            _mt_db_stat_set "traffic_day" "$_today"
+            _mt_db_stat_set "traffic_day_base" "$_cur_bytes"
+        fi
+        local _base_bytes; _base_bytes=$(_mt_db_stat_get "traffic_day_base")
+        _base_bytes=${_base_bytes:-0}
+        local _day_bytes=$(( _cur_bytes - _base_bytes ))
+        [ $_day_bytes -lt 0 ] && _day_bytes=0
+        local _day_str
+        if   [ $_day_bytes -ge 1000000000 ]; then _day_str=$(awk "BEGIN{printf \"%.1fGB\", $_day_bytes/1000000000}")
+        elif [ $_day_bytes -ge 1000000 ];    then _day_str=$(awk "BEGIN{printf \"%.1fMB\", $_day_bytes/1000000}")
+        elif [ $_day_bytes -ge 1000 ];       then _day_str=$(awk "BEGIN{printf \"%.1fkB\", $_day_bytes/1000}")
+        else _day_str="${_day_bytes}B"; fi
+        echo -e " ${DARKGRAY}$(_mpad "Трафик за сегодня:" $_cw)${NC} ${WHITE}${_day_str}${NC}"
+
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         # Фильтруем заблокированные IP из статистики
         local _visible_ips=""
@@ -880,9 +916,12 @@ _mt_do_stats() {
 
         if [ -n "$_visible_ips" ]; then
             echo
-            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
-            echo -e " ${DARKGRAY}Подключённые IP:${NC}"
-            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+            local _sep_stat="──────────────────────────────────────"
+            local _hdr_stat="Подключённые IP:"
+            local _hdr_pad=$(( (${#_sep_stat} - ${#_hdr_stat}) / 2 ))
+            echo -e "${DARKGRAY}${_sep_stat}${NC}"
+            printf "${DARKGRAY}%${_hdr_pad}s%s${NC}\n" "" "$_hdr_stat"
+            echo -e "${DARKGRAY}${_sep_stat}${NC}"
 
             # Считаем /24 подсети среди видимых IP
             declare -A _st_subnet_count=()
@@ -909,9 +948,11 @@ _mt_do_stats() {
             if [ ${#_st_subnets[@]} -gt 0 ]; then
                 IFS=$'\n' _st_subnets=($(printf '%s\n' "${_st_subnets[@]}" | sort))
                 unset IFS
-                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
-                echo -e " ${DARKGRAY}Подозрительные подсети:${NC}"
-                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+                local _hdr_sn="Подозрительные подсети:"
+                local _hdr_sn_pad=$(( (${#_sep_stat} - ${#_hdr_sn}) / 2 ))
+                echo -e "${DARKGRAY}${_sep_stat}${NC}"
+                printf "${DARKGRAY}%${_hdr_sn_pad}s%s${NC}\n" "" "$_hdr_sn"
+                echo -e "${DARKGRAY}${_sep_stat}${NC}"
                 for _sn in "${_st_subnets[@]}"; do
                     printf "   ${YELLOW}%-20s${DARKGRAY}%s IP из подсети${NC}\n" "$_sn" "${_st_subnet_count[$_sn]}"
                 done
@@ -1524,8 +1565,11 @@ _mt_do_access() {
         if [ ${#_all_ips[@]} -eq 0 ]; then
             _ip_items+=("${DARKGRAY}(нет данных о подключениях)${NC}"); _ip_vals+=("sep")
         else
-            _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            local _sep_ac="──────────────────────────────────────"
+            local _hdr_ac="Список IP адресов:"
+            local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
+            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
                 [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
@@ -1548,9 +1592,11 @@ _mt_do_access() {
 
         # Подозрительные подсети (2+ IP из истории)
         if [ ${#_subnet_groups[@]} -gt 0 ]; then
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"${DARKGRAY}Подозрительные подсети:${NC}"); _ip_vals+=("sep")
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            local _hdr_sn2="Подозрительные подсети:"
+            local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_sn2_pad '' "$_hdr_sn2")"); _ip_vals+=("sep")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             for _sn in "${_subnet_groups[@]}"; do
                 local _total="${_sn_cnt[$_sn]}"
                 # Считаем онлайн и заблокированных в этой подсети
@@ -1593,19 +1639,30 @@ _mt_do_access() {
             [ "$_is_group" -eq 0 ] && _extra_cidrs+=("$_bn")
         done
         if [ ${#_extra_cidrs[@]} -gt 0 ]; then
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"${DARKGRAY}Заблокированные подсети:${NC}"); _ip_vals+=("sep")
-            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            local _hdr_bl="Заблокированные подсети:"
+            local _hdr_bl_pad=$(( (${#_sep_ac} - ${#_hdr_bl}) / 2 ))
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_bl_pad '' "$_hdr_bl")"); _ip_vals+=("sep")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             for _bn in "${_extra_cidrs[@]}"; do
                 _ip_items+=("${RED}${_bn}${NC}")
                 _ip_vals+=("$_bn")
             done
         fi
 
-        _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("✏️   Ввести IP или CIDR вручную");      _ip_vals+=("manual")
-        _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                           _ip_vals+=("back")
+
+        # Находим индекс первого IP (пропускаем sep/заголовки)
+        local _first_ip_idx=0
+        for _fi in "${!_ip_vals[@]}"; do
+            if [ "${_ip_vals[$_fi]}" != "sep" ] && [ "${_ip_vals[$_fi]}" != "manual" ] && [ "${_ip_vals[$_fi]}" != "back" ]; then
+                _first_ip_idx=$_fi; break
+            fi
+        done
+        export MENU_INITIAL_IDX=$_first_ip_idx
 
         # Заголовок: центрированный с статистикой
         local _blk_total=${#_blocked_list[@]}

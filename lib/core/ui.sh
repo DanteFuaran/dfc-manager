@@ -151,7 +151,9 @@ show_arrow_menu() {
     shift
     local options=("$@")
     local num_options=${#options[@]}
-    local selected=0
+    local selected=${MENU_INITIAL_IDX:-0}
+    # Если начальный индекс указан — сбрасываем переменную
+    unset MENU_INITIAL_IDX
 
     # Если stdin не является TTY — не пытаемся читать, возвращаем 255
     if ! [ -t 0 ]; then
@@ -215,8 +217,11 @@ show_arrow_menu() {
         for i in "${!options[@]}"; do
             # Проверяем, является ли элемент разделителем
             if [[ "${options[$i]}" =~ ^[─━═\s]*$ ]]; then
-                # Разделители без отступа - вровень с рамкой
+                # Разделители без отступа - вровень с рамкой (синие)
                 echo -e "${DARKGRAY}${options[$i]}${NC}"
+            elif [[ "${options[$i]}" == $'\x02'* ]]; then
+                # Серый разделитель (──────)
+                echo -e "${DARKGRAY}${options[$i]:1}${NC}"
             elif [[ "${options[$i]}" == $'\x01'* ]]; then
                 # Заголовок-секция (не выбирается)
                 echo -e "${DARKGRAY}${options[$i]:1}${NC}"
@@ -250,7 +255,7 @@ show_arrow_menu() {
                             selected=$((num_options - 1))
                         fi
                         # Пропускаем разделители и заголовки вверх
-                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]]; do
+                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]] || [[ "${options[$selected]}" == $'\x02'* ]]; do
                             ((selected--))
                             if [ $selected -lt 0 ]; then
                                 selected=$((num_options - 1))
@@ -263,7 +268,7 @@ show_arrow_menu() {
                             selected=0
                         fi
                         # Пропускаем разделители и заголовки вниз
-                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]]; do
+                        while [[ "${options[$selected]}" =~ ^[─═\s]*$ ]] || [[ "${options[$selected]}" == $'\x01'* ]] || [[ "${options[$selected]}" == $'\x02'* ]]; do
                             ((selected++))
                             if [ $selected -ge $num_options ]; then
                                 selected=0
