@@ -344,6 +344,7 @@ _mt_do_install() {
 
     (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск MTProto..." "MTProto запущен!"
+    _mt_block_apply
 
     # UFW
     if command -v ufw >/dev/null 2>&1; then
@@ -697,6 +698,7 @@ _mt_do_change_config() {
     # Перезапуск с новым портом
     (cd "$_MT_DIR" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Перезапуск MTProto..." "MTProto перезапущен!"
+    _mt_block_apply
 
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
@@ -738,6 +740,7 @@ _mt_do_start() {
     fi
     (cd "$_MT_DIR" && docker compose start >/dev/null 2>&1) &
     show_spinner "Запуск прокси..." "Прокси запущен"
+    _mt_block_apply
     _mt_press_enter
 }
 
@@ -748,7 +751,9 @@ _mt_do_restart() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     (cd "$_MT_DIR" && docker compose restart >/dev/null 2>&1) &
+    # Применяем правила блокировки — они не переживают перезапуск контейнера (iptables остаётся)
     show_spinner "Перезапуск прокси..." "Прокси перезапущен"
+    _mt_block_apply
     _mt_press_enter
 }
 
@@ -830,6 +835,195 @@ _mt_do_update() {
     _mt_press_enter
 }
 
+}
+
+# ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
+_MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
+
+_mt_block_apply() {
+    # Применяем все заблокированные записи из файла через iptables
+    # Вызывается при старте контейнера и из меню
+    local _port="${PROXY_PORT:-443}"
+    [ ! -f "$_MT_BLOCK_FILE" ] && return
+    while IFS= read -r _entry; do
+        [[ "$_entry" =~ ^#|^$ ]] && continue
+        # Добавляем только если правила ещё нет
+        iptables -C INPUT -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null \
+            || iptables -I INPUT -s "$_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+    done < "$_MT_BLOCK_FILE"
+}
+
+_mt_block_clear_all() {
+    # Снимаем все DROP-правила для нашего порта
+    local _port="${PROXY_PORT:-443}"
+    while iptables -D INPUT -p tcp --dport "$_port" -j DROP 2>/dev/null; do :; done
+    # Убираем и правила с -s (конкретные IP)
+    iptables -S INPUT 2>/dev/null | grep -- "--dport ${_port} -j DROP" | while read -r _rule; do
+        iptables "${_rule/-A/-D}" 2>/dev/null || true
+    done
+}
+
+_mt_do_access() {
+    if ! _mt_installed; then
+        echo -e "${RED}✖ MTProto не установлен${NC}"; _mt_press_enter; return
+    fi
+    _mt_load_env
+    mkdir -p "$_MT_DIR"
+    touch "$_MT_BLOCK_FILE" 2>/dev/null || true
+
+    while true; do
+        clear
+        echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+        echo -e "${RED}       🚫 Управление доступом MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+        echo
+
+        # Показываем список заблокированных
+        local _blocked_list=()
+        while IFS= read -r _e; do
+            [[ "$_e" =~ ^#|^$ ]] && continue
+            _blocked_list+=("$_e")
+        done < "$_MT_BLOCK_FILE"
+
+        if [ ${#_blocked_list[@]} -eq 0 ]; then
+            echo -e " ${DARKGRAY}Заблокированных записей нет${NC}"
+        else
+            echo -e " ${DARKGRAY}Заблокировано (${#_blocked_list[@]}):${NC}"
+            for _b in "${_blocked_list[@]}"; do
+                echo -e "   ${RED}✖${NC} ${WHITE}${_b}${NC}"
+            done
+        fi
+        echo
+        echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+
+        local -a _items=() _actions=()
+        _items+=("➕  Заблокировать IP или подсеть"); _actions+=("add")
+
+        # Показываем сейчас подключённых — можно заблокировать прямо отсюда
+        local _ss_out _client_ips _cur_ips=()
+        _ss_out=$(docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
+            | awk 'NR>1 && $3 ~ /:443$/')
+        _client_ips=$(printf '%s\n' "$_ss_out" \
+            | awk 'NF{print $4}' | sed 's/:[0-9]*$//' | sort -u)
+        while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
+
+        if [ ${#_cur_ips[@]} -gt 0 ]; then
+            _items+=("🔌  Заблокировать из подключённых"); _actions+=("block_current")
+        fi
+
+        if [ ${#_blocked_list[@]} -gt 0 ]; then
+            _items+=("✅  Разблокировать запись");         _actions+=("remove")
+            _items+=("🗑️   Очистить весь список");          _actions+=("clear")
+        fi
+        _items+=("──────────────────────────────────────"); _actions+=("sep")
+        _items+=("⬅️   Назад");                             _actions+=("back")
+
+        show_arrow_menu "🚫 Управление доступом" "${_items[@]}"
+        local _choice=$?
+        [[ $_choice -eq 255 ]] && return
+        local _action="${_actions[$_choice]:-sep}"
+
+        case "$_action" in
+        add)
+            clear
+            echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+            echo -e "${RED}       🚫 Заблокировать IP / подсеть${NC}"
+            echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+            echo
+            echo -e " ${DARKGRAY}Примеры:${NC}"
+            echo -e "   ${WHITE}1.2.3.4${NC}          ${DARKGRAY}— конкретный IP${NC}"
+            echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть (256 адресов)${NC}"
+            echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть (65535 адресов)${NC}"
+            echo
+            local _new_entry=""
+            _mt_read_input _new_entry "IP или CIDR:" ""
+            _new_entry=$(echo "$_new_entry" | tr -d ' ')
+            if [[ -n "$_new_entry" ]]; then
+                # Базовая валидация
+                if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+                    if grep -qxF "$_new_entry" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                        echo -e "${YELLOW}⚠ Уже в списке${NC}"
+                    else
+                        echo "$_new_entry" >> "$_MT_BLOCK_FILE"
+                        local _port="${PROXY_PORT:-443}"
+                        iptables -I INPUT -s "$_new_entry" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                        echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
+                        # Сбрасываем существующие соединения с этого IP/подсети
+                        docker exec "$_MT_CONTAINER" ss -K dst "$_new_entry" 2>/dev/null || true
+                    fi
+                else
+                    echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR (1.2.3.4 или 1.2.3.0/24)${NC}"
+                fi
+                sleep 1.5
+            fi
+            ;;
+        block_current)
+            # Показываем список текущих подключений для выбора
+            local -a _ip_items=() _ip_vals=()
+            for _ip in "${_cur_ips[@]}"; do
+                local _geo_str
+                _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
+                [ -z "$_geo_str" ] && _geo_str="—"
+                _ip_items+=("$(printf '%-20s %s' "$_ip" "$_geo_str")")
+                _ip_vals+=("$_ip")
+                # Также предлагаем /24 подсеть
+                local _subnet24
+                _subnet24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                _ip_items+=("$(printf '%-20s %s' "$_subnet24" "вся /24 подсеть")")
+                _ip_vals+=("$_subnet24")
+            done
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            _ip_items+=("⬅️   Назад"); _ip_vals+=("back")
+
+            show_arrow_menu "Выберите что заблокировать:" "${_ip_items[@]}"
+            local _ic=$?
+            [[ $_ic -eq 255 ]] && continue
+            local _sel="${_ip_vals[$_ic]:-sep}"
+            if [[ "$_sel" != "sep" && "$_sel" != "back" && -n "$_sel" ]]; then
+                if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                    echo -e "${YELLOW}⚠ Уже в списке: ${_sel}${NC}"
+                else
+                    echo "$_sel" >> "$_MT_BLOCK_FILE"
+                    local _port="${PROXY_PORT:-443}"
+                    iptables -I INPUT -s "$_sel" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                    docker exec "$_MT_CONTAINER" ss -K dst "$_sel" 2>/dev/null || true
+                    echo -e "${GREEN}✅ Заблокировано и отключено: ${_sel}${NC}"
+                fi
+                sleep 1.5
+            fi
+            ;;
+        remove)
+            [ ${#_blocked_list[@]} -eq 0 ] && continue
+            local -a _rm_items=()
+            for _b in "${_blocked_list[@]}"; do _rm_items+=("$_b"); done
+            _rm_items+=("──────────────────────────────────────")
+            _rm_items+=("⬅️   Назад")
+
+            show_arrow_menu "Выберите для разблокировки:" "${_rm_items[@]}"
+            local _rc=$?
+            [[ $_rc -eq 255 ]] && continue
+            local _to_remove="${_blocked_list[$_rc]:-}"
+            if [ -n "$_to_remove" ]; then
+                # Удаляем из файла
+                sed -i "/^$(echo "$_to_remove" | sed 's/[\/&]/\\&/g')$/d" "$_MT_BLOCK_FILE" 2>/dev/null || true
+                # Удаляем iptables правило
+                local _port="${PROXY_PORT:-443}"
+                iptables -D INPUT -s "$_to_remove" -p tcp --dport "$_port" -j DROP 2>/dev/null || true
+                echo -e "${GREEN}✅ Разблокировано: ${_to_remove}${NC}"
+                sleep 1.5
+            fi
+            ;;
+        clear)
+            _mt_block_clear_all
+            > "$_MT_BLOCK_FILE"
+            echo -e "${GREEN}✅ Список очищен, все правила сняты${NC}"
+            sleep 1.5
+            ;;
+        back) return ;;
+        esac
+    done
+}
+
 manage_mtproto() {
     while true; do
         tput civis 2>/dev/null || true
@@ -863,7 +1057,8 @@ manage_mtproto() {
             _items+=("⬆️   Обновить образ");          _actions+=("update")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             _items+=("📊  Статистика подключений");            _actions+=("stats")
-            _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
+            _items+=("�  Управление доступом");               _actions+=("access")
+            _items+=("�📄  Конфигурация и ссылка");             _actions+=("config")
             _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             if [ "$_running" = true ]; then
@@ -886,6 +1081,7 @@ manage_mtproto() {
             install)       _mt_do_install || return ;;
             update)        _mt_do_update ;;
             stats)         _mt_do_stats || return ;;
+            access)        _mt_do_access ;;
             config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
             start)         _mt_do_start ;;
