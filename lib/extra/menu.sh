@@ -930,6 +930,13 @@ _mt_do_access() {
     mkdir -p "$_MT_DIR"
     touch "$_MT_BLOCK_FILE" 2>/dev/null || true
 
+    # Синхронизируем iptables с файлом: если файл пустой — снимаем все DROP-правила
+    local _file_entries
+    _file_entries=$(grep -cEv '^#|^$' "$_MT_BLOCK_FILE" 2>/dev/null || echo 0)
+    if [ "$_file_entries" -eq 0 ]; then
+        _mt_block_clear_all
+    fi
+
     while true; do
         # Считываем заблокированных и текущие подключения для счётчиков
         local _blocked_list=()
