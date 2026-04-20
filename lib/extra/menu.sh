@@ -621,14 +621,28 @@ _mt_do_install() {
 
     # Проверяем свободен ли порт (только для не-443, где Docker пробрасывает напрямую)
     if [ "${PROXY_PORT:-443}" != "443" ]; then
-        local _port_user=""
-        _port_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
-        if [ -n "$_port_user" ] && [ "$_port_user" != "docker-proxy" ]; then
-            echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом ${_port_user}${NC}"
-            echo -e "${DARKGRAY}  Освободите порт или переустановите MTProto с другим портом${NC}"
-            _mt_press_enter
-            return
-        fi
+        while true; do
+            local _port_user=""
+            _port_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
+            [ -z "$_port_user" ] || [ "$_port_user" = "docker-proxy" ] && break
+            echo
+            echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом: ${WHITE}${_port_user}${NC}"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+            tput civis 2>/dev/null || true
+            local _pk=""
+            while true; do
+                IFS= read -rsn1 _pk
+                if [[ "$_pk" == $'\x1b' ]]; then
+                    tput cnorm 2>/dev/null || true
+                    return
+                elif [[ "$_pk" == "" ]]; then
+                    tput cnorm 2>/dev/null || true
+                    break
+                fi
+            done
+        done
     fi
 
     # Тянем образ и запускаем
