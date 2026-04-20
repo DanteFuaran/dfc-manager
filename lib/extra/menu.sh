@@ -1226,6 +1226,89 @@ _mt_do_update() {
     _mt_press_enter
 }
 
+# ─── Создание / пересоздание SSL-сертификата и страницы /connect ──────────────
+_mt_do_setup_connect() {
+    _mt_load_env
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}     🌐 Страница подключения /connect${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
+    if [ -z "${SERVER_IP:-}" ]; then
+        echo -e "${RED}✖ Конфигурация не найдена. Сначала установите прокси.${NC}"
+        _mt_press_enter; return
+    fi
+
+    if [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${YELLOW}⚠️  Страница /connect доступна только при использовании домена (не IP).${NC}"
+        echo -e "${DARKGRAY}   Текущий SERVER_IP: ${SERVER_IP}${NC}"
+        _mt_press_enter; return
+    fi
+
+    local _cert_ok=false _nginx_ok=false
+    [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ] && _cert_ok=true
+    grep -q "BEGIN_MT_CONNECT_${SERVER_IP}" /opt/nginx/nginx.conf 2>/dev/null && _nginx_ok=true
+
+    echo -e " ${DARKGRAY}Домен:${NC}         ${WHITE}${SERVER_IP}${NC}"
+    if $_cert_ok; then
+        echo -e " ${DARKGRAY}SSL сертификат:${NC} ${GREEN}✅ Получен${NC}"
+    else
+        echo -e " ${DARKGRAY}SSL сертификат:${NC} ${RED}✖ Не найден${NC}"
+    fi
+    if $_nginx_ok; then
+        echo -e " ${DARKGRAY}Nginx блок:${NC}     ${GREEN}✅ Настроен${NC}"
+    else
+        echo -e " ${DARKGRAY}Nginx блок:${NC}     ${RED}✖ Не настроен${NC}"
+    fi
+    echo
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo -e " Убедитесь, что:"
+    echo -e "   ${DARKGRAY}1. DNS A-запись ${WHITE}${SERVER_IP}${DARKGRAY} указывает на этот сервер${NC}"
+    echo -e "   ${DARKGRAY}2. Порт ${WHITE}80${DARKGRAY} открыт (для получения сертификата)${NC}"
+    echo -e "${BLUE}──────────────────────────────────────${NC}"
+    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+
+    local _flush; read -s -r -t 0.1 _flush 2>/dev/null || true
+    tput civis 2>/dev/null || true
+    local _k
+    while true; do
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
+            "") break ;;
+        esac
+    done
+    tput cnorm 2>/dev/null || true
+
+    echo
+
+    # Nginx если не запущен
+    if [ -z "$(_mt_nginx_container)" ]; then
+        (_mt_setup_nginx) &
+        show_spinner "Установка Nginx..." "Nginx установлен"
+    fi
+
+    # Сертификат
+    (_mt_issue_cert "$SERVER_IP") &
+    show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+    if ! _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
+        echo -e "${RED}✖ Не удалось получить сертификат для ${SERVER_IP}.${NC}"
+        echo -e "${DARKGRAY}  Проверьте DNS и доступность порта 80.${NC}"
+        _mt_press_enter; return
+    fi
+
+    # Nginx блок + страница
+    (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+    show_spinner "Настройка Nginx и страницы..." "Страница /connect создана"
+
+    echo
+    echo -e "${GREEN}✅ Страница подключения:${NC}"
+    echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
+    echo
+    _mt_press_enter
+}
+
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_DB="${_MT_DIR}/mtproto.db"             # SQLite-база всех данных MTProto
 _MT_NGINX_CONF="/opt/nginx/nginx.conf"     # nginx конфиг (stream-блок MTProto)
@@ -2147,6 +2230,9 @@ manage_mtproto() {
             _items+=("🚫  Управление доступом");               _actions+=("access")
             _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
             _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
+            if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                _items+=("🌐  Страница /connect");             _actions+=("setup_connect")
+            fi
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             if [ "$_running" = true ]; then
                 _items+=("⏹️   Остановить прокси");    _actions+=("stop")
@@ -2171,6 +2257,7 @@ manage_mtproto() {
             access)        _mt_do_access ;;
             config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
+            setup_connect) _mt_do_setup_connect ;;
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
             restart)       _mt_do_restart ;;
