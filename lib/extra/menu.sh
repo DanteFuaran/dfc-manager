@@ -1309,6 +1309,39 @@ _mt_do_uninstall() {
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
     show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
 
+    # Удаляем nginx блок и SSL сертификаты для домена
+    local _domain="${SERVER_IP:-}"
+    if [ -n "$_domain" ] && ! [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        (local _nginx_conf="/opt/nginx/nginx.conf"
+        local _begin_marker="# BEGIN_MT_CONNECT_${_domain}"
+        local _end_marker="# END_MT_CONNECT_${_domain}"
+        if grep -q "$_begin_marker" "$_nginx_conf" 2>/dev/null; then
+            python3 - "$_nginx_conf" "$_begin_marker" "$_end_marker" <<'PYEOF' 2>/dev/null || true
+import sys
+path, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f: content = f.read()
+while begin in content:
+    i_start = content.find('\n' + begin)
+    if i_start == -1: i_start = content.find(begin)
+    else: i_start += 1
+    i_end = content.find(end, i_start)
+    if i_end == -1: break
+    i_end += len(end)
+    if i_end < len(content) and content[i_end] == '\n': i_end += 1
+    content = content[:i_start] + content[i_end:]
+with open(path, 'w') as f: f.write(content)
+PYEOF
+        fi
+        # Удаляем скопированные SSL сертификаты
+        rm -rf "/opt/nginx/ssl/${_domain}" 2>/dev/null || true
+        # Перезагружаем nginx
+        local _nc; _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
+        if [ -n "$_nc" ]; then
+            docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
+        fi) &
+        show_spinner "Удаление из Nginx..." "Удалено из Nginx"
+    fi
+
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
     echo
