@@ -128,19 +128,40 @@ _mt_check_docker() {
     if ! docker info >/dev/null 2>&1; then
         print_error "Docker не запущен"; return 1
     fi
+    if ! command -v sqlite3 &>/dev/null; then
+        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q sqlite3 >/dev/null 2>&1) &
+        show_spinner "Установка необходимых компонентов" "Компоненты установлены"
+    fi
 }
 
-# Генерирует Fake TLS secret на основе домена
+# Генерирует Fake TLS secret (ee-формат: ee + 16 случайных байт + hex(domain))
+# Совместим с nineseconds/mtg:2 и другими modern-реализациями
 _mt_generate_fake_tls_secret() {
     local domain="${1:-google.com}"
     local domain_hex
     domain_hex=$(printf '%s' "$domain" | xxd -ps | tr -d '\n')
-    local domain_len=${#domain_hex}
-    local needed=$(( 30 - domain_len ))
-    [ "$needed" -lt 0 ] && needed=0
-    local random_hex=""
-    [ "$needed" -gt 0 ] && random_hex=$(openssl rand -hex 15 2>/dev/null | cut -c1-"$needed")
-    printf 'ee%s%s' "$domain_hex" "$random_hex"
+    local random_hex
+    random_hex=$(openssl rand -hex 16 2>/dev/null)
+    printf 'ee%s%s' "$random_hex" "$domain_hex"
+}
+
+# Извлекает «сырой» 32-символьный секрет (16 байт hex) из FakeTLS-обёртки
+# ee<32hex><domain_hex> → <32hex>
+_mt_extract_raw_secret() {
+    local s="${1:-}"
+    if [[ "$s" =~ ^[Ee]{2} ]] && [ ${#s} -gt 34 ]; then
+        echo "${s:2:32}"
+    else
+        echo "$s"
+    fi
+}
+
+# Секрет для Telegram ссылок: ee + 32 hex (без домена)
+# ee<32hex><domain_hex> → ee<32hex>
+_mt_link_secret() {
+    local s="${1:-}"
+    local raw; raw=$(_mt_extract_raw_secret "$s")
+    echo "ee${raw}"
 }
 
 # Ищет свободный порт начиная с base
@@ -163,13 +184,222 @@ PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
+PROXY_NAME=${PROXY_NAME:-}
 EOF
+}
+
+# Выпускает SSL-сертификат для домена через certbot standalone (порт 80)
+# Возвращает 0 если сертификат готов (новый или уже существующий), 1 при ошибке
+_mt_issue_cert() {
+    local _domain="${1:-}"
+    # Если это IP — сертификат не нужен
+    if [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 1
+    fi
+    [ -z "$_domain" ] && return 1
+    local _cert_dir="/etc/letsencrypt/live/${_domain}"
+    # Уже есть — ок
+    if [ -f "${_cert_dir}/fullchain.pem" ]; then
+        return 0
+    fi
+    # Устанавливаем certbot если нет
+    if ! command -v certbot >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
+    fi
+    # Открываем порт 80, выпускаем, закрываем
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    # Останавливаем nginx если он занимает порт 80
+    local _nginx_stopped=false
+    local _nc; _nc=$(_mt_nginx_container)
+    if [ -n "$_nc" ] && ss -tlnp sport = :80 2>/dev/null | grep -q "nginx\|docker"; then
+        docker stop "$_nc" >/dev/null 2>&1 && _nginx_stopped=true
+    fi
+    certbot certonly --standalone --non-interactive --agree-tos \
+        --register-unsafely-without-email \
+        --preferred-challenges http-01 \
+        --http-01-port 80 \
+        -d "$_domain" >/dev/null 2>&1
+    local _rc=$?
+    # Запускаем nginx обратно если останавливали
+    $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
+    if command -v ufw >/dev/null 2>&1; then
+        ufw delete allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    return $_rc
+}
+
+# Находит имя nginx-контейнера
+_mt_nginx_container() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1
+}
+
+# Добавляет домен в nginx: stream map + server block с /connect
+_mt_nginx_add_domain() {
+    local _domain="${1:-}" _secret="${2:-}" _port="${3:-}" _name="${4:-}"
+    [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
+    [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
+
+    local _nginx_conf="/opt/nginx/nginx.conf"
+    local _ssl_dir="/opt/nginx/ssl/${_domain}"
+    local _cert_src="/etc/letsencrypt/live/${_domain}"
+
+    [ -f "${_cert_src}/fullchain.pem" ] || return 1
+
+    # Копируем сертификат в nginx ssl папку
+    mkdir -p "$_ssl_dir"
+    cp "${_cert_src}/fullchain.pem" "${_ssl_dir}/fullchain.pem"
+    cp "${_cert_src}/privkey.pem"   "${_ssl_dir}/privkey.pem"
+
+    # Renewal hook — копирует сертификат и перезагружает nginx
+    local _hook_file="/etc/letsencrypt/renewal-hooks/deploy/mtproto-${_domain}.sh"
+    cat > "$_hook_file" << HOOK
+#!/bin/bash
+# Авторенью: копирует сертификат в nginx ssl и перезагружает nginx
+D="${_domain}"
+mkdir -p /opt/nginx/ssl/\$D
+cp /etc/letsencrypt/live/\$D/fullchain.pem /opt/nginx/ssl/\$D/fullchain.pem
+cp /etc/letsencrypt/live/\$D/privkey.pem   /opt/nginx/ssl/\$D/privkey.pem
+NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
+[ -n "\$NGINX" ] && docker exec "\$NGINX" nginx -s reload 2>/dev/null || true
+HOOK
+    chmod +x "$_hook_file"
+
+    # Добавляем домен в stream map если есть stream-блок и домен не добавлен
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null && ! grep -q "${_domain}.*127.0.0.1:8444" "$_nginx_conf"; then
+        sed -i "s|default\s\+127\.0\.0\.1:8445|${_domain}   127.0.0.1:8444;\n        default                 127.0.0.1:8445|" "$_nginx_conf"
+    fi
+
+    # Генерируем HTML-страницу /connect
+    _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
+
+    local _html_path="/var/www/html/mtproto-connect.html"
+    local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
+
+    # Добавляем server block если не добавлен
+    if ! grep -q "$_connect_marker" "$_nginx_conf"; then
+        # listen 443 ssl нужен только если нет stream-блока (порт MTProto не 443)
+        local _listen443=""
+        grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null || _listen443="    listen 443 ssl;"
+        # Записываем block во временный файл, затем вставляем через awk перед маркером закрытия http
+        local _tmpf; _tmpf=$(mktemp)
+        cat > "$_tmpf" << NGINX_BLOCK
+
+${_connect_marker}
+server {
+    server_name ${_domain};
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+${_listen443}
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
+
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+
+    location = /connect {
+        default_type text/html;
+        alias ${_html_path};
+    }
+
+    location / {
+        return 444;
+    }
+}
+# END_MT_CONNECT_${_domain}
+NGINX_BLOCK
+        awk '/end http/ { while ((getline line < blockfile) > 0) print line; close(blockfile) } { print }' \
+            blockfile="$_tmpf" "$_nginx_conf" > "${_nginx_conf}.tmp" \
+            && mv "${_nginx_conf}.tmp" "$_nginx_conf"
+        rm -f "$_tmpf"
+    else
+        # Обновляем только HTML-файл (server block уже есть)
+        :
+    fi
+
+    # Перезагружаем nginx (полный рестарт чтобы подхватить новые server blocks)
+    local _nc; _nc=$(_mt_nginx_container)
+    if [ -n "$_nc" ]; then
+        docker exec "$_nc" nginx -t 2>/dev/null \
+            && docker restart "$_nc" >/dev/null 2>&1 \
+            || true
+    fi
+}
+
+# Генерирует HTML-страницу с лоадером для редиректа в Telegram
+_mt_write_proxy_page() {
+    local _domain="${1:-${SERVER_IP:-}}"
+    local _secret="${2:-${PROXY_SECRET:-}}"
+    local _port="${3:-${PROXY_PORT:-}}"
+    local _name="${4:-${PROXY_NAME:-}}"
+    [ -z "$_secret" ] || [ -z "$_port" ] || [ -z "$_domain" ] && return 0
+
+    local _display_name="${_name:-MTProto Proxy}"
+    local _tg_url="tg://proxy?server=${_domain}&port=${_port}&secret=${_secret}"
+    local _html_path="/var/www/html/mtproto-connect.html"
+
+    mkdir -p /var/www/html
+    cat > "$_html_path" << HTMLEOF
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${_display_name}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#17212b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{text-align:center;padding:2.5rem 2rem;max-width:360px;width:100%}
+.loader{width:56px;height:56px;margin:0 auto 1.5rem;position:relative}
+.loader::before,.loader::after{content:'';position:absolute;border-radius:50%}
+.loader::before{width:100%;height:100%;border:3px solid rgba(255,255,255,.12);top:0;left:0}
+.loader::after{width:100%;height:100%;border:3px solid transparent;border-top-color:#5da8d6;top:0;left:0;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.plane{font-size:1.8rem;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
+.sub{color:#7a9db8;font-size:.95rem;margin-bottom:2rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 2rem;background:#2b5278;border-radius:10px;color:#fff;text-decoration:none;font-size:1rem;font-weight:500;transition:background .2s,transform .1s}
+.btn:hover{background:#3a6d9e}
+.btn:active{transform:scale(.97)}
+.btn svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="loader"><span class="plane">✈️</span></div>
+  <h1>${_display_name}</h1>
+  <div class="sub">Телеграм прокси</div>
+  <a class="btn" id="btn" href="${_tg_url}">
+    <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+    Подключиться
+  </a>
+</div>
+<script>
+var TG="${_tg_url}",done=false;
+function go(){
+  if(done)return;done=true;
+  window.location.href=TG;
+}
+setTimeout(go,1200);
+setTimeout(function(){window.close()},10000);
+document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
+</script>
+</body>
+</html>
+HTMLEOF
+
+    # Обновляем старую test-n страницу для совместимости
+    [ -f /var/www/html/mtproto.html ] && cp "$_html_path" /var/www/html/mtproto.html 2>/dev/null || true
 }
 
 # Записывает docker-compose.yml
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
+    # telegrammessenger/proxy требует ровно 32 hex без ee-префикса
+    local _raw_secret; _raw_secret=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    cat > "${_MT_DIR}/docker-compose.yml" << COMPOSE
 services:
   mtproto-proxy:
     image: telegrammessenger/proxy:latest
@@ -178,7 +408,7 @@ services:
     ports:
       - "${PROXY_PORT}:443"
     environment:
-      - SECRET=${PROXY_SECRET}
+      - SECRET=${_raw_secret}
       - TAG=${PROXY_TAG}
     sysctls:
       - net.ipv4.tcp_keepalive_time=30
@@ -197,12 +427,13 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
     PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
+    PROXY_NAME=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -269,14 +500,52 @@ _mt_do_install() {
                     done
                 done
                 ;;
-            2) # Порт
-                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
-                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+            2) # Порт MTProto
+                local _port_default="${PROXY_PORT:-$(_mt_find_free_port 8443)}"
+                _mt_read_input PROXY_PORT "Порт MTProto ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
-                    if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
-                        (( _step++ ))
-                    else
+                    if ! ([[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 ))); then
                         echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                    else
+                        # Проверяем свободен ли порт
+                        local _busy_user=""
+                        _busy_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
+                        # Игнорируем: nginx (stream будет перенастроен) и docker-proxy нашего mtproto
+                        if [ -n "$_busy_user" ]; then
+                            local _skip=false
+                            if [ "$_busy_user" = "nginx" ] && [ "$PROXY_PORT" = "443" ]; then
+                                _skip=true  # nginx на 443 — stream перенастроит
+                            elif [ "$_busy_user" = "docker-proxy" ]; then
+                                # Только если это наш mtproto-proxy (переустановка)
+                                local _mt_port=""
+                                _mt_port=$(docker port "$_MT_CONTAINER" 3128/tcp 2>/dev/null | grep -oP ':\K\d+' | head -1)
+                                [ "$_mt_port" = "$PROXY_PORT" ] && _skip=true
+                            fi
+                            if ! $_skip; then
+                                echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом: ${WHITE}${_busy_user}${NC}"
+                            echo
+                            echo -e "${BLUE}══════════════════════════════════════${NC}"
+                            echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+                            tput civis 2>/dev/null || true
+                            local _pk=""
+                            while true; do
+                                IFS= read -rsn1 _pk
+                                if [[ "$_pk" == $'\x1b' ]]; then
+                                    tput cnorm 2>/dev/null || true
+                                    return
+                                elif [[ "$_pk" == "" ]]; then
+                                    tput cnorm 2>/dev/null || true
+                                    break
+                                fi
+                            done
+                            # Стираем блок ошибки (4 строки) + строку ввода порта (1) → повтор на том же месте
+                            _mt_erase_lines 5
+                            else
+                                (( _step++ ))
+                            fi
+                        else
+                            (( _step++ ))
+                        fi
                     fi
                 else
                     _mt_erase_lines 1
@@ -295,20 +564,21 @@ _mt_do_install() {
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
+                    if [ -z "$_secret_input" ]; then
+                        # Генерируем секрет и показываем сырой (без ee-обёртки)
+                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
+                        # Пользователь ввёл полный FakeTLS секрет — извлекаем сырой
+                        _secret_input="${_secret_input:2:32}"
+                    fi
                     (( _step++ ))
                 else
                     _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
-            5) # Показать секрет + Telegram TAG
-                local _disp_secret
-                if [ -n "$_secret_input" ]; then
-                    _disp_secret="$_secret_input"
-                else
-                    _disp_secret=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
-                fi
-                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+            5) # Telegram TAG
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
@@ -321,33 +591,34 @@ _mt_do_install() {
         esac
     done
 
-    # Финализация введённых значений
-    if [ -n "$_secret_input" ]; then
-        PROXY_SECRET="$_secret_input"
-    else
-        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
-    fi
+    # Финализация: собираем полный FakeTLS секрет из сырого + домен
+    local _domain_hex
+    _domain_hex=$(printf '%s' "$FAKE_DOMAIN" | xxd -ps | tr -d '\n')
+    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     echo
     echo
 
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    print_success "Подготовка файлов"
+    printf "${GREEN}\u2705${NC} Подготовка файлов\n"
+
+    # База данных
+    (_mt_db_migrate) &
+    show_spinner "Подключение базы" "Подключение базы"
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
         (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
          docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        show_spinner "Очистка старого контейнера..." "Старый контейнер удалён"
+        show_spinner "Очистка старого контейнера" "Старый контейнер удалён"
     fi
 
     # Тянем образ и запускаем
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
-    show_spinner "Загрузка образа..." "Образ загружен"
-
-    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск MTProto..." "MTProto запущен!"
+    local _compose_err; _compose_err=$(mktemp)
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d 2>"$_compose_err" >/dev/null) &
+    show_spinner "Запуск MTProto" "Запуск MTProto"
+    tput civis 2>/dev/null || true
     _mt_block_apply
 
     # UFW
@@ -356,7 +627,10 @@ _mt_do_install() {
     fi
 
     if _mt_running; then
+        rm -f "${_compose_err:-}"
         _mt_save_config
+        print_success "Установка завершена!"
+        echo
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         local _ok_line="✅ MTProto успешно установлен!"
@@ -377,6 +651,10 @@ _mt_do_install() {
         echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
+        local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+        echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
+        echo -e "   ${YELLOW}${_raw_s}${NC}"
+        echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
         tput civis 2>/dev/null || true
@@ -390,8 +668,13 @@ _mt_do_install() {
         done
     else
         echo
-        print_error "Контейнер не запустился. Логи:"
-        docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+        print_error "Контейнер не запустился."
+        if [ -s "${_compose_err:-}" ]; then
+            echo -e "${DARKGRAY}$(head -10 "$_compose_err")${NC}"
+        else
+            docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+        fi
+        rm -f "${_compose_err:-}"
         _mt_press_enter
     fi
 }
@@ -425,6 +708,10 @@ _mt_do_config() {
     echo
     echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo
+    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
+    echo -e "   ${YELLOW}${_raw_s}${NC}"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -677,7 +964,6 @@ _mt_do_stats() {
 }
 
 # Сменить конфигурацию — интерактивно
-
 _mt_do_change_config() {
     if ! _mt_installed; then
         echo -e "${RED}✖ MTProto не установлен. Сначала установите прокси.${NC}"
@@ -744,16 +1030,16 @@ _mt_do_change_config() {
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             4) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
-                if [ $? -eq 0 ]; then (( _step++ ))
+                if [ $? -eq 0 ]; then
+                    if [ -z "$_secret_input" ]; then
+                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
+                        _secret_input="${_secret_input:2:32}"
+                    fi
+                    (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            5) # Показать секрет + Telegram TAG
-                local _disp_secret
-                if [ -n "$_secret_input" ]; then
-                    _disp_secret="$_secret_input"
-                else
-                    _disp_secret=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
-                fi
-                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
+            5) # Telegram TAG
                 echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
@@ -761,11 +1047,9 @@ _mt_do_change_config() {
         esac
     done
 
-    if [ -n "$_secret_input" ]; then
-        PROXY_SECRET="$_secret_input"
-    else
-        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
-    fi
+    local _domain_hex
+    _domain_hex=$(printf '%s' "$NEW_FAKE_DOMAIN" | xxd -ps | tr -d '\n')
+    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     SERVER_IP="$NEW_SERVER_IP"
     PROXY_PORT="$NEW_PROXY_PORT"
     FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
@@ -790,7 +1074,9 @@ _mt_do_change_config() {
     fi
 
     echo
-    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
     echo
     _mt_press_enter
 }
@@ -841,47 +1127,49 @@ _mt_do_restart() {
 
 _mt_do_uninstall() {
     _mt_load_env
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
+
     if ! _mt_installed; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
         echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
         _mt_press_enter; return
     fi
 
-    echo -e "    ${YELLOW}MTProto будет удалён с сервера${NC}"
-    echo
+    local _del_items=("✅  Да, удалить" "❌  Нет, не удалять")
+    local _del_actions=("yes" "no")
+    MENU_ESC_LABEL="Отмена"
+    show_arrow_menu "🗑️  Удаление MTProto" "${_del_items[@]}"
+    local _choice=$?
+    unset MENU_ESC_LABEL
+    [[ $_choice -eq 255 ]] && return
+    local _act="${_del_actions[$_choice]:-no}"
+    [[ "$_act" != "yes" ]] && return
+
+    clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
-            "")      break ;;
-        esac
-    done
-    tput cnorm 2>/dev/null || true
-    echo
+    echo -e "${RED}         🗑️  Удаление MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     (if [ -d "$_MT_DIR" ]; then
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
-    show_spinner "Остановка контейнера..." "Контейнер остановлен"
+    show_spinner "Остановка контейнера" "Остановка контейнера"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
+    _mt_block_clear_all 2>/dev/null || true
+    if _mt_nginx_available; then : ; fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
-    show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
+    show_spinner "Удаление остаточных файлов" "Удаление остаточных файлов"
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
@@ -1677,6 +1965,7 @@ manage_mtproto() {
         esac
     done
 }
+
 
 # ═══════════════════════════════════════════════════
 # ТЕСТИРОВАНИЕ СЕРВЕРА
