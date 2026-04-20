@@ -1411,11 +1411,62 @@ _mt_ipt() {
     fi
 }
 
-# Сбросить текущие соединения с IP (использует conntrack если доступен)
+# Добавить правило блокировки для IP/CIDR с учётом режима работы MTProto:
+#   port 443 + nginx stream (host mode) → INPUT -p tcp --dport 443
+#   port ≠ 443 (Docker direct)          → DOCKER-USER (FORWARD) + PREROUTING mangle
+_mt_ipt_block_add() {
+    local _entry="$1"
+    _mt_load_env
+    local _port="${PROXY_PORT:-3128}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        # nginx слушает 443 в host-mode — блокируем в INPUT
+        _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+    else
+        # Docker DNAT: HOST:PORT → container:3128 — пакеты идут через FORWARD, не INPUT
+        # DOCKER-USER вызывается первым в FORWARD для всех форвардированных пакетов
+        _mt_ipt -C DOCKER-USER -s "$_entry" -j DROP 2>/dev/null \
+            || _mt_ipt -I DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+        # Дополнительно: блокируем до DNAT в mangle PREROUTING на реальном порту
+        _mt_ipt -t mangle -C PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null \
+            || _mt_ipt -t mangle -I PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+    fi
+}
+
+# Удалить правило блокировки
+_mt_ipt_block_del() {
+    local _entry="$1"
+    _mt_load_env
+    local _port="${PROXY_PORT:-3128}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        _mt_ipt -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+    else
+        _mt_ipt -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+        _mt_ipt -t mangle -D PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+    fi
+}
+
+# Сбросить текущие соединения заблокированного IP
 _mt_kill_src() {
     local _src="$1"
+    # Предпочитаем conntrack — удаляет запись из таблицы состояний, пакеты перестают проходить
     if command -v conntrack >/dev/null 2>&1; then
         conntrack -D -s "$_src" >/dev/null 2>&1 || true
+        return
+    fi
+    # Fallback: ss -K убивает сокет напрямую
+    _mt_load_env
+    local _port="${PROXY_PORT:-3128}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        # Host mode: сокеты nginx видны на хосте
+        ss -K "src ${_src}" >/dev/null 2>&1 || true
+    else
+        # Docker mode: сокеты внутри network namespace контейнера
+        local _pid
+        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
+        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
+            nsenter -t "$_pid" -n ss -K "src ${_src}" >/dev/null 2>&1 || true
+        fi
     fi
 }
 
@@ -1513,19 +1564,28 @@ PYEOF
 }
 
 _mt_block_apply() {
-    # Блокировка через iptables INPUT на порту 443 (работает до nginx, на уровне хоста)
     _mt_db_ensure
     while IFS= read -r _entry; do
         [ -z "$_entry" ] && continue
-        _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
-            || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        _mt_ipt_block_add "$_entry"
     done < <(_mt_db_blocked_list)
 }
 
 _mt_block_clear_all() {
-    _mt_ipt -S INPUT 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
-        _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
-    done
+    _mt_load_env
+    local _port="${PROXY_PORT:-3128}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        _mt_ipt -S INPUT 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
+            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
+        done
+    else
+        _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
+            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
+        done
+        _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
+            _mt_ipt -t mangle ${_rule/-A/-D} 2>/dev/null || true
+        done
+    fi
 }
 
 # Проверяет, заблокирован ли IP (точно или через CIDR в таблице blocked)
@@ -1556,6 +1616,11 @@ _mt_do_access() {
     _mt_load_env
     mkdir -p "$_MT_DIR"
     _mt_db_ensure
+
+    # Устанавливаем conntrack-tools если отсутствует (нужен для мгновенного обрыва соединений)
+    if ! command -v conntrack >/dev/null 2>&1; then
+        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q conntrack >/dev/null 2>&1) &
+    fi
 
     # Синхронизируем iptables с БД: если заблокированных нет — снимаем все DROP-правила (тихо)
     local _file_entries
@@ -1779,7 +1844,7 @@ _mt_do_access() {
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
                         _mt_db_blocked_add "$_new_entry"
-                        _mt_ipt -I INPUT -s "$_new_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt_block_add "$_new_entry"
                         _mt_kill_src "$_new_entry"
                         echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                     fi
@@ -1835,11 +1900,11 @@ _mt_do_access() {
                     # Блок/разблок всей подсети как CIDR
                     if _mt_ip_is_blocked "$_sn_cidr"; then
                         _mt_db_blocked_rm "$_sn_cidr"
-                        _mt_ipt -D INPUT -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt_block_del "$_sn_cidr"
                         echo -e "${GREEN}✅ Подсеть разблокирована: ${_sn_cidr}${NC}"
                     else
                         _mt_db_blocked_add "$_sn_cidr"
-                        _mt_ipt -I INPUT -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt_block_add "$_sn_cidr"
                         _mt_kill_src "$_sn_cidr"
                         echo -e "${GREEN}✅ Подсеть заблокирована: ${_sn_cidr}${NC}"
                     fi
@@ -1850,11 +1915,11 @@ _mt_do_access() {
                     local _sip="${_sn_ips[$_sc]}"
                     if _mt_ip_is_blocked "$_sip"; then
                         _mt_db_blocked_rm "$_sip"
-                        _mt_ipt -D INPUT -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt_block_del "$_sip"
                         echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
                     else
                         _mt_db_blocked_add "$_sip"
-                        _mt_ipt -I INPUT -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                        _mt_ipt_block_add "$_sip"
                         _mt_kill_src "$_sip"
                         echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
                     fi
@@ -1870,11 +1935,11 @@ _mt_do_access() {
             if [[ -n "$_sel" ]]; then
                 if _mt_ip_is_blocked "$_sel"; then
                     _mt_db_blocked_rm "$_sel"
-                    _mt_ipt -D INPUT -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                    _mt_ipt_block_del "$_sel"
                     echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
                 else
                     _mt_db_blocked_add "$_sel"
-                    _mt_ipt -I INPUT -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
+                    _mt_ipt_block_add "$_sel"
                     _mt_kill_src "$_sel"
                     echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
                 fi
