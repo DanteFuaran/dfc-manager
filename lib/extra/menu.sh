@@ -277,6 +277,7 @@ _mt_issue_cert() {
     local -a _certbot_args=(
         certonly --standalone --non-interactive --agree-tos
         --preferred-challenges http-01 --http-01-port 80
+        --cert-name "$_domain"
         -d "$_domain"
     )
     if [ -n "${ACME_EMAIL:-}" ]; then
@@ -289,25 +290,6 @@ _mt_issue_cert() {
     local _rc=$?
     $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
     command -v ufw >/dev/null 2>&1 && ufw delete allow 80/tcp >/dev/null 2>&1 || true
-    
-    # Если certbot успешно выполнен, проверяем где он создал сертификат
-    if [ $_rc -eq 0 ]; then
-        # Если сертификат не в основной директории, ищем его в суффиксированных версиях
-        if [ ! -f "${_cert_dir}/fullchain.pem" ]; then
-            local _latest_num=0
-            while IFS= read -r -d '' _dir; do
-                local _num="${_dir##*-}"
-                [[ "$_num" =~ ^[0-9]+$ ]] && (( _num > _latest_num )) && _latest_num="$_num"
-            done < <(find /etc/letsencrypt/live -maxdepth 1 -type d -name "${_domain}-[0-9]*" -print0 2>/dev/null)
-            
-            # Если нашли суффиксированную версию - создаём symlink на основной путь
-            if [ $_latest_num -gt 0 ]; then
-                rm -f "$_cert_dir" 2>/dev/null || true
-                ln -s "${_domain}-$(printf '%04d' $_latest_num)" "$_cert_dir" 2>/dev/null || true
-            fi
-        fi
-    fi
-    
     return $_rc
 }
 
