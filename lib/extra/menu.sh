@@ -1700,7 +1700,7 @@ _mt_do_access() {
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Список разрешённых IP адресов"
         else
-            _hdr_ac="История IP адресов (Выберите для блокирования)"
+            _hdr_ac="Обнаруженные IP адреса"
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
         [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
@@ -1896,13 +1896,14 @@ _mt_do_access() {
             fi
             echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
             echo
-            echo -e " ${DARKGRAY}Примеры:${NC}"
+            echo -e " ${DARKGRAY}Примеры для добавления:${NC}"
+            echo -e " ${DARKGRAY}──────────────────────────────────────${NC}"
             echo -e "   ${WHITE}1.2.3.4${NC}          ${DARKGRAY}— конкретный IP${NC}"
             echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть${NC}"
             echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть${NC}"
-            echo
+            echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
             local _new_entry=""
-            _mt_read_input _new_entry "IP или CIDR:" ""
+            _mt_read_input _new_entry "IP или Подсеть:" ""
             _new_entry=$(echo "$_new_entry" | tr -d ' ')
             if [[ -n "$_new_entry" ]]; then
                 if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
@@ -2044,7 +2045,7 @@ _mt_do_access() {
                     _conf_title="Заблокировать IP?"
                     _conf_btn="${RED}🚫 Заблокировать: ${_sel}${NC}"
                 fi
-                local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️   Отменить")
+                local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️   Назад")
                 show_arrow_menu "$_conf_title" "${_conf_items[@]}"
                 local _cc=$?
                 if [ "$_cc" -eq 0 ]; then
