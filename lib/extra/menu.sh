@@ -560,12 +560,11 @@ _mt_do_install() {
                 fi
                 ;;
             6) # Telegram TAG
-                echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
                     break
                 else
-                    _mt_erase_lines 2
+                    _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
