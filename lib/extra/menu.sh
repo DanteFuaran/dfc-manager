@@ -1710,6 +1710,7 @@ _mt_do_access() {
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("✏️   Ввести IP или CIDR вручную");      _ip_vals+=("manual")
+        _ip_items+=("🗑️   Очистить историю IP");              _ip_vals+=("clear_history")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                           _ip_vals+=("back")
 
@@ -1734,6 +1735,30 @@ _mt_do_access() {
         case "$_sel" in
         sep) ;;
         back) return ;;
+        clear_history)
+            clear
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "${RED}       🗑️  Очистить историю IP${NC}"
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo
+            echo -e " ${DARKGRAY}Будет удалена история всех виденных IP адресов.${NC}"
+            echo -e " ${DARKGRAY}Текущие заблокированные правила НЕ изменятся.${NC}"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo -e "    ${BLUE}Enter${DARKGRAY}: Очистить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+            local _flush; read -s -r -t 0.1 _flush 2>/dev/null || true
+            local _ck
+            while true; do
+                IFS= read -rsn1 _ck 2>/dev/null
+                if [[ "$_ck" == $'\x1b' ]]; then break
+                elif [[ "$_ck" == "" ]]; then
+                    sqlite3 "$_MT_DB" "DELETE FROM seen_ips;" 2>/dev/null || true
+                    echo -e "${GREEN}✅ История IP очищена${NC}"
+                    sleep 1
+                    break
+                fi
+            done
+            ;;
         manual)
             clear
             echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
