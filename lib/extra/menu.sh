@@ -269,11 +269,18 @@ _mt_issue_cert() {
 
     # Запускаем certbot, сохраняем вывод для диагностики
     local _certbot_log="/tmp/certbot-${_domain}.log"
-    certbot certonly --standalone --non-interactive --agree-tos \
-        --register-unsafely-without-email \
-        --preferred-challenges http-01 --http-01-port 80 \
-        ${_force:+--force-renewal} \
-        -d "$_domain" > "$_certbot_log" 2>&1
+    local -a _certbot_args=(
+        certonly --standalone --non-interactive --agree-tos
+        --preferred-challenges http-01 --http-01-port 80
+        -d "$_domain"
+    )
+    if [ -n "${ACME_EMAIL:-}" ]; then
+        _certbot_args+=(--email "${ACME_EMAIL}")
+    else
+        _certbot_args+=(--register-unsafely-without-email)
+    fi
+    [ -n "$_force" ] && _certbot_args+=(--force-renewal)
+    certbot "${_certbot_args[@]}" > "$_certbot_log" 2>&1
     local _rc=$?
     $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
     command -v ufw >/dev/null 2>&1 && ufw delete allow 80/tcp >/dev/null 2>&1 || true
@@ -424,6 +431,7 @@ SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
 PROXY_NAME=${PROXY_NAME}
+ACME_EMAIL=${ACME_EMAIL:-}
 EOF
 }
 
@@ -458,13 +466,14 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME ACME_EMAIL
     PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
     PROXY_NAME=""
+    ACME_EMAIL=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -583,7 +592,16 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            4) # Fake TLS домен
+            4) # Email для ACME/Let's Encrypt
+                _mt_read_input ACME_EMAIL "Email для SSL-сертификата ${DARKGRAY}[Enter — пропустить]${NC}:" "${ACME_EMAIL:-}"
+                if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            5) # Fake TLS домен
                 echo
                 _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then
@@ -593,7 +611,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            5) # Секрет — inline отображение при авто-генерации
+            6) # Секрет — inline отображение при авто-генерации
                 echo
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
@@ -607,7 +625,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            6) # Telegram TAG
+            7) # Telegram TAG
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
                     break
@@ -1054,6 +1072,7 @@ _mt_do_change_config() {
     local NEW_PROXY_PORT="$PROXY_PORT"
     local NEW_FAKE_DOMAIN="$FAKE_DOMAIN"
     local NEW_PROXY_TAG="${PROXY_TAG:-}"
+    local NEW_ACME_EMAIL="${ACME_EMAIL:-}"
 
     _mt_erase_lines() {
         local n=$1
@@ -1105,11 +1124,15 @@ _mt_do_change_config() {
                 _mt_read_input NEW_FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${NEW_FAKE_DOMAIN}]${NC}:" "$NEW_FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            4) # Секрет
+            4) # Email для ACME
+                _mt_read_input NEW_ACME_EMAIL "Email для SSL-сертификата ${DARKGRAY}[Enter — пропустить]${NC}:" "${NEW_ACME_EMAIL:-}"
+                if [ $? -eq 0 ]; then (( _step++ ))
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+            5) # Секрет
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            5) # Показать секрет + Telegram TAG
+            6) # Показать секрет + Telegram TAG
                 local _disp_secret
                 if [ -n "$_secret_input" ]; then
                     _disp_secret="$_secret_input"
@@ -1133,6 +1156,7 @@ _mt_do_change_config() {
     PROXY_PORT="$NEW_PROXY_PORT"
     FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
     PROXY_TAG="$NEW_PROXY_TAG"
+    ACME_EMAIL="$NEW_ACME_EMAIL"
     echo
     echo
 
