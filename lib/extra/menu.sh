@@ -1695,122 +1695,117 @@ _mt_do_access() {
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Заголовок списка (cразу после рамки — MENU_NO_BLANK)
+        # Заголовок списка
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Список разрешённых IP адресов"
         else
-            _hdr_ac="Список заблокированных IP адресов"
+            _hdr_ac="История IP адресов (Выберите для блокирования)"
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
+        [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
         _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
-        if [ ${#_all_ips[@]} -eq 0 ]; then
-            local _empty_msg
-            if [ "$_access_mode" = "allow" ]; then
-                _empty_msg="Нет разрешённых IP адресов"
+        if [ "$_access_mode" = "allow" ]; then
+            # Режим разрешения: только вручную добавленные IP
+            if [ ${#_list[@]} -eq 0 ]; then
+                local _empty_msg="Нет разрешённых IP адресов"
+                local _em_pad=$(( (${#_sep_ac} - $(printf '%s' "$_empty_msg" | wc -m)) / 2 ))
+                [ "$_em_pad" -lt 0 ] && _em_pad=0
+                _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
             else
-                _empty_msg="Нет заблокированных IP адресов"
+                for _le in "${_list[@]}"; do
+                    local _geo_str=""
+                    [[ "$_le" != */* ]] && _geo_str=$(_mt_db_geo_get "$_le")
+                    [ "$_geo_str" = "—" ] && _geo_str=""
+                    local _line; _line=$(printf '%-22s  %s' "$_le" "$_geo_str")
+                    _ip_items+=("${GREEN}${_line}${NC}")
+                    _ip_vals+=("$_le")
+                done
             fi
-            local _em_pad=$(( (${#_sep_ac} - $(printf '%s' "$_empty_msg" | wc -m)) / 2 ))
-            [ "$_em_pad" -lt 0 ] && _em_pad=0
-            _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
         else
-            local _has_solo=0
-            for _ip in "${_all_ips[@]}"; do
-                [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
-                local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
-                local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
-                local _in_l=false; _ip_in_list "$_ip" && _in_l=true
-                if [ "$_access_mode" = "allow" ]; then
-                    if [ "$_in_l" = true ]; then
-                        _ip_items+=("${GREEN}${_line}${NC}")
-                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
-                        _ip_items+=("${RED}${_line}${NC}")
-                    else
-                        _ip_items+=("$_line")
-                    fi
-                else
-                    if [ "$_in_l" = true ]; then
-                        _ip_items+=("${RED}${_line}${NC}")
-                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
-                        _ip_items+=("${GREEN}${_line}${NC}")
-                    else
-                        _ip_items+=("$_line")
-                    fi
-                fi
-                _ip_vals+=("$_ip"); _has_solo=1
-            done
-            [ "$_has_solo" -eq 0 ] && { _ip_items+=("${DARKGRAY}(все IP сгруппированы по подсетям)${NC}"); _ip_vals+=("sep"); }
-        fi
-
-        if [ ${#_subnet_groups[@]} -gt 0 ]; then
-            local _hdr_sn2="Подозрительные подсети:"
-            local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_sn2_pad '' "$_hdr_sn2")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            for _sn in "${_subnet_groups[@]}"; do
-                local _total="${_sn_cnt[$_sn]}"
-                local _on_cnt=0 _bl_cnt=0
+            # Режим блокировки: история всех виденных IP
+            # Красный = заблокирован, Зелёный = онлайн не заблокирован, Белый = не онлайн не заблокирован
+            if [ ${#_all_ips[@]} -eq 0 ]; then
+                local _empty_msg="История IP пуста"
+                local _em_pad=$(( (${#_sep_ac} - $(printf '%s' "$_empty_msg" | wc -m)) / 2 ))
+                [ "$_em_pad" -lt 0 ] && _em_pad=0
+                _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
+            else
+                local _has_solo=0
                 for _ip in "${_all_ips[@]}"; do
-                    local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
-                    [ "$_s24" != "$_sn" ] && continue
-                    printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" && (( _on_cnt++ )) || true
-                    _ip_in_list "$_ip" && (( _bl_cnt++ )) || true
-                done
-                local _sn_geo="—"
-                for _gip in "${_all_ips[@]}"; do
-                    local _g24; _g24=$(echo "$_gip" | awk -F. '{print $1"."$2"."$3".0/24"}')
-                    [ "$_g24" != "$_sn" ] && continue
-                    local _gg; _gg=$(_mt_db_geo_get "$_gip")
-                    if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
-                done
-                local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
-                local _sn_in_l=false; _ip_in_list "$_sn" && _sn_in_l=true
-                if [ "$_access_mode" = "allow" ]; then
-                    if [ "$_sn_in_l" = true ]; then
-                        _ip_items+=("${GREEN}${_sn_line}${NC}")
-                    elif [ "$_on_cnt" -gt 0 ]; then
-                        _ip_items+=("${RED}${_sn_line}${NC}")
+                    [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
+                    local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
+                    [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
+                    local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
+                    local _in_l=false; _ip_in_list "$_ip" && _in_l=true
+                    if [ "$_in_l" = true ]; then
+                        _ip_items+=("${RED}${_line}${NC}")
+                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
+                        _ip_items+=("${GREEN}${_line}${NC}")
                     else
-                        _ip_items+=("$_sn_line")
+                        _ip_items+=("$_line")
                     fi
-                else
-                    if [ "$_sn_in_l" = true ]; then
-                        _ip_items+=("${RED}${_sn_line}${NC}")
-                    elif [ "$_on_cnt" -gt 0 ]; then
-                        _ip_items+=("${GREEN}${_sn_line}${NC}")
-                    else
-                        _ip_items+=("$_sn_line")
-                    fi
-                fi
-                _ip_vals+=("sn:${_sn}")
-            done
-        fi
+                    _ip_vals+=("$_ip"); _has_solo=1
+                done
+                [ "$_has_solo" -eq 0 ] && { _ip_items+=("${DARKGRAY}(все IP сгруппированы по подсетям)${NC}"); _ip_vals+=("sep"); }
 
-        local -a _extra_cidrs=()
-        for _bn in "${_blocked_cidrs[@]}"; do
-            local _is_group=0
-            for _grp in "${_subnet_groups[@]}"; do
-                [ "$_grp" = "$_bn" ] && _is_group=1 && break
-            done
-            [ "$_is_group" -eq 0 ] && _extra_cidrs+=("$_bn")
-        done
-        if [ ${#_extra_cidrs[@]} -gt 0 ]; then
-            local _hdr_bl="Записи в списке:"
-            local _hdr_bl_pad=$(( (${#_sep_ac} - ${#_hdr_bl}) / 2 ))
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_bl_pad '' "$_hdr_bl")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            for _bn in "${_extra_cidrs[@]}"; do
-                [ "$_access_mode" = "allow" ] \
-                    && _ip_items+=("${GREEN}${_bn}${NC}") \
-                    || _ip_items+=("${RED}${_bn}${NC}")
-                _ip_vals+=("$_bn")
-            done
+                if [ ${#_subnet_groups[@]} -gt 0 ]; then
+                    local _hdr_sn2="Подозрительные подсети:"
+                    local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
+                    _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+                    _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_sn2_pad '' "$_hdr_sn2")"); _ip_vals+=("sep")
+                    _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+                    for _sn in "${_subnet_groups[@]}"; do
+                        local _total="${_sn_cnt[$_sn]}"
+                        local _on_cnt=0 _bl_cnt=0
+                        for _ip in "${_all_ips[@]}"; do
+                            local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                            [ "$_s24" != "$_sn" ] && continue
+                            printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" && (( _on_cnt++ )) || true
+                            _ip_in_list "$_ip" && (( _bl_cnt++ )) || true
+                        done
+                        local _sn_geo="—"
+                        for _gip in "${_all_ips[@]}"; do
+                            local _g24; _g24=$(echo "$_gip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+                            [ "$_g24" != "$_sn" ] && continue
+                            local _gg; _gg=$(_mt_db_geo_get "$_gip")
+                            if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
+                        done
+                        local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
+                        local _sn_in_l=false; _ip_in_list "$_sn" && _sn_in_l=true
+                        if [ "$_sn_in_l" = true ]; then
+                            _ip_items+=("${RED}${_sn_line}${NC}")
+                        elif [ "$_on_cnt" -gt 0 ]; then
+                            _ip_items+=("${GREEN}${_sn_line}${NC}")
+                        else
+                            _ip_items+=("$_sn_line")
+                        fi
+                        _ip_vals+=("sn:${_sn}")
+                    done
+                fi
+
+                local -a _extra_cidrs=()
+                for _bn in "${_blocked_cidrs[@]}"; do
+                    local _is_group=0
+                    for _grp in "${_subnet_groups[@]}"; do
+                        [ "$_grp" = "$_bn" ] && _is_group=1 && break
+                    done
+                    [ "$_is_group" -eq 0 ] && _extra_cidrs+=("$_bn")
+                done
+                if [ ${#_extra_cidrs[@]} -gt 0 ]; then
+                    local _hdr_bl="Записи в списке:"
+                    local _hdr_bl_pad=$(( (${#_sep_ac} - ${#_hdr_bl}) / 2 ))
+                    _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+                    _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_bl_pad '' "$_hdr_bl")"); _ip_vals+=("sep")
+                    _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+                    for _bn in "${_extra_cidrs[@]}"; do
+                        _ip_items+=("${RED}${_bn}${NC}")
+                        _ip_vals+=("$_bn")
+                    done
+                fi
+            fi
         fi
 
         local _toggle_label
@@ -1858,14 +1853,11 @@ _mt_do_access() {
                 _mt_db_mode_set "block"
                 _mt_block_clear_all 2>/dev/null
                 _mt_block_apply
-                echo -e "${GREEN}✅ Режим: Блокирование${NC}"
             else
                 _mt_db_mode_set "allow"
                 _mt_block_clear_all 2>/dev/null
                 _mt_ipt_allow_apply
-                echo -e "${GREEN}✅ Режим: Разрешение${NC}"
             fi
-            sleep 1
             ;;
         clear_list)
             clear
@@ -2040,27 +2032,39 @@ _mt_do_access() {
         *)
             if [[ -n "$_sel" ]]; then
                 local _in_l=false; _ip_in_list "$_sel" && _in_l=true
-                if [ "$_in_l" = true ]; then
-                    _mt_db_blocked_rm "$_sel"
-                    if [ "$_access_mode" = "allow" ]; then
-                        _mt_ipt_allow_apply
-                        echo -e "${GREEN}✅ Убрано из разрешённых: ${_sel}${NC}"
-                    else
-                        _mt_ipt_block_del "$_sel"
-                        echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
-                    fi
+                # Диалог подтверждения
+                local _conf_title _conf_btn
+                if [ "$_access_mode" = "allow" ]; then
+                    _conf_title="Удалить из разрешённых?"
+                    _conf_btn="${RED}🚫 Удалить: ${_sel}${NC}"
+                elif [ "$_in_l" = true ]; then
+                    _conf_title="Разблокировать IP?"
+                    _conf_btn="${GREEN}✅ Разблокировать: ${_sel}${NC}"
                 else
-                    _mt_db_blocked_add "$_sel"
-                    if [ "$_access_mode" = "allow" ]; then
-                        _mt_ipt_allow_apply
-                        echo -e "${GREEN}✅ Добавлено в разрешённые: ${_sel}${NC}"
+                    _conf_title="Заблокировать IP?"
+                    _conf_btn="${RED}🚫 Заблокировать: ${_sel}${NC}"
+                fi
+                local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️   Отменить")
+                show_arrow_menu "$_conf_title" "${_conf_items[@]}"
+                local _cc=$?
+                if [ "$_cc" -eq 0 ]; then
+                    if [ "$_in_l" = true ]; then
+                        _mt_db_blocked_rm "$_sel"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                        else
+                            _mt_ipt_block_del "$_sel"
+                        fi
                     else
-                        _mt_ipt_block_add "$_sel"
-                        _mt_kill_src "$_sel"
-                        echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
+                        _mt_db_blocked_add "$_sel"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                        else
+                            _mt_ipt_block_add "$_sel"
+                            _mt_kill_src "$_sel"
+                        fi
                     fi
                 fi
-                sleep 1.5
             fi
             ;;
         esac
