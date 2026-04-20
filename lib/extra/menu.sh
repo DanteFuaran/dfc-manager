@@ -236,24 +236,24 @@ _mt_issue_cert() {
     # Проверяем основной путь и варианты с суффиксом (т.к. certbot может создать domain-0001, domain-0002 и т.д.)
     local _cert_dir="/etc/letsencrypt/live/${_domain}"
     local _found_cert_dir=""
+    local _latest_num=0
     
-    # Сначала ищем основную директорию
-    if [ -f "${_cert_dir}/fullchain.pem" ]; then
+    # Ищем варианты с суффиксом (domain-0001, domain-0002 и т.д.)
+    # Берём самый свежий (самый высокий номер)
+    while IFS= read -r -d '' _dir; do
+        local _num="${_dir##*-}"
+        [[ "$_num" =~ ^[0-9]+$ ]] && (( _num > _latest_num )) && _latest_num="$_num"
+    done < <(find /etc/letsencrypt/live -maxdepth 1 -type d -name "${_domain}-[0-9]*" -print0 2>/dev/null)
+    
+    # Если нашли версию с суффиксом — используем её и обновляем symlink
+    if [ $_latest_num -gt 0 ]; then
+        _found_cert_dir="/etc/letsencrypt/live/${_domain}-$(printf '%04d' $_latest_num)"
+        # Обновляем symlink на основной путь, если нужно (даже если уже существует)
+        rm -f "$_cert_dir" 2>/dev/null || true
+        ln -s "${_domain}-$(printf '%04d' $_latest_num)" "$_cert_dir" 2>/dev/null || true
+    elif [ -f "${_cert_dir}/fullchain.pem" ]; then
+        # Основной путь существует и прямой (не symlink)
         _found_cert_dir="$_cert_dir"
-    else
-        # Затем ищем варианты с суффиксом (domain-0001, domain-0002 и т.д.)
-        # Берём самый свежий (самый высокий номер)
-        local _latest_num=0
-        while IFS= read -r -d '' _dir; do
-            local _num="${_dir##*-}"
-            [[ "$_num" =~ ^[0-9]+$ ]] && (( _num > _latest_num )) && _latest_num="$_num"
-        done < <(find /etc/letsencrypt/live -maxdepth 1 -type d -name "${_domain}-[0-9]*" -print0 2>/dev/null)
-        
-        if [ $_latest_num -gt 0 ]; then
-            _found_cert_dir="/etc/letsencrypt/live/${_domain}-$(printf '%04d' $_latest_num)"
-            # Создаём symlink на основной путь для удобства
-            [ ! -e "$_cert_dir" ] && ln -sf "${_domain}-$(printf '%04d' $_latest_num)" "$_cert_dir" 2>/dev/null || true
-        fi
     fi
     
     # Если сертификат найден и не форсируем перевыпуск — сразу успех
