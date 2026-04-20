@@ -696,6 +696,11 @@ _mt_do_install() {
 
     # Выпуск сертификата и настройка /connect страницы
     if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        # Если nginx не запущен — устанавливаем его (MTProto на чистом сервере)
+        if ! _mt_nginx_available; then
+            (ensure_nginx && nginx_generate_minimal_conf && nginx_reload) &
+            show_spinner "Установка Nginx" "Nginx установлен"
+        fi
         _mt_issue_cert "$SERVER_IP" &
         if show_spinner "Выпуск SSL-сертификата" "SSL-сертификат получен"; then
             _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "$PROXY_NAME" &
