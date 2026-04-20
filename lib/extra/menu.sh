@@ -947,6 +947,14 @@ _mt_do_stats() {
                     printf "   ${YELLOW}%-20s${DARKGRAY}%s IP из подсети${NC}\n" "$_sn" "${_st_subnet_count[$_sn]}"
                 done
             fi
+        else
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            echo
+            local _nc_msg="Нет активных подключений"
+            local _nc_pad; _nc_pad=$(( (38 - $(printf '%s' "$_nc_msg" | wc -m)) / 2 ))
+            [ "$_nc_pad" -lt 0 ] && _nc_pad=0
+            printf "${DARKGRAY}%${_nc_pad}s%s${NC}\n" "" "$_nc_msg"
         fi
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1673,19 +1681,21 @@ _mt_do_access() {
         }
 
         local _list_count=${#_list[@]}
-        local _mode_word _list_word
+        local _list_word
         if [ "$_access_mode" = "allow" ]; then
-            _mode_word="${GREEN}Разрешение${NC}"; _list_word="Разрешено"
+            _list_word="Разрешено"
         else
-            _mode_word="${RED}Блокирование${NC}"; _list_word="Заблокировано"
+            _list_word="Заблокировано"
         fi
-        local _stat_line="• Режим: ${_mode_word}  • Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
+        local _stat_plain="• Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
+        local _stat_pad; _stat_pad=$(( (38 - $(printf '%s' "$_stat_plain" | wc -m)) / 2 ))
+        [ "$_stat_pad" -lt 0 ] && _stat_pad=0
 
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Строка статистики (вне рамки заголовка)
-        _ip_items+=($'\x01'$'\e[0m'"${_stat_line}"); _ip_vals+=("sep")
+        # Строка статистики (выровненная, без пустой строки до нее — MENU_NO_BLANK)
+        _ip_items+=($'\x01'"$(printf '%*s%s' "$_stat_pad" '' "$_stat_plain")"); _ip_vals+=("sep")
 
         # Заголовок списка
         local _hdr_ac
@@ -1694,14 +1704,14 @@ _mt_do_access() {
         else
             _hdr_ac="Список заблокированных IP адресов"
         fi
-        local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
+        local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
         if [ ${#_all_ips[@]} -eq 0 ]; then
             local _empty_msg
-            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых пользователей" || _empty_msg="Нет заблокированных пользователей"
+            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых IP" || _empty_msg="Нет запрещённых IP"
             _ip_items+=($'\x01'"${_empty_msg}"); _ip_vals+=("sep")
         else
             local _has_solo=0
@@ -1795,9 +1805,9 @@ _mt_do_access() {
         fi
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("$_toggle_label");                              _ip_vals+=("toggle_mode")
         _ip_items+=("✏️   Добавить IP или группу в список");       _ip_vals+=("manual")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("$_toggle_label");                              _ip_vals+=("toggle_mode")
         _ip_items+=("🗑️   Очистить список");                       _ip_vals+=("clear_list")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                                  _ip_vals+=("back")
@@ -1811,10 +1821,11 @@ _mt_do_access() {
         done
         if [ "$_first_ip_idx" -eq -1 ]; then
             for _fi in "${!_ip_vals[@]}"; do
-                [ "${_ip_vals[$_fi]}" = "toggle_mode" ] && { _first_ip_idx=$_fi; break; }
+                [ "${_ip_vals[$_fi]}" = "manual" ] && { _first_ip_idx=$_fi; break; }
             done
         fi
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
+        export MENU_NO_BLANK=1
         export MENU_INITIAL_IDX=$_first_ip_idx
 
         local _title="🚫 Управление доступом"

@@ -212,7 +212,8 @@ show_arrow_menu() {
             echo -e "${GREEN}$title${NC}"
         fi
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
+        [[ -z "${MENU_NO_BLANK:-}" ]] && echo
+        unset MENU_NO_BLANK
 
         for i in "${!options[@]}"; do
             # Проверяем, является ли элемент разделителем
