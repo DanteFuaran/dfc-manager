@@ -397,7 +397,7 @@ HTMLEOF
 # Записывает docker-compose.yml
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    cat > "${_MT_DIR}/docker-compose.yml" << COMPOSE
+    cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
 services:
   mtproto-proxy:
     image: telegrammessenger/proxy:latest
