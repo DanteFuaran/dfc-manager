@@ -545,11 +545,22 @@ _mt_do_install() {
                     if ! ([[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 ))); then
                         echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
                     else
-                        # Проверяем свободен ли порт (для не-443 Docker пробрасывает напрямую)
+                        # Проверяем свободен ли порт
                         local _busy_user=""
-                        [ "$PROXY_PORT" != "443" ] && _busy_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
-                        if [ -n "$_busy_user" ] && [ "$_busy_user" != "docker-proxy" ]; then
-                            echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом: ${WHITE}${_busy_user}${NC}"
+                        _busy_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
+                        # Игнорируем: nginx (stream будет перенастроен) и docker-proxy нашего mtproto
+                        if [ -n "$_busy_user" ]; then
+                            local _skip=false
+                            if [ "$_busy_user" = "nginx" ] && [ "$PROXY_PORT" = "443" ]; then
+                                _skip=true  # nginx на 443 — stream перенастроит
+                            elif [ "$_busy_user" = "docker-proxy" ]; then
+                                # Только если это наш mtproto-proxy (переустановка)
+                                local _mt_port=""
+                                _mt_port=$(docker port "$_MT_CONTAINER" 3128/tcp 2>/dev/null | grep -oP ':\K\d+' | head -1)
+                                [ "$_mt_port" = "$PROXY_PORT" ] && _skip=true
+                            fi
+                            if ! $_skip; then
+                                echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом: ${WHITE}${_busy_user}${NC}"
                             echo
                             echo -e "${BLUE}══════════════════════════════════════${NC}"
                             echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
@@ -567,6 +578,9 @@ _mt_do_install() {
                             done
                             # Стираем блок ошибки (4 строки) + строку ввода порта (1) → повтор на том же месте
                             _mt_erase_lines 5
+                            else
+                                (( _step++ ))
+                            fi
                         else
                             (( _step++ ))
                         fi
