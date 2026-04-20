@@ -225,8 +225,7 @@ HOOK
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
-        local _listen443=""
-        grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null || _listen443="    listen 443 ssl;"
+        local _listen443="    listen 443 ssl;"
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
 
@@ -554,8 +553,9 @@ _mt_do_install() {
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+        echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
            [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
             echo
@@ -614,8 +614,9 @@ _mt_do_config() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
+    echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
        [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
         echo
