@@ -22,7 +22,7 @@ if command -v git >/dev/null 2>&1 && [ -d "${DIR_SCRIPT}.git" ]; then
 fi
 _vf="${DIR_SCRIPT}version"
 if [ -f "$_vf" ]; then
-    _sv=$(grep '^version:' "$_vf" 2>/dev/null | cut -d: -f2 | tr -d ' ')
+    _sv=$(grep '^version:' "$_vf" 2>/dev/null | head -1 | cut -d: -f2 | tr -d ' ')
     _br=$(grep '^branch:'  "$_vf" 2>/dev/null | cut -d: -f2 | tr -d ' ')
     _rp=$(grep '^repo:'    "$_vf" 2>/dev/null | cut -d: -f2- | tr -d ' ')
     [ -n "$_sv" ] && SCRIPT_VERSION="$_sv"
