@@ -175,7 +175,7 @@ _mt_find_free_port() {
     echo "10443"
 }
 
-# Сохраняет конфиг в .env и config.toml
+# Сохраняет конфиг в .env
 _mt_save_config() {
     mkdir -p "$_MT_DIR"
     cat > "$_MT_ENV" << EOF
@@ -186,45 +186,6 @@ FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
 PROXY_NAME=${PROXY_NAME:-}
 EOF
-    # config.toml для mtg:2
-    local _pp="false"
-    # PROXY protocol только при работе через nginx stream (порт 443)
-    _mt_nginx_available && [ "${PROXY_PORT:-}" = "443" ] && _pp="true"
-    cat > "${_MT_DIR}/config.toml" << TOML
-# Конфигурация MTProto прокси (mtg v2) — управляется dfc-manager
-
-secret = "${PROXY_SECRET}"
-bind-to = "0.0.0.0:3128"
-
-# PROXY protocol от nginx для получения реальных IP клиентов
-proxy-protocol-listener = ${_pp}
-
-# Предпочтение IPv4/IPv6 для связи с Telegram
-prefer-ip = "prefer-ipv4"
-
-# Защита от replay-атак
-[defense.anti-replay]
-enabled = true
-max-size = "1mib"
-error-rate = 0.001
-
-# Таймауты сети
-[network.timeout]
-tcp = "5s"
-http = "10s"
-idle = "5m"
-
-# TCP Keep-Alive (быстрое обнаружение отключённых клиентов)
-[network.keep-alive]
-disabled = false
-idle = "30s"
-interval = "10s"
-count = 3
-TOML
-    if [ -n "${PROXY_TAG:-}" ]; then
-        printf '\nadvertise-tag = "%s"\n' "${PROXY_TAG}" >> "${_MT_DIR}/config.toml"
-    fi
-    _mt_write_proxy_page "${SERVER_IP:-}" "${PROXY_SECRET:-}" "${PROXY_PORT:-}" "${PROXY_NAME:-}"
 }
 
 # Выпускает SSL-сертификат для домена через certbot standalone (порт 80)
@@ -436,22 +397,21 @@ HTMLEOF
 # Записывает docker-compose.yml
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    local _port_map="127.0.0.1:3128:3128"
-    # Если порт ≠ 443 и нет nginx stream — mtg слушает напрямую на PROXY_PORT
-    if [ "${PROXY_PORT:-443}" != "443" ]; then
-        _port_map="0.0.0.0:${PROXY_PORT}:3128"
-    fi
     cat > "${_MT_DIR}/docker-compose.yml" << COMPOSE
 services:
   mtproto-proxy:
-    image: nineseconds/mtg:2
+    image: telegrammessenger/proxy:latest
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "${_port_map}"
-    volumes:
-      - ./config.toml:/config.toml:ro
-    command: run /config.toml
+      - "${PROXY_PORT}:443"
+    environment:
+      - SECRET=${PROXY_SECRET}
+      - TAG=${PROXY_TAG}
+    sysctls:
+      - net.ipv4.tcp_keepalive_time=30
+      - net.ipv4.tcp_keepalive_intvl=10
+      - net.ipv4.tcp_keepalive_probes=3
     logging:
       driver: "json-file"
       options:
@@ -620,18 +580,9 @@ _mt_do_install() {
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
-                    (( _step++ ))
-                else
-                    _mt_erase_lines 2
-                    (( _step-- ))
-                fi
-                ;;
-            6) # Название сервиса для страницы подключения
-                _mt_read_input PROXY_NAME "Название сервиса ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_NAME:-}"
-                if [ $? -eq 0 ]; then
                     break
                 else
-                    _mt_erase_lines 1
+                    _mt_erase_lines 2
                     (( _step-- ))
                 fi
                 ;;
@@ -667,46 +618,6 @@ _mt_do_install() {
     show_spinner "Запуск MTProto" "Запуск MTProto"
     tput civis 2>/dev/null || true
     _mt_block_apply
-    if _mt_nginx_available && [ "${PROXY_PORT:-}" = "443" ]; then
-        # Если порт 443 занят не nginx-ом (например rw-core/Xray) — освобождаем
-        local _port443_owner
-        _port443_owner=$(ss -tlnp 'sport = :443' 2>/dev/null | awk -F'"' '/users:/{print $2}' | head -1)
-        local _node_stopped=false
-        if [ -n "$_port443_owner" ] && [ "$_port443_owner" != "nginx" ]; then
-            if [ -f "/opt/remnanode/docker-compose.yml" ]; then
-                (cd /opt/remnanode && docker compose stop >/dev/null 2>&1) || true
-                _node_stopped=true
-            fi
-        fi
-
-        _mt_nginx_stream_write
-
-        # Перезапускаем nginx чтобы подхватить stream-блок
-        local _nc; _nc=$(_mt_nginx_container)
-        if [ -n "$_nc" ]; then
-            docker restart "$_nc" >/dev/null 2>&1 || true
-            sleep 2
-        fi
-
-        # Возвращаем ноду (Xray не получит 443 — его занял nginx stream, но 8443 будет работать)
-        if $_node_stopped; then
-            (cd /opt/remnanode && docker compose start >/dev/null 2>&1) || true
-        fi
-    fi
-
-    # Выпуск сертификата и настройка /connect страницы
-    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        # Если nginx не запущен — устанавливаем его (MTProto на чистом сервере)
-        if ! _mt_nginx_available; then
-            (ensure_nginx && nginx_generate_minimal_conf && nginx_reload) &
-            show_spinner "Установка Nginx" "Nginx установлен"
-        fi
-        _mt_issue_cert "$SERVER_IP" &
-        if show_spinner "Выпуск SSL-сертификата" "SSL-сертификат получен"; then
-            _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "$PROXY_NAME" &
-            show_spinner "Настройка страницы подключения" "Страница подключения готова"
-        fi
-    fi
 
     # UFW
     if command -v ufw >/dev/null 2>&1; then
@@ -732,19 +643,12 @@ _mt_do_install() {
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
-        [ -n "$PROXY_NAME" ] && echo -e " ${DARKGRAY}$(_mpad "Название:" $_cw)${NC} ${WHITE}${PROXY_NAME}${NC}"
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
+        echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
-        # Ссылка страницы подключения (браузер → Telegram)
-        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo -e "${WHITE}🌐 Страница подключения (для пользователей):${NC}"
-            echo -e "   ${CYAN:-\033[0;36m}https://${SERVER_IP}/connect${NC}"
-            echo
-        fi
         local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
         echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
         echo -e "   ${YELLOW}${_raw_s}${NC}"
@@ -800,14 +704,9 @@ _mt_do_config() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
+    echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo
-    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo -e "${WHITE}🌐 Страница подключения (для пользователей):${NC}"
-        echo -e "   ${CYAN:-\033[0;36m}https://${SERVER_IP}/connect${NC}"
-        echo
-    fi
     local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
     echo -e "   ${YELLOW}${_raw_s}${NC}"
@@ -1165,17 +1064,6 @@ _mt_do_change_config() {
     show_spinner "Перезапуск MTProto..." "MTProto перезапущен!"
     _mt_block_apply
 
-    # Управление nginx stream: добавляем если 443, удаляем если нет
-    if _mt_nginx_available; then
-        if [ "${PROXY_PORT}" = "443" ]; then
-            _mt_nginx_stream_write
-        else
-            _mt_nginx_stream_remove
-        fi
-        local _nc; _nc=$(_mt_nginx_container)
-        [ -n "$_nc" ] && docker restart "$_nc" >/dev/null 2>&1 || true
-    fi
-
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
         if [ -n "$_old_port" ] && [ "$_old_port" != "$PROXY_PORT" ]; then
@@ -1276,7 +1164,7 @@ _mt_do_uninstall() {
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
     _mt_block_clear_all 2>/dev/null || true
-    if _mt_nginx_available; then _mt_nginx_stream_remove; fi
+    if _mt_nginx_available; then : ; fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
     show_spinner "Удаление остаточных файлов" "Удаление остаточных файлов"
