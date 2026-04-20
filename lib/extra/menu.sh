@@ -311,18 +311,7 @@ _mt_nginx_add_domain() {
     mkdir -p "$_ssl_dest"
     cp -f "${_cert_src}/fullchain.pem" "${_ssl_dest}/fullchain.pem"
     cp -f "${_cert_src}/privkey.pem" "${_ssl_dest}/privkey.pem"
-    # Renewal hook — копирует обновлённые серты и перезагружает nginx
-    local _hook_file="/etc/letsencrypt/renewal-hooks/deploy/mtproto-${_domain}.sh"
-    mkdir -p "$(dirname "$_hook_file")"
-    cat > "$_hook_file" << HOOK
-#!/bin/bash
-mkdir -p /opt/nginx/ssl/${_domain}
-cp -f /etc/letsencrypt/live/${_domain}/fullchain.pem /opt/nginx/ssl/${_domain}/fullchain.pem
-cp -f /etc/letsencrypt/live/${_domain}/privkey.pem /opt/nginx/ssl/${_domain}/privkey.pem
-NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
-[ -n "\$NGINX" ] && docker exec "\$NGINX" nginx -s reload 2>/dev/null || true
-HOOK
-    chmod +x "$_hook_file"
+    
     _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
