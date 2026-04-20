@@ -357,6 +357,9 @@ CSRC
     rm -f "$_launcher_src"
 
     for _cmd in dfc rw; do
+        # Удаляем симлинк/файл ПЕРЕД установкой — иначе cp следует за симлинком
+        # и перезаписывает dfc-manager.sh вместо создания нового файла
+        rm -f "/usr/local/bin/${_cmd}"
         if [ "$_compiled" -eq 1 ]; then
             cp "$_launcher_bin" "/usr/local/bin/${_cmd}"
             chmod +x "/usr/local/bin/${_cmd}"
