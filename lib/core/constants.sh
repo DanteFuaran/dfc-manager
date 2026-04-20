@@ -8,7 +8,7 @@ DIR_NODE="/opt/remnanode/"
 DIR_SUB="/opt/subscribe-page/"
 
 # Версия, ветка и репозиторий — источник: /usr/local/dfc-manager/version (всегда присутствует)
-SCRIPT_VERSION="0.0.201"
+SCRIPT_VERSION="0.0.202"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
 _DFC_KEY=""

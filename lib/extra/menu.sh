@@ -202,21 +202,13 @@ _mt_nginx_add_domain() {
     [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
     [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
     local _nginx_conf="/opt/nginx/nginx.conf"
-    local _ssl_dir="/opt/nginx/ssl/${_domain}"
     local _cert_src="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_src}/fullchain.pem" ] || return 1
-    mkdir -p "$_ssl_dir"
-    cp "${_cert_src}/fullchain.pem" "${_ssl_dir}/fullchain.pem"
-    cp "${_cert_src}/privkey.pem"   "${_ssl_dir}/privkey.pem"
-    # Renewal hook
+    # Renewal hook — только перезагружает nginx (сертификаты берём из letsencrypt напрямую)
     local _hook_file="/etc/letsencrypt/renewal-hooks/deploy/mtproto-${_domain}.sh"
     mkdir -p "$(dirname "$_hook_file")"
     cat > "$_hook_file" << HOOK
 #!/bin/bash
-D="${_domain}"
-mkdir -p /opt/nginx/ssl/\$D
-cp /etc/letsencrypt/live/\$D/fullchain.pem /opt/nginx/ssl/\$D/fullchain.pem
-cp /etc/letsencrypt/live/\$D/privkey.pem   /opt/nginx/ssl/\$D/privkey.pem
 NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
 [ -n "\$NGINX" ] && docker exec "\$NGINX" nginx -s reload 2>/dev/null || true
 HOOK
@@ -225,7 +217,6 @@ HOOK
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
-        local _listen443="    listen 443 ssl;"
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
 
@@ -233,11 +224,11 @@ ${_connect_marker}
 server {
     server_name ${_domain};
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-${_listen443}
+    listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
+    ssl_certificate "/etc/letsencrypt/live/${_domain}/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/${_domain}/privkey.pem";
 
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 
@@ -264,7 +255,7 @@ PYEOF
     fi
     local _nc; _nc=$(_mt_nginx_container)
     if [ -n "$_nc" ]; then
-        docker exec "$_nc" nginx -t 2>/dev/null && docker restart "$_nc" >/dev/null 2>&1 || true
+        docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
     fi
 }
 
@@ -334,6 +325,7 @@ PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
+PROXY_NAME=${PROXY_NAME}
 EOF
 }
 
@@ -368,12 +360,13 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
     PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
+    PROXY_NAME=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -483,7 +476,16 @@ _mt_do_install() {
                     break
                 done
                 ;;
-            3) # Fake TLS домен
+            3) # Название сервиса (для страницы /connect)
+                _mt_read_input PROXY_NAME "Название сервиса ${DARKGRAY}[Enter — MTProto Proxy]${NC}:" "${PROXY_NAME:-}"
+                if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            4) # Fake TLS домен
                 _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then
                     (( _step++ ))
@@ -492,7 +494,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            4) # Секрет — inline отображение при авто-генерации
+            5) # Секрет — inline отображение при авто-генерации
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$_secret_input" ]; then
@@ -505,7 +507,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            5) # Telegram TAG
+            6) # Telegram TAG
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
@@ -580,6 +582,7 @@ _mt_do_install() {
         local _cw=12
         echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Название:" $_cw)${NC} ${WHITE}${PROXY_NAME:-MTProto Proxy}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
         if [ -n "$PROXY_TAG" ]; then
