@@ -579,7 +579,7 @@ _mt_do_install() {
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    printf "✅ Подготовка компонентов\n"
+    printf "${GREEN}\u2705${NC} Подготовка компонентов\n"
 
     # База данных
     (_mt_db_migrate) &
@@ -1638,11 +1638,11 @@ _mt_do_access() {
 
         # ── Строим меню ────────────────────────────────────────────────────
         local -a _ip_items=() _ip_vals=()
+        local _sep_ac="──────────────────────────────────────"
 
         if [ ${#_all_ips[@]} -eq 0 ]; then
             _ip_items+=("${DARKGRAY}(нет данных о подключениях)${NC}"); _ip_vals+=("sep")
         else
-            local _sep_ac="──────────────────────────────────────"
             local _hdr_ac="Список IP адресов:"
             local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
             _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
