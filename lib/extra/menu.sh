@@ -459,7 +459,7 @@ _mt_do_install() {
                     if ss -tuln 2>/dev/null | grep -q ":${PROXY_PORT} "; then
                         echo
                         echo -e "${BLUE}══════════════════════════════════════${NC}"
-                        echo -e "   ${RED}✖ Порт ${PROXY_PORT} занят${DARKGRAY} — освободите или выберите другой${NC}"
+                        echo -e "${RED}✖ Порт ${PROXY_PORT} занят${DARKGRAY} — освободите или выберите другой${NC}"
                         echo -e "${BLUE}══════════════════════════════════════${NC}"
                         echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
                         tput civis 2>/dev/null || true
@@ -468,12 +468,12 @@ _mt_do_install() {
                             IFS= read -rsn1 _pk
                             if [[ "$_pk" == $'\x1b' ]]; then
                                 tput cnorm 2>/dev/null || true
-                                _mt_erase_lines 4
+                                _mt_erase_lines 6
                                 (( _step-- ))
                                 break 2
                             elif [[ "$_pk" == "" ]]; then
                                 tput cnorm 2>/dev/null || true
-                                _mt_erase_lines 4
+                                _mt_erase_lines 6
                                 break
                             fi
                         done
