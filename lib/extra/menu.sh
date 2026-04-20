@@ -241,9 +241,20 @@ _mt_issue_cert() {
     if [ -f "${_cert_dir}/fullchain.pem" ]; then
         return 0
     fi
+    # Устанавливаем certbot если нет
+    if ! command -v certbot >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
+    fi
     # Открываем порт 80, выпускаем, закрываем
     if command -v ufw >/dev/null 2>&1; then
         ufw allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    # Останавливаем nginx если он занимает порт 80
+    local _nginx_stopped=false
+    local _nc; _nc=$(_mt_nginx_container)
+    if [ -n "$_nc" ] && ss -tlnp sport = :80 2>/dev/null | grep -q "nginx\|docker"; then
+        docker stop "$_nc" >/dev/null 2>&1 && _nginx_stopped=true
     fi
     certbot certonly --standalone --non-interactive --agree-tos \
         --register-unsafely-without-email \
@@ -251,6 +262,8 @@ _mt_issue_cert() {
         --http-01-port 80 \
         -d "$_domain" >/dev/null 2>&1
     local _rc=$?
+    # Запускаем nginx обратно если останавливали
+    $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
     if command -v ufw >/dev/null 2>&1; then
         ufw delete allow 80/tcp >/dev/null 2>&1 || true
     fi
@@ -522,7 +535,7 @@ _mt_do_install() {
                 done
                 ;;
             2) # Порт MTProto
-                local _port_default="${PROXY_PORT:-8443}"
+                local _port_default="${PROXY_PORT:-$(_mt_find_free_port 8443)}"
                 _mt_read_input PROXY_PORT "Порт MTProto ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
                     if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
@@ -616,8 +629,21 @@ _mt_do_install() {
         show_spinner "Очистка старого контейнера" "Старый контейнер удалён"
     fi
 
+    # Проверяем свободен ли порт (только для не-443, где Docker пробрасывает напрямую)
+    if [ "${PROXY_PORT:-443}" != "443" ]; then
+        local _port_user=""
+        _port_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
+        if [ -n "$_port_user" ] && [ "$_port_user" != "docker-proxy" ]; then
+            echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом ${_port_user}${NC}"
+            echo -e "${DARKGRAY}  Освободите порт или переустановите MTProto с другим портом${NC}"
+            _mt_press_enter
+            return
+        fi
+    fi
+
     # Тянем образ и запускаем
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+    local _compose_err; _compose_err=$(mktemp)
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d 2>"$_compose_err" >/dev/null) &
     show_spinner "Запуск MTProto" "Запуск MTProto"
     tput civis 2>/dev/null || true
     _mt_block_apply
@@ -663,6 +689,7 @@ _mt_do_install() {
     fi
 
     if _mt_running; then
+        rm -f "${_compose_err:-}"
         _mt_save_config
         print_success "Установка завершена!"
         echo
@@ -710,8 +737,13 @@ _mt_do_install() {
         done
     else
         echo
-        print_error "Контейнер не запустился. Логи:"
-        docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+        print_error "Контейнер не запустился."
+        if [ -s "${_compose_err:-}" ]; then
+            echo -e "${DARKGRAY}$(head -10 "$_compose_err")${NC}"
+        else
+            docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+        fi
+        rm -f "${_compose_err:-}"
         _mt_press_enter
     fi
 }
