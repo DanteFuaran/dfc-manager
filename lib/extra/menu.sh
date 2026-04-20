@@ -497,24 +497,24 @@ _mt_do_install() {
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    print_success "Подготовка файлов"
+    printf "✅ Подготовка компонентов\n"
 
     # База данных
     (_mt_db_migrate) &
-    show_spinner "Подключение базы" "База подключена"
+    show_spinner "Создание базы данных" "Создание базы данных"
 
-    # Чистим старый контейнер если есть
+    # Чистим старый контейнер если есть (тихо)
     if _mt_installed; then
         (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
          docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        show_spinner "Очистка старого контейнера" "Старый контейнер удалён"
+        wait $! 2>/dev/null || true
     fi
 
     # Тянем образ и запускаем
     local _compose_err; _compose_err=$(mktemp)
     (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && \
      docker compose up -d 2>"$_compose_err" >/dev/null) &
-    show_spinner "Запуск MTProto" "MTProto запущен!"
+    show_spinner "Подключение MT Proto" "Подключение MT Proto"
     _mt_block_apply
 
     # UFW
@@ -529,12 +529,16 @@ _mt_do_install() {
         # Сертификат и страница /connect (только для доменного SERVER_IP)
         if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             (_mt_issue_cert "$SERVER_IP") &
-            show_spinner "Получение SSL-сертификата" "Сертификат получен"
+            show_spinner "Получение сертификатов" "Получение сертификатов"
             if _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
                 (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-                show_spinner "Настройка страницы /connect" "Страница /connect настроена"
+                show_spinner "Создание страницы подключения" "Создание страницы подключения"
             fi
         fi
+
+        echo
+        printf "${GREEN}✅ Установка завершена!${NC}\n"
+        sleep 0.6
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -547,21 +551,26 @@ _mt_do_install() {
         local _cw=12
         echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
-        echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
-        [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
+        if [ -n "$PROXY_TAG" ]; then
+            echo -e " ${DARKGRAY}$(_mpad "Тег:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+        else
+            echo -e " ${DARKGRAY}$(_mpad "Тег:" $_cw)${NC} ${DARKGRAY}Не подключен${NC}"
+        fi
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
            [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
-            echo
             echo -e "${WHITE}🌐 Страница подключения:${NC}"
             echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
+            echo
         fi
+        echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
+        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo
+        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
