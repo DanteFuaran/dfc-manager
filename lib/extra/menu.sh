@@ -710,13 +710,20 @@ _mt_do_install() {
             esac
         done
     else
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${RED}       ✖ MTProto не запустился${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        print_error "Контейнер не запустился."
         if [ -s "${_compose_err:-}" ]; then
-            echo -e "${DARKGRAY}$(head -10 "$_compose_err")${NC}"
+            echo -e "${YELLOW}Ошибка docker compose:${NC}"
+            echo -e "${DARKGRAY}$(cat "$_compose_err")${NC}"
         else
-            docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
+            echo -e "${YELLOW}Логи контейнера:${NC}"
+            docker logs "$_MT_CONTAINER" 2>&1 | tail -40 || true
         fi
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         rm -f "${_compose_err:-}"
         _mt_press_enter
     fi
@@ -1130,8 +1137,35 @@ _mt_do_change_config() {
         fi
     fi
 
+    # Пересоздаём страницу /connect если домен изменился или блок ещё не создан
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [ -z "$(_mt_nginx_container)" ]; then
+            (_mt_setup_nginx) &
+            show_spinner "Установка Nginx..." "Nginx установлен"
+        fi
+        (_mt_issue_cert "$SERVER_IP") &
+        show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+        local _cert_rc=$?
+        if [ "$_cert_rc" -eq 0 ]; then
+            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+            show_spinner "Создание страницы /connect..." "Страница /connect обновлена"
+        elif [ "$_cert_rc" -eq 2 ]; then
+            local _dns_ips; _dns_ips="$(_mt_resolve_domain_ips "$SERVER_IP" | tr '\n' ' ')"
+            local _srv_ip; _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
+            echo
+            echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана:${NC}"
+            echo -e "   ${DARKGRAY}Домен указывает на:${NC} ${WHITE}${_dns_ips:-?}${NC}"
+            echo -e "   ${DARKGRAY}IP этого сервера:${NC}   ${WHITE}${_srv_ip:-?}${NC}"
+            echo -e "   ${DARKGRAY}Исправьте A-запись и используйте пункт \"🌐 Страница /connect\".${NC}"
+        fi
+    fi
+
     echo
     echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+       [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+        echo -e " ${DARKGRAY}Страница:${NC}  ${GREEN}https://${SERVER_IP}/connect${NC}"
+    fi
     echo
     _mt_press_enter
 }
