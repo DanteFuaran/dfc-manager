@@ -1675,13 +1675,23 @@ _mt_do_access() {
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        if [ ${#_all_ips[@]} -eq 0 ]; then
-            _ip_items+=("${DARKGRAY}(нет данных о подключениях)${NC}"); _ip_vals+=("sep")
+        # Заголовок списка (выводим до IP)
+        local _hdr_ac
+        if [ "$_access_mode" = "allow" ]; then
+            _hdr_ac="Список разрешённых IP адресов:"
         else
-            local _hdr_ac="Список IP адресов:"
-            local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _hdr_ac="Список заблокированных IP адресов:"
+        fi
+        local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+
+        if [ ${#_all_ips[@]} -eq 0 ]; then
+            local _empty_msg
+            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых адресов" || _empty_msg="Нет заблокированных адресов"
+            _ip_items+=("${DARKGRAY}${_empty_msg}${NC}"); _ip_vals+=("sep")
+        else
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
                 [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
@@ -1767,9 +1777,9 @@ _mt_do_access() {
 
         local _toggle_label
         if [ "$_access_mode" = "allow" ]; then
-            _toggle_label="🔄  Режим: Разрешение → Блокирование"
+            _toggle_label="🔄  Переключить режим на ${RED}Блокирование${NC}"
         else
-            _toggle_label="🔄  Режим: Блокирование → Разрешение"
+            _toggle_label="🔄  Переключить режим на ${GREEN}Разрешение${NC}"
         fi
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
@@ -1789,13 +1799,14 @@ _mt_do_access() {
         export MENU_INITIAL_IDX=$_first_ip_idx
 
         local _list_count=${#_list[@]}
-        local _mode_word _list_word
+        local _mode_word _list_word _mode_color
         if [ "$_access_mode" = "allow" ]; then
-            _mode_word="Разрешение"; _list_word="Разрешено"
+            _mode_word="${GREEN}Разрешение${NC}"; _list_word="Разрешено"
         else
-            _mode_word="Блокирование"; _list_word="Заблокировано"
+            _mode_word="${RED}Блокирование${NC}"; _list_word="Заблокировано"
         fi
-        local _title="🚫 Управление доступом\n• Онлайн: ${#_cur_ips[@]}\n• ${_list_word}: ${_list_count}\n• Режим: ${_mode_word}"
+        local _stat_line="• Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}  • Режим: ${_mode_word}"
+        local _title="🚫 Управление доступом\n${_stat_line}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
