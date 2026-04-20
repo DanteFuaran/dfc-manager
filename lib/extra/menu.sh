@@ -110,6 +110,22 @@ _mt_get_server_ip() {
     echo "YOUR_IP"
 }
 
+# Возвращает список IPv4-адресов домена
+_mt_resolve_domain_ips() {
+    local _domain="${1:-}"
+    [ -z "$_domain" ] && return 1
+    if command -v dig >/dev/null 2>&1; then
+        dig +short A "$_domain" 2>/dev/null |
+            grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' |
+            awk '!seen[$0]++'
+    else
+        getent ahostsv4 "$_domain" 2>/dev/null |
+            awk '{print $1}' |
+            grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' |
+            awk '!seen[$0]++'
+    fi
+}
+
 # Устанавливает nginx если не запущен
 _mt_setup_nginx() {
     local _nginx_dir="/opt/nginx"
@@ -218,6 +234,17 @@ _mt_issue_cert() {
     [ -z "$_domain" ] && return 1
     local _cert_dir="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_dir}/fullchain.pem" ] && return 0
+
+    # Для http-01 домен должен указывать на этот сервер, иначе certbot заведомо не пройдет.
+    local _srv_ip _dns_ip _dns_match=false
+    _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
+    if [ -n "$_srv_ip" ] && [ "$_srv_ip" != "YOUR_IP" ]; then
+        while IFS= read -r _dns_ip; do
+            [ "$_dns_ip" = "$_srv_ip" ] && _dns_match=true && break
+        done < <(_mt_resolve_domain_ips "$_domain")
+        [ "$_dns_match" = false ] && return 2
+    fi
+
     if ! command -v certbot >/dev/null 2>&1; then
         DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
         DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
@@ -623,9 +650,14 @@ _mt_do_install() {
             fi
             (_mt_issue_cert "$SERVER_IP") &
             show_spinner "Получение сертификатов" "Получение сертификатов"
-            if _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
+            local _cert_rc=$?
+            if [ "$_cert_rc" -eq 0 ]; then
                 (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
                 show_spinner "Создание страницы подключения" "Создание страницы подключения"
+            elif [ "$_cert_rc" -eq 2 ]; then
+                echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
+                echo -e "${DARKGRAY}   Пока DNS не обновится, /connect будет открываться на чужом хосте.${NC}"
+                echo
             fi
         fi
 
@@ -1292,9 +1324,20 @@ _mt_do_setup_connect() {
     # Сертификат
     (_mt_issue_cert "$SERVER_IP") &
     show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
-    if ! _mt_issue_cert "$SERVER_IP" 2>/dev/null; then
+    local _cert_rc=$?
+    if [ "$_cert_rc" -ne 0 ]; then
         echo -e "${RED}✖ Не удалось получить сертификат для ${SERVER_IP}.${NC}"
-        echo -e "${DARKGRAY}  Проверьте DNS и доступность порта 80.${NC}"
+        if [ "$_cert_rc" -eq 2 ]; then
+            local _srv_ip _dns_ips
+            _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
+            _dns_ips="$(_mt_resolve_domain_ips "$SERVER_IP" | tr '\n' ' ')"
+            echo -e "${YELLOW}⚠️  DNS mismatch:${NC}"
+            echo -e "   ${DARKGRAY}Домен указывает на:${NC} ${WHITE}${_dns_ips:-не удалось определить}${NC}"
+            echo -e "   ${DARKGRAY}IP этого сервера:${NC} ${WHITE}${_srv_ip:-не удалось определить}${NC}"
+            echo -e "${DARKGRAY}  Исправьте A-запись домена на IP этого сервера и повторите.${NC}"
+        else
+            echo -e "${DARKGRAY}  Проверьте DNS и доступность порта 80.${NC}"
+        fi
         _mt_press_enter; return
     fi
 
@@ -1838,7 +1881,27 @@ _mt_do_access() {
                     [[ "$_le" != */* ]] && _geo_str=$(_mt_db_geo_get "$_le")
                     [ "$_geo_str" = "—" ] && _geo_str=""
                     local _line; _line=$(printf '%-15s     %s' "$_le" "$_geo_str")
-                    _ip_items+=("${GREEN}${_line}${NC}")
+                    # Зелёный только если IP сейчас онлайн
+                    local _is_online=false
+                    if [[ "$_le" != */* ]]; then
+                        printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_le" && _is_online=true
+                    else
+                        # Для подсети — онлайн если хоть один cur_ip входит в неё
+                        local _net_a="${_le%/*}" _pfx_a="${_le#*/}"
+                        local _net_int_a _mask_a
+                        _net_int_a=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net_a//./ })" 2>/dev/null) || true
+                        _mask_a=$(( 0xFFFFFFFF << (32 - _pfx_a) & 0xFFFFFFFF )) 2>/dev/null || true
+                        for _cip in "${_cur_ips[@]}"; do
+                            local _cip_int
+                            _cip_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_cip//./ })" 2>/dev/null) || continue
+                            [ $(( _cip_int & _mask_a )) -eq $(( _net_int_a & _mask_a )) ] && _is_online=true && break
+                        done
+                    fi
+                    if [ "$_is_online" = true ]; then
+                        _ip_items+=("${GREEN}${_line}${NC}")
+                    else
+                        _ip_items+=("${WHITE}${_line}${NC}")
+                    fi
                     _ip_vals+=("$_le")
                 done
                 _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
