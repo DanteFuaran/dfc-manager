@@ -217,6 +217,53 @@ _nginx_restore_stream_block() {
 # Вызывается из nginx_restore_server_blocks.
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
+
+    # Fallback: если блоки не сохранены (MTProto установлен без nginx), генерируем из .env
+    local _mt_env="/opt/mtproto/.env"
+    if [ ${#_NGINX_MT_CONNECT_BLOCKS[@]} -eq 0 ] && [ -f "$_mt_env" ]; then
+        local _si="" _ss="" _sp="" _sn=""
+        _si=$(grep '^SERVER_IP=' "$_mt_env" 2>/dev/null | cut -d= -f2)
+        _ss=$(grep '^PROXY_SECRET=' "$_mt_env" 2>/dev/null | cut -d= -f2)
+        _sp=$(grep '^PROXY_PORT=' "$_mt_env" 2>/dev/null | cut -d= -f2)
+        _sn=$(grep '^PROXY_NAME=' "$_mt_env" 2>/dev/null | cut -d= -f2)
+        # Только для доменов (не IP), с существующим сертификатом
+        if [ -n "$_si" ] && [[ ! "$_si" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+           && [ -f "/opt/nginx/ssl/${_si}/fullchain.pem" -o -f "/etc/letsencrypt/live/${_si}/fullchain.pem" ]; then
+            # Копируем сертификат в nginx ssl если нет
+            if [ ! -f "/opt/nginx/ssl/${_si}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${_si}/fullchain.pem" ]; then
+                mkdir -p "/opt/nginx/ssl/${_si}"
+                cp -fL "/etc/letsencrypt/live/${_si}/fullchain.pem" "/opt/nginx/ssl/${_si}/fullchain.pem"
+                cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
+            fi
+            local _listen443=""
+            grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null || _listen443=$'\n    listen 443 ssl;'
+            local _html_path="/var/www/html/mtproto-connect.html"
+            _NGINX_MT_CONNECT_BLOCKS["$_si"]="server {
+    server_name ${_si};
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;${_listen443}
+    http2 on;
+
+    ssl_certificate \"/etc/nginx/ssl/${_si}/fullchain.pem\";
+    ssl_certificate_key \"/etc/nginx/ssl/${_si}/privkey.pem\";
+
+    add_header X-Robots-Tag \"noindex, nofollow, noarchive, nosnippet, noimageindex\" always;
+
+    location = /connect {
+        default_type text/html;
+        alias ${_html_path};
+    }
+
+    location / {
+        return 444;
+    }
+}"
+            # Также обновляем HTML-файл
+            if type _mt_write_proxy_page &>/dev/null; then
+                _mt_write_proxy_page "$_si" "$_ss" "$_sp" "$_sn" 2>/dev/null || true
+            fi
+        fi
+    fi
+
     local domain content tmp block_file
     for domain in "${!_NGINX_MT_CONNECT_BLOCKS[@]}"; do
         grep -qF "# BEGIN_MT_CONNECT_${domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
