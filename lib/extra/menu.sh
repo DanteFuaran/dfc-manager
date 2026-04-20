@@ -229,20 +229,26 @@ _mt_extract_raw_secret() {
 
 # Получает/устанавливает SSL-сертификат через certbot standalone
 _mt_issue_cert() {
-    local _domain="${1:-}"
+    local _domain="${1:-}" _force="${2:-}"
     [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
     [ -z "$_domain" ] && return 1
     local _cert_dir="/etc/letsencrypt/live/${_domain}"
-    [ -f "${_cert_dir}/fullchain.pem" ] && return 0
+    # Если сертификат уже есть и не форсируем перевыпуск — сразу успех
+    [ -f "${_cert_dir}/fullchain.pem" ] && [ -z "$_force" ] && return 0
 
-    # Для http-01 домен должен указывать на этот сервер, иначе certbot заведомо не пройдет.
-    local _srv_ip _dns_ip _dns_match=false
+    # DNS-проверка: блокируем certbot только если домен явно указывает на ЧУЖОЙ IP.
+    # Если DNS не резолвится с этого сервера — не блокируем, пусть certbot сам попробует.
+    local _srv_ip _dns_ip _dns_match=false _dns_found=false
     _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
     if [ -n "$_srv_ip" ] && [ "$_srv_ip" != "YOUR_IP" ]; then
         while IFS= read -r _dns_ip; do
+            [ -n "$_dns_ip" ] && _dns_found=true
             [ "$_dns_ip" = "$_srv_ip" ] && _dns_match=true && break
         done < <(_mt_resolve_domain_ips "$_domain")
-        [ "$_dns_match" = false ] && return 2
+        # Только если DNS ответил И указывает на другой IP — это настоящий mismatch
+        if [ "$_dns_found" = true ] && [ "$_dns_match" = false ]; then
+            return 2
+        fi
     fi
 
     if ! command -v certbot >/dev/null 2>&1; then
@@ -250,15 +256,24 @@ _mt_issue_cert() {
         DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
     fi
     command -v ufw >/dev/null 2>&1 && ufw allow 80/tcp >/dev/null 2>&1 || true
+
+    # Останавливаем nginx если занимает порт 80
     local _nginx_stopped=false
     local _nc; _nc=$(_mt_nginx_container)
-    if [ -n "$_nc" ] && ss -tlnp 2>/dev/null | grep ":80 " | grep -q "nginx\|docker"; then
-        docker stop "$_nc" >/dev/null 2>&1 && _nginx_stopped=true
+    if [ -n "$_nc" ]; then
+        if ss -tlnp 2>/dev/null | grep -qE ':80\s'; then
+            docker stop "$_nc" >/dev/null 2>&1 && _nginx_stopped=true
+            sleep 1
+        fi
     fi
+
+    # Запускаем certbot, сохраняем вывод для диагностики
+    local _certbot_log="/tmp/certbot-${_domain}.log"
     certbot certonly --standalone --non-interactive --agree-tos \
         --register-unsafely-without-email \
         --preferred-challenges http-01 --http-01-port 80 \
-        -d "$_domain" >/dev/null 2>&1
+        ${_force:+--force-renewal} \
+        -d "$_domain" > "$_certbot_log" 2>&1
     local _rc=$?
     $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
     command -v ufw >/dev/null 2>&1 && ufw delete allow 80/tcp >/dev/null 2>&1 || true
@@ -1327,13 +1342,29 @@ _mt_do_setup_connect() {
     else
         echo -e " ${DARKGRAY}Nginx блок:${NC}     ${RED}✖ Не настроен${NC}"
     fi
+
+    # DNS-диагностика
+    local _srv_ip _dns_ips
+    _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
+    _dns_ips="$(_mt_resolve_domain_ips "$SERVER_IP" | tr '\n' ' ' | sed 's/ $//')"
+    echo
+    echo -e " ${DARKGRAY}IP сервера:${NC}     ${WHITE}${_srv_ip:-?}${NC}"
+    echo -e " ${DARKGRAY}DNS домена:${NC}     ${WHITE}${_dns_ips:-не резолвится}${NC}"
+    if [ -n "$_dns_ips" ] && [ -n "$_srv_ip" ] && [[ " $_dns_ips " != *" $_srv_ip "* ]]; then
+        echo -e " ${YELLOW}⚠️  DNS указывает не на этот сервер!${NC}"
+    fi
+
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"
-    echo -e " Убедитесь, что:"
-    echo -e "   ${DARKGRAY}1. DNS A-запись ${WHITE}${SERVER_IP}${DARKGRAY} указывает на этот сервер${NC}"
-    echo -e "   ${DARKGRAY}2. Порт ${WHITE}80${DARKGRAY} открыт (для получения сертификата)${NC}"
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
-    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    echo -e "   ${DARKGRAY}1. Убедитесь что A-запись ${WHITE}${SERVER_IP}${DARKGRAY} → ${WHITE}${_srv_ip:-этот сервер}${NC}"
+    echo -e "   ${DARKGRAY}2. Порт ${WHITE}80${DARKGRAY} открыт (certbot, временно)${NC}"
+    if $_cert_ok; then
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Пересоздать   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    else
+        echo -e "${BLUE}──────────────────────────────────────${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    fi
 
     local _flush; read -s -r -t 0.1 _flush 2>/dev/null || true
     tput civis 2>/dev/null || true
@@ -1355,22 +1386,26 @@ _mt_do_setup_connect() {
         show_spinner "Установка Nginx..." "Nginx установлен"
     fi
 
-    # Сертификат
-    (_mt_issue_cert "$SERVER_IP") &
+    # Сертификат (force если уже есть, но nginx-блок не создан)
+    local _force_flag=""
+    $_cert_ok && ! $_nginx_ok && _force_flag="force"
+    (_mt_issue_cert "$SERVER_IP" "$_force_flag") &
     show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
     local _cert_rc=$?
     if [ "$_cert_rc" -ne 0 ]; then
         echo -e "${RED}✖ Не удалось получить сертификат для ${SERVER_IP}.${NC}"
         if [ "$_cert_rc" -eq 2 ]; then
-            local _srv_ip _dns_ips
-            _srv_ip="$(_mt_get_server_ip | tr -d '[:space:]')"
-            _dns_ips="$(_mt_resolve_domain_ips "$SERVER_IP" | tr '\n' ' ')"
-            echo -e "${YELLOW}⚠️  DNS mismatch:${NC}"
-            echo -e "   ${DARKGRAY}Домен указывает на:${NC} ${WHITE}${_dns_ips:-не удалось определить}${NC}"
-            echo -e "   ${DARKGRAY}IP этого сервера:${NC} ${WHITE}${_srv_ip:-не удалось определить}${NC}"
-            echo -e "${DARKGRAY}  Исправьте A-запись домена на IP этого сервера и повторите.${NC}"
+            echo -e "${YELLOW}⚠️  DNS mismatch — домен указывает не на этот сервер.${NC}"
+            echo -e "${DARKGRAY}   Исправьте A-запись и повторите.${NC}"
         else
-            echo -e "${DARKGRAY}  Проверьте DNS и доступность порта 80.${NC}"
+            # Показываем лог certbot
+            local _clog="/tmp/certbot-${SERVER_IP}.log"
+            if [ -s "$_clog" ]; then
+                echo -e "${YELLOW}Лог certbot:${NC}"
+                echo -e "${DARKGRAY}$(tail -20 "$_clog")${NC}"
+            else
+                echo -e "${DARKGRAY}  Проверьте: DNS указывает на этот сервер, порт 80 открыт.${NC}"
+            fi
         fi
         _mt_press_enter; return
     fi
