@@ -312,6 +312,22 @@ _mt_nginx_add_domain() {
     cp -f "${_cert_src}/fullchain.pem" "${_ssl_dest}/fullchain.pem"
     cp -f "${_cert_src}/privkey.pem" "${_ssl_dest}/privkey.pem"
     
+    local _nc; _nc=$(_mt_nginx_container)
+    
+    # Перед изменением конфига — починить все битые MT блоки (у которых нет сертов в /opt/nginx/ssl/)
+    if [ -n "$_nc" ]; then
+        while IFS= read -r _broken_domain; do
+            local _broken_cert="/etc/letsencrypt/live/${_broken_domain}"
+            local _broken_ssl="/opt/nginx/ssl/${_broken_domain}"
+            if [ -f "${_broken_cert}/fullchain.pem" ]; then
+                mkdir -p "$_broken_ssl"
+                cp -f "${_broken_cert}/fullchain.pem" "${_broken_ssl}/fullchain.pem"
+                cp -f "${_broken_cert}/privkey.pem" "${_broken_ssl}/privkey.pem"
+            fi
+        done < <(docker exec "$_nc" nginx -t 2>&1 | \
+            grep -oP 'cannot load certificate "/etc/nginx/ssl/\K[^/]+' | sort -u)
+    fi
+    
     _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
@@ -352,9 +368,15 @@ with open(path, 'w') as f: f.write(content)
 PYEOF
         rm -f "$_tmpf"
     fi
-    local _nc; _nc=$(_mt_nginx_container)
     if [ -n "$_nc" ]; then
-        docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
+        local _nginx_test
+        _nginx_test=$(docker exec "$_nc" nginx -t 2>&1)
+        if echo "$_nginx_test" | grep -q "test is successful"; then
+            docker exec "$_nc" nginx -s reload 2>/dev/null || true
+        else
+            echo "$_nginx_test" > "/tmp/nginx-test-${_domain}.log" 2>/dev/null || true
+            return 1
+        fi
     fi
 }
 
@@ -676,6 +698,12 @@ _mt_do_install() {
             if [ "$_cert_rc" -eq 0 ]; then
                 (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
                 show_spinner "Создание страницы подключения" "Создание страницы подключения"
+                local _nginx_rc=$?
+                if [ $_nginx_rc -ne 0 ]; then
+                    echo -e "${RED}✖ Nginx не смог перезагрузить конфиг:${NC}"
+                    cat "/tmp/nginx-test-${SERVER_IP}.log" 2>/dev/null | head -20
+                    echo
+                fi
             elif [ "$_cert_rc" -eq 2 ]; then
                 echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
                 echo -e "${DARKGRAY}   Пока DNS не обновится, /connect будет открываться на чужом хосте.${NC}"
