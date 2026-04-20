@@ -453,6 +453,10 @@ services:
       - net.ipv4.tcp_keepalive_time=30
       - net.ipv4.tcp_keepalive_intvl=10
       - net.ipv4.tcp_keepalive_probes=3
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
     logging:
       driver: "json-file"
       options:
