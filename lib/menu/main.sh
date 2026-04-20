@@ -12,7 +12,7 @@ main_menu() {
 
     while true; do
         tput civis 2>/dev/null || true
-        local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION\n${DARKGRAY}Проект развивается благодаря вашей поддержке\n    https://github.com/DanteFuaran${NC}"
+        local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION"
 
         local -a items=() actions=()
         local _rw_label="📦  Remnawave - Панель  " _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "

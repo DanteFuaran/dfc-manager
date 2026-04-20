@@ -1267,6 +1267,8 @@ _mt_db_blocked_rm()   { sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE entry='$1';
 _mt_db_blocked_has()  { [ "$(sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE entry='$1';" 2>/dev/null)" = "1" ]; }
 _mt_db_blocked_list() { sqlite3 "$_MT_DB" "SELECT entry FROM blocked;" 2>/dev/null; }
 _mt_db_blocked_count(){ sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked;" 2>/dev/null; }
+_mt_db_mode_get()  { local _m; _m=$(sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='access_mode';" 2>/dev/null); echo "${_m:-block}"; }
+_mt_db_mode_set()  { sqlite3 "$_MT_DB" "INSERT OR REPLACE INTO stats(key,value) VALUES('access_mode','$1');" 2>/dev/null || true; }
 
 # ── stats ─────────────────────────────────────────────────────────────────
 _mt_db_stat_get() { sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='$1';" 2>/dev/null; }
@@ -1517,27 +1519,56 @@ PYEOF
     docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
 }
 
+# Применяет whitelist-режим (разрешаются только те, кто в списке; остальные блокируются)
+_mt_ipt_allow_apply() {
+    _mt_block_clear_all 2>/dev/null
+    _mt_load_env
+    local _port="${PROXY_PORT:-8443}"
+    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+        while IFS= read -r _e; do
+            [ -z "$_e" ] && continue
+            _mt_ipt -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
+                || _mt_ipt -I INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+        done < <(_mt_db_blocked_list)
+        _mt_ipt -C INPUT -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ipt -A INPUT -p tcp --dport 443 -j DROP 2>/dev/null || true
+    else
+        while IFS= read -r _e; do
+            [ -z "$_e" ] && continue
+            _mt_ipt -t mangle -C PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null \
+                || _mt_ipt -t mangle -I PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null || true
+        done < <(_mt_db_blocked_list)
+        _mt_ipt -t mangle -C PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null \
+            || _mt_ipt -t mangle -A PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+    fi
+}
+
 _mt_block_apply() {
     _mt_db_ensure
-    while IFS= read -r _entry; do
-        [ -z "$_entry" ] && continue
-        _mt_ipt_block_add "$_entry"
-    done < <(_mt_db_blocked_list)
+    local _mode; _mode=$(_mt_db_mode_get)
+    if [ "$_mode" = "allow" ]; then
+        _mt_ipt_allow_apply
+    else
+        while IFS= read -r _entry; do
+            [ -z "$_entry" ] && continue
+            _mt_ipt_block_add "$_entry"
+        done < <(_mt_db_blocked_list)
+    fi
 }
 
 _mt_block_clear_all() {
     _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
+    local _port="${PROXY_PORT:-8443}"
     if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        _mt_ipt -S INPUT 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
-            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
+        _mt_ipt -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
+            eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
         done
     else
         _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
-            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
+            eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
         done
-        _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
-            _mt_ipt -t mangle ${_rule/-A/-D} 2>/dev/null || true
+        _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
+            eval _mt_ipt -t mangle "${_rule/-A/-D}" 2>/dev/null || true
         done
     fi
 }
@@ -1571,30 +1602,22 @@ _mt_do_access() {
     mkdir -p "$_MT_DIR"
     _mt_db_ensure
 
-    # Устанавливаем conntrack-tools если отсутствует (нужен для мгновенного обрыва соединений)
     if ! command -v conntrack >/dev/null 2>&1; then
         (DEBIAN_FRONTEND=noninteractive apt-get install -y -q conntrack >/dev/null 2>&1) &
     fi
 
-    # Синхронизируем iptables с БД: если заблокированных нет — снимаем все DROP-правила (тихо)
-    local _file_entries
-    _file_entries=$(_mt_db_blocked_count)
-    if [ "${_file_entries:-0}" -eq 0 ]; then
-        _mt_block_clear_all 2>/dev/null
-    fi
-
     while true; do
-        # ── Актуальные данные ──────────────────────────────────────────────
-        local -a _blocked_list=()
+        local _access_mode; _access_mode=$(_mt_db_mode_get)
+
+        local -a _list=()
         while IFS= read -r _e; do
-            [ -n "$_e" ] && _blocked_list+=("$_e")
+            [ -n "$_e" ] && _list+=("$_e")
         done < <(_mt_db_blocked_list)
 
         local _client_ips _cur_ips=()
         _client_ips=$(_mt_get_active_ips)
         while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
 
-        # Сохраняем историю виденных IP в БД
         if [ -n "$_client_ips" ]; then
             while IFS= read -r _gip; do
                 [ -z "$_gip" ] && continue
@@ -1602,7 +1625,6 @@ _mt_do_access() {
             done <<< "$_client_ips"
         fi
 
-        # ── Все виденные IP (история ∪ онлайн) ────────────────────────────
         local -a _all_ips=()
         local _combined
         _combined=$(printf '%s\n' "$(_mt_db_seen_list)" "${_cur_ips[@]}")
@@ -1611,7 +1633,6 @@ _mt_do_access() {
             _all_ips+=("$_ip")
         done < <(printf '%s\n' "${_combined}" | sort -u)
 
-        # ── Группировка по /24: подсети с 2+ IP из истории ────────────────
         declare -A _sn_cnt=()
         for _ip in "${_all_ips[@]}"; do
             local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
@@ -1623,20 +1644,34 @@ _mt_do_access() {
         done
         IFS=$'\n' _subnet_groups=($(printf '%s\n' "${_subnet_groups[@]}" | sort)); unset IFS
 
-        # IP входящие в подсети (скрываем из основного списка)
         declare -A _in_subnet=()
         for _ip in "${_all_ips[@]}"; do
             local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
             [ "${_sn_cnt[$_s24]:-0}" -ge 2 ] && _in_subnet["$_ip"]=1
         done
 
-        # Заблокированные CIDR-подсети
         local -a _blocked_cidrs=()
-        for _b in "${_blocked_list[@]}"; do
+        for _b in "${_list[@]}"; do
             [[ "$_b" == */* ]] && _blocked_cidrs+=("$_b")
         done
 
-        # ── Строим меню ────────────────────────────────────────────────────
+        # Проверяет, есть ли IP в списке
+        _ip_in_list() {
+            local _x="$1"
+            for _le in "${_list[@]}"; do [ "$_le" = "$_x" ] && return 0; done
+            [[ "$_x" == */* ]] && return 1
+            for _le in "${_list[@]}"; do
+                [[ "$_le" != */* ]] && continue
+                local _net _pfx _ip_int _net_int _mask
+                _net="${_le%/*}"; _pfx="${_le#*/}"
+                _ip_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_x//./ } 2>/dev/null)" 2>/dev/null) || continue
+                _net_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net//./ })" 2>/dev/null) || continue
+                _mask=$(( 0xFFFFFFFF << (32 - _pfx) & 0xFFFFFFFF ))
+                [ $(( _ip_int & _mask )) -eq $(( _net_int & _mask )) ] && return 0
+            done
+            return 1
+        }
+
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
@@ -1650,24 +1685,29 @@ _mt_do_access() {
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
                 [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
-                local _geo_str
-                _geo_str=$(_mt_db_geo_get "$_ip")
+                local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
                 [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
                 local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
-                if _mt_ip_is_blocked "$_ip"; then
-                    _ip_items+=("${RED}${_line}${NC}")
-                elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
-                    _ip_items+=("${GREEN}${_line}${NC}")
+                local _in_l=false; _ip_in_list "$_ip" && _in_l=true
+                if [ "$_access_mode" = "allow" ]; then
+                    [ "$_in_l" = true ] && _ip_items+=("${GREEN}${_line}${NC}") \
+                        || ( printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" \
+                             && _ip_items+=("${RED}${_line}${NC}") \
+                             || _ip_items+=("$_line") )
                 else
-                    _ip_items+=("$_line")
+                    if [ "$_in_l" = true ]; then
+                        _ip_items+=("${RED}${_line}${NC}")
+                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
+                        _ip_items+=("${GREEN}${_line}${NC}")
+                    else
+                        _ip_items+=("$_line")
+                    fi
                 fi
-                _ip_vals+=("$_ip")
-                _has_solo=1
+                _ip_vals+=("$_ip"); _has_solo=1
             done
             [ "$_has_solo" -eq 0 ] && { _ip_items+=("${DARKGRAY}(все IP сгруппированы по подсетям)${NC}"); _ip_vals+=("sep"); }
         fi
 
-        # Подозрительные подсети (2+ IP из истории)
         if [ ${#_subnet_groups[@]} -gt 0 ]; then
             local _hdr_sn2="Подозрительные подсети:"
             local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
@@ -1676,15 +1716,13 @@ _mt_do_access() {
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             for _sn in "${_subnet_groups[@]}"; do
                 local _total="${_sn_cnt[$_sn]}"
-                # Считаем онлайн и заблокированных в этой подсети
                 local _on_cnt=0 _bl_cnt=0
                 for _ip in "${_all_ips[@]}"; do
                     local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
                     [ "$_s24" != "$_sn" ] && continue
                     printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" && (( _on_cnt++ )) || true
-                    _mt_ip_is_blocked "$_ip" && (( _bl_cnt++ )) || true
+                    _ip_in_list "$_ip" && (( _bl_cnt++ )) || true
                 done
-                # Гео — берём у первого IP в этой подсети с данными
                 local _sn_geo="—"
                 for _gip in "${_all_ips[@]}"; do
                     local _g24; _g24=$(echo "$_gip" | awk -F. '{print $1"."$2"."$3".0/24"}')
@@ -1693,22 +1731,20 @@ _mt_do_access() {
                     if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
                 done
                 local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
-                # Цвет: красный если CIDR заблокирована, зелёный если есть онлайн, иначе обычный
-                if _mt_ip_is_blocked "$_sn"; then
-                    _ip_items+=("${RED}${_sn_line}${NC}")
-                elif [ "$_on_cnt" -gt 0 ]; then
-                    _ip_items+=("${GREEN}${_sn_line}${NC}")
+                local _sn_in_l=false; _ip_in_list "$_sn" && _sn_in_l=true
+                if [ "$_access_mode" = "allow" ]; then
+                    [ "$_sn_in_l" = true ] && _ip_items+=("${GREEN}${_sn_line}${NC}") \
+                        || ( [ "$_on_cnt" -gt 0 ] && _ip_items+=("${RED}${_sn_line}${NC}") || _ip_items+=("$_sn_line") )
                 else
-                    _ip_items+=("$_sn_line")
+                    [ "$_sn_in_l" = true ] && _ip_items+=("${RED}${_sn_line}${NC}") \
+                        || ( [ "$_on_cnt" -gt 0 ] && _ip_items+=("${GREEN}${_sn_line}${NC}") || _ip_items+=("$_sn_line") )
                 fi
                 _ip_vals+=("sn:${_sn}")
             done
         fi
 
-        # Заблокированные CIDR-подсети НЕ из групп (ручной ввод)
         local -a _extra_cidrs=()
         for _bn in "${_blocked_cidrs[@]}"; do
-            # Показываем отдельно только те CIDR, которые не совпадают с автогруппой
             local _is_group=0
             for _grp in "${_subnet_groups[@]}"; do
                 [ "$_grp" = "$_bn" ] && _is_group=1 && break
@@ -1716,35 +1752,50 @@ _mt_do_access() {
             [ "$_is_group" -eq 0 ] && _extra_cidrs+=("$_bn")
         done
         if [ ${#_extra_cidrs[@]} -gt 0 ]; then
-            local _hdr_bl="Заблокированные подсети:"
+            local _hdr_bl="Записи в списке:"
             local _hdr_bl_pad=$(( (${#_sep_ac} - ${#_hdr_bl}) / 2 ))
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_bl_pad '' "$_hdr_bl")"); _ip_vals+=("sep")
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             for _bn in "${_extra_cidrs[@]}"; do
-                _ip_items+=("${RED}${_bn}${NC}")
+                [ "$_access_mode" = "allow" ] \
+                    && _ip_items+=("${GREEN}${_bn}${NC}") \
+                    || _ip_items+=("${RED}${_bn}${NC}")
                 _ip_vals+=("$_bn")
             done
         fi
 
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("✏️   Ввести IP или CIDR вручную");      _ip_vals+=("manual")
-        _ip_items+=("🗑️   Очистить историю IP");              _ip_vals+=("clear_history")
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("⬅️   Назад");                           _ip_vals+=("back")
+        local _toggle_label
+        if [ "$_access_mode" = "allow" ]; then
+            _toggle_label="🔄  Режим: Разрешение → Блокирование"
+        else
+            _toggle_label="🔄  Режим: Блокирование → Разрешение"
+        fi
 
-        # Находим индекс первого IP (пропускаем sep/заголовки)
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("$_toggle_label");                              _ip_vals+=("toggle_mode")
+        _ip_items+=("✏️   Добавить IP или группу в список");       _ip_vals+=("manual")
+        _ip_items+=("🗑️   Очистить список");                       _ip_vals+=("clear_list")
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("⬅️   Назад");                                  _ip_vals+=("back")
+
         local _first_ip_idx=0
         for _fi in "${!_ip_vals[@]}"; do
-            if [ "${_ip_vals[$_fi]}" != "sep" ] && [ "${_ip_vals[$_fi]}" != "manual" ] && [ "${_ip_vals[$_fi]}" != "back" ]; then
+            local _v="${_ip_vals[$_fi]}"
+            if [[ "$_v" != "sep" && "$_v" != "toggle_mode" && "$_v" != "manual" && "$_v" != "clear_list" && "$_v" != "back" ]]; then
                 _first_ip_idx=$_fi; break
             fi
         done
         export MENU_INITIAL_IDX=$_first_ip_idx
 
-        # Заголовок: центрированный с статистикой
-        local _blk_total=${#_blocked_list[@]}
-        local _title="🚫 Управление доступом\n• Онлайн: ${#_cur_ips[@]}\n• Заблокировано: ${_blk_total}"
+        local _list_count=${#_list[@]}
+        local _mode_word _list_word
+        if [ "$_access_mode" = "allow" ]; then
+            _mode_word="Разрешение"; _list_word="Разрешено"
+        else
+            _mode_word="Блокирование"; _list_word="Заблокировано"
+        fi
+        local _title="🚫 Управление доступом\n• Онлайн: ${#_cur_ips[@]}\n• ${_list_word}: ${_list_count}\n• Режим: ${_mode_word}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
@@ -1754,14 +1805,31 @@ _mt_do_access() {
         case "$_sel" in
         sep) ;;
         back) return ;;
-        clear_history)
+        toggle_mode)
+            if [ "$_access_mode" = "allow" ]; then
+                _mt_db_mode_set "block"
+                _mt_block_clear_all 2>/dev/null
+                _mt_block_apply
+                echo -e "${GREEN}✅ Режим: Блокирование${NC}"
+            else
+                _mt_db_mode_set "allow"
+                _mt_block_clear_all 2>/dev/null
+                _mt_ipt_allow_apply
+                echo -e "${GREEN}✅ Режим: Разрешение${NC}"
+            fi
+            sleep 1
+            ;;
+        clear_list)
             clear
             echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${RED}       🗑️  Очистить историю IP${NC}"
+            echo -e "${RED}       🗑️  Очистить список${NC}"
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             echo
-            echo -e " ${DARKGRAY}Будет удалена история всех виденных IP адресов.${NC}"
-            echo -e " ${DARKGRAY}Текущие заблокированные правила НЕ изменятся.${NC}"
+            if [ "$_access_mode" = "allow" ]; then
+                echo -e " ${YELLOW}⚠ В режиме Разрешения очистка списка заблокирует всех!${NC}"
+            else
+                echo -e " ${DARKGRAY}Все записи будут удалены, правила iptables сняты.${NC}"
+            fi
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             echo -e "    ${BLUE}Enter${DARKGRAY}: Очистить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
@@ -1771,23 +1839,27 @@ _mt_do_access() {
                 IFS= read -rsn1 _ck 2>/dev/null
                 if [[ "$_ck" == $'\x1b' ]]; then break
                 elif [[ "$_ck" == "" ]]; then
-                    sqlite3 "$_MT_DB" "DELETE FROM seen_ips;" 2>/dev/null || true
-                    echo -e "${GREEN}✅ История IP очищена${NC}"
-                    sleep 1
-                    break
+                    sqlite3 "$_MT_DB" "DELETE FROM blocked;" 2>/dev/null || true
+                    _mt_block_clear_all 2>/dev/null
+                    echo -e "${GREEN}✅ Список очищен${NC}"
+                    sleep 1; break
                 fi
             done
             ;;
         manual)
             clear
             echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-            echo -e "${RED}       🚫 Заблокировать IP / подсеть${NC}"
+            if [ "$_access_mode" = "allow" ]; then
+                echo -e "${GREEN}       ✅ Добавить в список разрешённых${NC}"
+            else
+                echo -e "${RED}       🚫 Добавить в список блокировки${NC}"
+            fi
             echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
             echo
             echo -e " ${DARKGRAY}Примеры:${NC}"
             echo -e "   ${WHITE}1.2.3.4${NC}          ${DARKGRAY}— конкретный IP${NC}"
-            echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть (256 адресов)${NC}"
-            echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть (65535 адресов)${NC}"
+            echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть${NC}"
+            echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть${NC}"
             echo
             local _new_entry=""
             _mt_read_input _new_entry "IP или CIDR:" ""
@@ -1798,21 +1870,24 @@ _mt_do_access() {
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
                         _mt_db_blocked_add "$_new_entry"
-                        _mt_ipt_block_add "$_new_entry"
-                        _mt_kill_src "$_new_entry"
-                        echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                            echo -e "${GREEN}✅ Добавлено в разрешённые: ${_new_entry}${NC}"
+                        else
+                            _mt_ipt_block_add "$_new_entry"
+                            _mt_kill_src "$_new_entry"
+                            echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
+                        fi
                     fi
                 else
-                    echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR (1.2.3.4 или 1.2.3.0/24)${NC}"
+                    echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR${NC}"
                 fi
                 sleep 1.5
             fi
             ;;
         sn:*)
-            # ── Подменю подсети ────────────────────────────────────────────
             local _sn_cidr="${_sel#sn:}"
             while true; do
-                # Собираем все IP этой подсети из истории
                 local -a _sn_ips=()
                 for _ip in "${_all_ips[@]}"; do
                     local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
@@ -1825,24 +1900,36 @@ _mt_do_access() {
                     local _sg; _sg=$(_mt_db_geo_get "$_sip")
                     [ -z "$_sg" ] && _sg="—"
                     local _sline; _sline=$(printf '%-22s  %s' "$_sip" "$_sg")
-                    if _mt_ip_is_blocked "$_sip"; then
-                        _sn_items+=("${RED}${_sline}${NC}")
-                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_sip"; then
-                        _sn_items+=("${GREEN}${_sline}${NC}")
+                    local _sip_in_l=false; _ip_in_list "$_sip" && _sip_in_l=true
+                    if [ "$_access_mode" = "allow" ]; then
+                        [ "$_sip_in_l" = true ] && _sn_items+=("${GREEN}${_sline}${NC}") \
+                            || ( printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_sip" \
+                                 && _sn_items+=("${RED}${_sline}${NC}") || _sn_items+=("$_sline") )
                     else
-                        _sn_items+=("$_sline")
+                        if [ "$_sip_in_l" = true ]; then
+                            _sn_items+=("${RED}${_sline}${NC}")
+                        elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_sip"; then
+                            _sn_items+=("${GREEN}${_sline}${NC}")
+                        else
+                            _sn_items+=("$_sline")
+                        fi
                     fi
                 done
 
                 local _sn_action_idx=$(( ${#_sn_ips[@]} + 1 ))
                 local _sn_back_idx=$(( ${#_sn_ips[@]} + 3 ))
-                _sn_items+=("──────────────────────────────────────")
-                if _mt_ip_is_blocked "$_sn_cidr"; then
-                    _sn_items+=("${GREEN}✅ Разблокировать подсеть ${_sn_cidr}${NC}")
+                _sn_items+=("${_sep_ac}")
+                local _sn_in_l=false; _ip_in_list "$_sn_cidr" && _sn_in_l=true
+                if [ "$_access_mode" = "allow" ]; then
+                    [ "$_sn_in_l" = true ] \
+                        && _sn_items+=("${RED}🚫 Убрать из разрешённых: ${_sn_cidr}${NC}") \
+                        || _sn_items+=("${GREEN}✅ Добавить в разрешённые: ${_sn_cidr}${NC}")
                 else
-                    _sn_items+=("🚫 Заблокировать подсеть ${_sn_cidr}")
+                    [ "$_sn_in_l" = true ] \
+                        && _sn_items+=("${GREEN}✅ Разблокировать подсеть ${_sn_cidr}${NC}") \
+                        || _sn_items+=("🚫 Заблокировать подсеть ${_sn_cidr}")
                 fi
-                _sn_items+=("──────────────────────────────────────")
+                _sn_items+=("${_sep_ac}")
                 _sn_items+=("⬅️   Назад")
 
                 show_arrow_menu "📡 Подсеть: ${_sn_cidr}" "${_sn_items[@]}"
@@ -1851,34 +1938,51 @@ _mt_do_access() {
                 if [[ $_sc -eq 255 || $_sc -eq $_sn_back_idx ]]; then
                     break
                 elif [ "$_sc" -eq "$_sn_action_idx" ]; then
-                    # Блок/разблок всей подсети как CIDR
-                    if _mt_ip_is_blocked "$_sn_cidr"; then
+                    if [ "$_sn_in_l" = true ]; then
                         _mt_db_blocked_rm "$_sn_cidr"
-                        _mt_ipt_block_del "$_sn_cidr"
-                        echo -e "${GREEN}✅ Подсеть разблокирована: ${_sn_cidr}${NC}"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                            echo -e "${GREEN}✅ Убрано из разрешённых: ${_sn_cidr}${NC}"
+                        else
+                            _mt_ipt_block_del "$_sn_cidr"
+                            echo -e "${GREEN}✅ Разблокировано: ${_sn_cidr}${NC}"
+                        fi
                     else
                         _mt_db_blocked_add "$_sn_cidr"
-                        _mt_ipt_block_add "$_sn_cidr"
-                        _mt_kill_src "$_sn_cidr"
-                        echo -e "${GREEN}✅ Подсеть заблокирована: ${_sn_cidr}${NC}"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                            echo -e "${GREEN}✅ Добавлено в разрешённые: ${_sn_cidr}${NC}"
+                        else
+                            _mt_ipt_block_add "$_sn_cidr"
+                            _mt_kill_src "$_sn_cidr"
+                            echo -e "${GREEN}✅ Заблокировано: ${_sn_cidr}${NC}"
+                        fi
                     fi
-                    sleep 1.5
-                    break
+                    sleep 1.5; break
                 elif [ "$_sc" -lt "${#_sn_ips[@]}" ]; then
-                    # Клик на IP — toggle block
                     local _sip="${_sn_ips[$_sc]}"
-                    if _mt_ip_is_blocked "$_sip"; then
+                    local _sip_in_l=false; _ip_in_list "$_sip" && _sip_in_l=true
+                    if [ "$_sip_in_l" = true ]; then
                         _mt_db_blocked_rm "$_sip"
-                        _mt_ipt_block_del "$_sip"
-                        echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                            echo -e "${GREEN}✅ Убрано из разрешённых: ${_sip}${NC}"
+                        else
+                            _mt_ipt_block_del "$_sip"
+                            echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
+                        fi
                     else
                         _mt_db_blocked_add "$_sip"
-                        _mt_ipt_block_add "$_sip"
-                        _mt_kill_src "$_sip"
-                        echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_ipt_allow_apply
+                            echo -e "${GREEN}✅ Добавлено в разрешённые: ${_sip}${NC}"
+                        else
+                            _mt_ipt_block_add "$_sip"
+                            _mt_kill_src "$_sip"
+                            echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
+                        fi
                     fi
                     sleep 1.5
-                    # Перечитываем _all_ips и cur_ips для обновления цветов в подменю
                     _client_ips=$(_mt_get_active_ips)
                     _cur_ips=()
                     while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
@@ -1887,15 +1991,26 @@ _mt_do_access() {
             ;;
         *)
             if [[ -n "$_sel" ]]; then
-                if _mt_ip_is_blocked "$_sel"; then
+                local _in_l=false; _ip_in_list "$_sel" && _in_l=true
+                if [ "$_in_l" = true ]; then
                     _mt_db_blocked_rm "$_sel"
-                    _mt_ipt_block_del "$_sel"
-                    echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
+                    if [ "$_access_mode" = "allow" ]; then
+                        _mt_ipt_allow_apply
+                        echo -e "${GREEN}✅ Убрано из разрешённых: ${_sel}${NC}"
+                    else
+                        _mt_ipt_block_del "$_sel"
+                        echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
+                    fi
                 else
                     _mt_db_blocked_add "$_sel"
-                    _mt_ipt_block_add "$_sel"
-                    _mt_kill_src "$_sel"
-                    echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
+                    if [ "$_access_mode" = "allow" ]; then
+                        _mt_ipt_allow_apply
+                        echo -e "${GREEN}✅ Добавлено в разрешённые: ${_sel}${NC}"
+                    else
+                        _mt_ipt_block_add "$_sel"
+                        _mt_kill_src "$_sel"
+                        echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
+                    fi
                 fi
                 sleep 1.5
             fi
