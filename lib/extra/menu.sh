@@ -34,7 +34,7 @@ manage_extra_settings() {
 # MTPROTO — УПРАВЛЕНИЕ
 # ═══════════════════════════════════════════════════
 _MT_CONTAINER="mtproto-proxy"
-_MT_IMAGE="nineseconds/mtg:2"
+_MT_IMAGE="telegrammessenger/proxy:latest"
 _MT_DIR="/opt/mtproto"
 _MT_ENV="${_MT_DIR}/.env"
 
@@ -128,40 +128,19 @@ _mt_check_docker() {
     if ! docker info >/dev/null 2>&1; then
         print_error "Docker не запущен"; return 1
     fi
-    if ! command -v sqlite3 &>/dev/null; then
-        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q sqlite3 >/dev/null 2>&1) &
-        show_spinner "Установка необходимых компонентов" "Компоненты установлены"
-    fi
 }
 
-# Генерирует Fake TLS secret (ee-формат: ee + 16 случайных байт + hex(domain))
-# Совместим с nineseconds/mtg:2 и другими modern-реализациями
+# Генерирует Fake TLS secret на основе домена
 _mt_generate_fake_tls_secret() {
     local domain="${1:-google.com}"
     local domain_hex
     domain_hex=$(printf '%s' "$domain" | xxd -ps | tr -d '\n')
-    local random_hex
-    random_hex=$(openssl rand -hex 16 2>/dev/null)
-    printf 'ee%s%s' "$random_hex" "$domain_hex"
-}
-
-# Извлекает «сырой» 32-символьный секрет (16 байт hex) из FakeTLS-обёртки
-# ee<32hex><domain_hex> → <32hex>
-_mt_extract_raw_secret() {
-    local s="${1:-}"
-    if [[ "$s" =~ ^[Ee]{2} ]] && [ ${#s} -gt 34 ]; then
-        echo "${s:2:32}"
-    else
-        echo "$s"
-    fi
-}
-
-# Секрет для Telegram ссылок: ee + 32 hex (без домена)
-# ee<32hex><domain_hex> → ee<32hex>
-_mt_link_secret() {
-    local s="${1:-}"
-    local raw; raw=$(_mt_extract_raw_secret "$s")
-    echo "ee${raw}"
+    local domain_len=${#domain_hex}
+    local needed=$(( 30 - domain_len ))
+    [ "$needed" -lt 0 ] && needed=0
+    local random_hex=""
+    [ "$needed" -gt 0 ] && random_hex=$(openssl rand -hex 15 2>/dev/null | cut -c1-"$needed")
+    printf 'ee%s%s' "$domain_hex" "$random_hex"
 }
 
 # Ищет свободный порт начиная с base
@@ -182,215 +161,9 @@ _mt_save_config() {
 PROXY_PORT=${PROXY_PORT}
 PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
+FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
-PROXY_NAME=${PROXY_NAME:-}
 EOF
-}
-
-# Выпускает SSL-сертификат для домена через certbot standalone (порт 80)
-# Возвращает 0 если сертификат готов (новый или уже существующий), 1 при ошибке
-_mt_issue_cert() {
-    local _domain="${1:-}"
-    # Если это IP — сертификат не нужен
-    if [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        return 1
-    fi
-    [ -z "$_domain" ] && return 1
-    local _cert_dir="/etc/letsencrypt/live/${_domain}"
-    # Уже есть — ок
-    if [ -f "${_cert_dir}/fullchain.pem" ]; then
-        return 0
-    fi
-    # Устанавливаем certbot если нет
-    if ! command -v certbot >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
-    fi
-    # Открываем порт 80, выпускаем, закрываем
-    if command -v ufw >/dev/null 2>&1; then
-        ufw allow 80/tcp >/dev/null 2>&1 || true
-    fi
-    # Останавливаем nginx если он занимает порт 80
-    local _nginx_stopped=false
-    local _nc; _nc=$(_mt_nginx_container)
-    if [ -n "$_nc" ] && ss -tlnp sport = :80 2>/dev/null | grep -q "nginx\|docker"; then
-        docker stop "$_nc" >/dev/null 2>&1 && _nginx_stopped=true
-    fi
-    certbot certonly --standalone --non-interactive --agree-tos \
-        --register-unsafely-without-email \
-        --preferred-challenges http-01 \
-        --http-01-port 80 \
-        -d "$_domain" >/dev/null 2>&1
-    local _rc=$?
-    # Запускаем nginx обратно если останавливали
-    $_nginx_stopped && docker start "$_nc" >/dev/null 2>&1
-    if command -v ufw >/dev/null 2>&1; then
-        ufw delete allow 80/tcp >/dev/null 2>&1 || true
-    fi
-    return $_rc
-}
-
-# Находит имя nginx-контейнера
-_mt_nginx_container() {
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1
-}
-
-# Добавляет домен в nginx: stream map + server block с /connect
-_mt_nginx_add_domain() {
-    local _domain="${1:-}" _secret="${2:-}" _port="${3:-}" _name="${4:-}"
-    [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
-    [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
-
-    local _nginx_conf="/opt/nginx/nginx.conf"
-    local _ssl_dir="/opt/nginx/ssl/${_domain}"
-    local _cert_src="/etc/letsencrypt/live/${_domain}"
-
-    [ -f "${_cert_src}/fullchain.pem" ] || return 1
-
-    # Копируем сертификат в nginx ssl папку
-    mkdir -p "$_ssl_dir"
-    cp "${_cert_src}/fullchain.pem" "${_ssl_dir}/fullchain.pem"
-    cp "${_cert_src}/privkey.pem"   "${_ssl_dir}/privkey.pem"
-
-    # Renewal hook — копирует сертификат и перезагружает nginx
-    local _hook_file="/etc/letsencrypt/renewal-hooks/deploy/mtproto-${_domain}.sh"
-    cat > "$_hook_file" << HOOK
-#!/bin/bash
-# Авторенью: копирует сертификат в nginx ssl и перезагружает nginx
-D="${_domain}"
-mkdir -p /opt/nginx/ssl/\$D
-cp /etc/letsencrypt/live/\$D/fullchain.pem /opt/nginx/ssl/\$D/fullchain.pem
-cp /etc/letsencrypt/live/\$D/privkey.pem   /opt/nginx/ssl/\$D/privkey.pem
-NGINX=\$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
-[ -n "\$NGINX" ] && docker exec "\$NGINX" nginx -s reload 2>/dev/null || true
-HOOK
-    chmod +x "$_hook_file"
-
-    # Добавляем домен в stream map если есть stream-блок и домен не добавлен
-    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null && ! grep -q "${_domain}.*127.0.0.1:8444" "$_nginx_conf"; then
-        sed -i "s|default\s\+127\.0\.0\.1:8445|${_domain}   127.0.0.1:8444;\n        default                 127.0.0.1:8445|" "$_nginx_conf"
-    fi
-
-    # Генерируем HTML-страницу /connect
-    _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
-
-    local _html_path="/var/www/html/mtproto-connect.html"
-    local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
-
-    # Добавляем server block если не добавлен
-    if ! grep -q "$_connect_marker" "$_nginx_conf"; then
-        # listen 443 ssl нужен только если нет stream-блока (порт MTProto не 443)
-        local _listen443=""
-        grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null || _listen443="    listen 443 ssl;"
-        # Записываем block во временный файл, затем вставляем через awk перед маркером закрытия http
-        local _tmpf; _tmpf=$(mktemp)
-        cat > "$_tmpf" << NGINX_BLOCK
-
-${_connect_marker}
-server {
-    server_name ${_domain};
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-${_listen443}
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
-
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-
-    location = /connect {
-        default_type text/html;
-        alias ${_html_path};
-    }
-
-    location / {
-        return 444;
-    }
-}
-# END_MT_CONNECT_${_domain}
-NGINX_BLOCK
-        awk '/end http/ { while ((getline line < blockfile) > 0) print line; close(blockfile) } { print }' \
-            blockfile="$_tmpf" "$_nginx_conf" > "${_nginx_conf}.tmp" \
-            && mv "${_nginx_conf}.tmp" "$_nginx_conf"
-        rm -f "$_tmpf"
-    else
-        # Обновляем только HTML-файл (server block уже есть)
-        :
-    fi
-
-    # Перезагружаем nginx (полный рестарт чтобы подхватить новые server blocks)
-    local _nc; _nc=$(_mt_nginx_container)
-    if [ -n "$_nc" ]; then
-        docker exec "$_nc" nginx -t 2>/dev/null \
-            && docker restart "$_nc" >/dev/null 2>&1 \
-            || true
-    fi
-}
-
-# Генерирует HTML-страницу с лоадером для редиректа в Telegram
-_mt_write_proxy_page() {
-    local _domain="${1:-${SERVER_IP:-}}"
-    local _secret="${2:-${PROXY_SECRET:-}}"
-    local _port="${3:-${PROXY_PORT:-}}"
-    local _name="${4:-${PROXY_NAME:-}}"
-    [ -z "$_secret" ] || [ -z "$_port" ] || [ -z "$_domain" ] && return 0
-
-    local _display_name="${_name:-MTProto Proxy}"
-    local _tg_url="tg://proxy?server=${_domain}&port=${_port}&secret=${_secret}"
-    local _html_path="/var/www/html/mtproto-connect.html"
-
-    mkdir -p /var/www/html
-    cat > "$_html_path" << HTMLEOF
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${_display_name}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#17212b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{text-align:center;padding:2.5rem 2rem;max-width:360px;width:100%}
-.loader{width:56px;height:56px;margin:0 auto 1.5rem;position:relative}
-.loader::before,.loader::after{content:'';position:absolute;border-radius:50%}
-.loader::before{width:100%;height:100%;border:3px solid rgba(255,255,255,.12);top:0;left:0}
-.loader::after{width:100%;height:100%;border:3px solid transparent;border-top-color:#5da8d6;top:0;left:0;animation:spin .9s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.plane{font-size:1.8rem;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
-.sub{color:#7a9db8;font-size:.95rem;margin-bottom:2rem}
-.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 2rem;background:#2b5278;border-radius:10px;color:#fff;text-decoration:none;font-size:1rem;font-weight:500;transition:background .2s,transform .1s}
-.btn:hover{background:#3a6d9e}
-.btn:active{transform:scale(.97)}
-.btn svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="loader"><span class="plane">✈️</span></div>
-  <h1>${_display_name}</h1>
-  <div class="sub">Телеграм прокси</div>
-  <a class="btn" id="btn" href="${_tg_url}">
-    <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
-    Подключиться
-  </a>
-</div>
-<script>
-var TG="${_tg_url}",done=false;
-function go(){
-  if(done)return;done=true;
-  window.location.href=TG;
-}
-setTimeout(go,1200);
-setTimeout(function(){window.close()},10000);
-document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
-</script>
-</body>
-</html>
-HTMLEOF
-
-    # Обновляем старую test-n страницу для совместимости
-    [ -f /var/www/html/mtproto.html ] && cp "$_html_path" /var/www/html/mtproto.html 2>/dev/null || true
 }
 
 # Записывает docker-compose.yml
@@ -424,12 +197,12 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP PROXY_TAG PROXY_NAME
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
     PROXY_PORT="8443"
+    FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
-    PROXY_NAME=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -449,7 +222,7 @@ _mt_do_install() {
         done
     }
 
-    local _step=1
+    local _step=1 _secret_input=""
 
     while true; do
         case $_step in
@@ -496,72 +269,46 @@ _mt_do_install() {
                     done
                 done
                 ;;
-            2) # Порт MTProto
-                local _port_default="${PROXY_PORT:-$(_mt_find_free_port 8443)}"
-                _mt_read_input PROXY_PORT "Порт MTProto ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+            2) # Порт
+                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
+                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
-                    if ! ([[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 ))); then
-                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                    if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
+                        (( _step++ ))
                     else
-                        # Проверяем свободен ли порт
-                        local _busy_user=""
-                        _busy_user=$(ss -tlnp "sport = :${PROXY_PORT}" 2>/dev/null | awk 'NR>1{match($0,/users:\(\("([^"]+)"/,a); if(a[1]) print a[1]}' | head -1)
-                        # Игнорируем: nginx (stream будет перенастроен) и docker-proxy нашего mtproto
-                        if [ -n "$_busy_user" ]; then
-                            local _skip=false
-                            if [ "$_busy_user" = "nginx" ] && [ "$PROXY_PORT" = "443" ]; then
-                                _skip=true  # nginx на 443 — stream перенастроит
-                            elif [ "$_busy_user" = "docker-proxy" ]; then
-                                # Только если это наш mtproto-proxy (переустановка)
-                                local _mt_port=""
-                                _mt_port=$(docker port "$_MT_CONTAINER" 3128/tcp 2>/dev/null | grep -oP ':\K\d+' | head -1)
-                                [ "$_mt_port" = "$PROXY_PORT" ] && _skip=true
-                            fi
-                            if ! $_skip; then
-                                echo -e "${YELLOW}⚠️  Порт ${PROXY_PORT} занят процессом: ${WHITE}${_busy_user}${NC}"
-                            echo
-                            echo -e "${BLUE}══════════════════════════════════════${NC}"
-                            echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-                            tput civis 2>/dev/null || true
-                            local _pk=""
-                            while true; do
-                                IFS= read -rsn1 _pk
-                                if [[ "$_pk" == $'\x1b' ]]; then
-                                    tput cnorm 2>/dev/null || true
-                                    return
-                                elif [[ "$_pk" == "" ]]; then
-                                    tput cnorm 2>/dev/null || true
-                                    break
-                                fi
-                            done
-                            # Стираем блок ошибки (4 строки) + строку ввода порта (1) → повтор на том же месте
-                            _mt_erase_lines 5
-                            else
-                                (( _step++ ))
-                            fi
-                        else
-                            (( _step++ ))
-                        fi
+                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
                     fi
                 else
                     _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
-            3) # Секрет
-                _mt_read_input PROXY_SECRET "Секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+            3) # Fake TLS домен
+                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then
-                    if [ -z "$PROXY_SECRET" ]; then
-                        PROXY_SECRET=$(openssl rand -hex 16 2>/dev/null)
-                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mСекрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${PROXY_SECRET}${NC}\n"
-                    fi
                     (( _step++ ))
                 else
                     _mt_erase_lines 1
                     (( _step-- ))
                 fi
                 ;;
-            4) # Telegram TAG
+            4) # Секрет
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+                if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            5) # Показать секрет + Telegram TAG
+                local _disp_secret
+                if [ -n "$_secret_input" ]; then
+                    _disp_secret="$_secret_input"
+                else
+                    _disp_secret=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+                fi
+                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
@@ -574,30 +321,33 @@ _mt_do_install() {
         esac
     done
 
+    # Финализация введённых значений
+    if [ -n "$_secret_input" ]; then
+        PROXY_SECRET="$_secret_input"
+    else
+        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
+    fi
     echo
     echo
 
     # Подготавливаем файлы
     _mt_write_compose
     _mt_save_config
-    printf "${GREEN}\u2705${NC} Подготовка файлов\n"
-
-    # База данных
-    (_mt_db_migrate) &
-    show_spinner "Подключение базы" "Подключение базы"
+    print_success "Подготовка файлов"
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
         (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
          docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        show_spinner "Очистка старого контейнера" "Старый контейнер удалён"
+        show_spinner "Очистка старого контейнера..." "Старый контейнер удалён"
     fi
 
     # Тянем образ и запускаем
-    local _compose_err; _compose_err=$(mktemp)
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && docker compose up -d 2>"$_compose_err" >/dev/null) &
-    show_spinner "Запуск MTProto" "Запуск MTProto"
-    tput civis 2>/dev/null || true
+    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
+    show_spinner "Загрузка образа..." "Образ загружен"
+
+    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
+    show_spinner "Запуск MTProto..." "MTProto запущен!"
     _mt_block_apply
 
     # UFW
@@ -606,10 +356,7 @@ _mt_do_install() {
     fi
 
     if _mt_running; then
-        rm -f "${_compose_err:-}"
         _mt_save_config
-        print_success "Установка завершена!"
-        echo
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         local _ok_line="✅ MTProto успешно установлен!"
@@ -622,15 +369,13 @@ _mt_do_install() {
         echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
-        echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
+        [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-        echo
-        echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
-        echo -e "   ${YELLOW}${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -645,13 +390,8 @@ _mt_do_install() {
         done
     else
         echo
-        print_error "Контейнер не запустился."
-        if [ -s "${_compose_err:-}" ]; then
-            echo -e "${DARKGRAY}$(head -10 "$_compose_err")${NC}"
-        else
-            docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
-        fi
-        rm -f "${_compose_err:-}"
+        print_error "Контейнер не запустился. Логи:"
+        docker logs "$_MT_CONTAINER" 2>&1 | tail -20 || true
         _mt_press_enter
     fi
 }
@@ -679,14 +419,12 @@ _mt_do_config() {
     echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP:-}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT:-}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN:-}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo
-    echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
-    echo -e "   ${YELLOW}${PROXY_SECRET}${NC}"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -711,18 +449,19 @@ _mt_do_stats() {
         _mt_press_enter; return
     fi
 
+    local _max_file="${_MT_DIR}/stats_max_connections"
+    local _uptime_file="${_MT_DIR}/stats_uptime_ts"
     local _max_sim=0
-    _mt_db_ensure
-    local _saved_max; _saved_max=$(_mt_db_stat_get "max_connections")
-    [ -n "$_saved_max" ] && _max_sim="$_saved_max"
+    [ -f "$_max_file" ] && _max_sim=$(cat "$_max_file" 2>/dev/null || echo "0")
 
     local _container_started
     _container_started=$(docker inspect --format '{{.State.StartedAt}}' \
         "$_MT_CONTAINER" 2>/dev/null | sed 's/[^0-9]//g' | cut -c1-14)
-    local _saved_ts; _saved_ts=$(_mt_db_stat_get "uptime_ts")
+    local _saved_ts=""
+    [ -f "$_uptime_file" ] && _saved_ts=$(cat "$_uptime_file" 2>/dev/null || true)
     if [ "$_container_started" != "$_saved_ts" ]; then
         _max_sim=0
-        _mt_db_stat_set "uptime_ts" "$_container_started"
+        echo "$_container_started" > "$_uptime_file" 2>/dev/null || true
     fi
 
     local _st_orig_stty
@@ -752,21 +491,23 @@ _mt_do_stats() {
         _client_ips=$(_mt_get_active_ips)
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
-        # Сохраняем историю виденных IP в БД
+        # Сохраняем историю виденных IP в файл seen_ips
         if [ -n "$_client_ips" ]; then
+            touch "$_MT_SEEN_FILE" 2>/dev/null || true
             while IFS= read -r _gip; do
                 [ -z "$_gip" ] && continue
-                _mt_db_seen_add "$_gip"
+                grep -qxF "$_gip" "$_MT_SEEN_FILE" 2>/dev/null || echo "$_gip" >> "$_MT_SEEN_FILE"
             done <<< "$_client_ips"
         fi
 
-        # Геолокация: кеш в seen_ips.geo (geo_ts = timestamp последнего обновления)
+        # Геолокация: кеш /tmp/mtproto_geo — строки вида "IP|Страна, Город"
         # Новые IP запрашиваем батчем через ip-api.com (бесплатно, без ключа)
+        local _geo_cache="/tmp/mtproto_geo"
+        touch "$_geo_cache" 2>/dev/null || true
         local _new_ips=""
         while IFS= read -r _gip; do
             [ -z "$_gip" ] && continue
-            local _ts; _ts=$(_mt_db_geo_ts "$_gip")
-            [ -z "$_ts" ] || [ "$_ts" = "0" ] && _new_ips="${_new_ips} ${_gip}"
+            grep -q "^${_gip}|" "$_geo_cache" 2>/dev/null || _new_ips="${_new_ips} ${_gip}"
         done <<< "$_client_ips"
         if [ -n "$_new_ips" ]; then
             # Формируем JSON-массив и делаем батч-запрос в фоне
@@ -789,14 +530,16 @@ _mt_do_stats() {
                     local _geo_str="—"
                     [ -n "$_co" ] && _geo_str="${_co}"
                     [ -n "$_ci" ] && _geo_str="${_geo_str}, ${_ci}"
-                    _mt_db_geo_set "$_q" "$_geo_str"
+                    # Атомарная запись (append): если IP ещё не в кеше — добавляем
+                    grep -q "^${_q}|" "$_geo_cache" 2>/dev/null \
+                        || echo "${_q}|${_geo_str}" >> "$_geo_cache"
                 done
             ) &
         fi
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
             _max_sim="$_active"
-            _mt_db_stat_set "max_connections" "$_max_sim"
+            echo "$_max_sim" > "$_max_file" 2>/dev/null || true
         fi
 
         local _up_h _up_m _up_s _up_str
@@ -822,45 +565,6 @@ _mt_do_stats() {
         echo -e " ${DARKGRAY}$(_mpad "Активных клиентов:" $_cw)${NC} ${GREEN}${_active}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Макс одновременно:" $_cw)${NC} ${YELLOW}${_max_sim}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Трафик (вх / исх):" $_cw)${NC} ${WHITE}${_net_io}${NC}"
-
-        # Трафик за сегодня
-        local _today; _today=$(date +%Y-%m-%d)
-        local _saved_day; _saved_day=$(_mt_db_stat_get "traffic_day")
-        # Парсим текущий NetIO в байты
-        _mt_parse_netio_bytes() {
-            local _s="$1"; local _total=0
-            for _part in $(echo "$_s" | tr '/' ' '); do
-                _part=$(echo "$_part" | tr -d ' ')
-                local _num _unit _bytes
-                _num=$(echo "$_part" | grep -oP '[0-9]+(\.[0-9]+)?')
-                _unit=$(echo "$_part" | grep -oP '[a-zA-Z]+')
-                _bytes=$(awk -v n="$_num" -v u="$_unit" 'BEGIN{
-                    if(u=="B")  b=n;
-                    else if(u=="kB") b=n*1000;
-                    else if(u=="MB") b=n*1000000;
-                    else if(u=="GB") b=n*1000000000;
-                    else b=n; printf "%d", b}')
-                _total=$(( _total + _bytes ))
-            done
-            echo "$_total"
-        }
-        local _cur_bytes; _cur_bytes=$(_mt_parse_netio_bytes "$_net_io")
-        if [ "$_saved_day" != "$_today" ]; then
-            # Новый день — сохраняем baseline
-            _mt_db_stat_set "traffic_day" "$_today"
-            _mt_db_stat_set "traffic_day_base" "$_cur_bytes"
-        fi
-        local _base_bytes; _base_bytes=$(_mt_db_stat_get "traffic_day_base")
-        _base_bytes=${_base_bytes:-0}
-        local _day_bytes=$(( _cur_bytes - _base_bytes ))
-        [ $_day_bytes -lt 0 ] && _day_bytes=0
-        local _day_str
-        if   [ $_day_bytes -ge 1000000000 ]; then _day_str=$(awk "BEGIN{printf \"%.1fGB\", $_day_bytes/1000000000}")
-        elif [ $_day_bytes -ge 1000000 ];    then _day_str=$(awk "BEGIN{printf \"%.1fMB\", $_day_bytes/1000000}")
-        elif [ $_day_bytes -ge 1000 ];       then _day_str=$(awk "BEGIN{printf \"%.1fkB\", $_day_bytes/1000}")
-        else _day_str="${_day_bytes}B"; fi
-        echo -e " ${DARKGRAY}$(_mpad "Трафик за сегодня:" $_cw)${NC} ${WHITE}${_day_str}${NC}"
-
         echo -e " ${DARKGRAY}$(_mpad "Аптайм:" $_cw)${NC} ${WHITE}${_up_str}${NC}"
         # Фильтруем заблокированные IP из статистики
         local _visible_ips=""
@@ -873,12 +577,9 @@ _mt_do_stats() {
 
         if [ -n "$_visible_ips" ]; then
             echo
-            local _sep_stat="──────────────────────────────────────"
-            local _hdr_stat="Подключённые IP:"
-            local _hdr_pad=$(( (${#_sep_stat} - ${#_hdr_stat}) / 2 ))
-            echo -e "${DARKGRAY}${_sep_stat}${NC}"
-            printf "${DARKGRAY}%${_hdr_pad}s%s${NC}\n" "" "$_hdr_stat"
-            echo -e "${DARKGRAY}${_sep_stat}${NC}"
+            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+            echo -e " ${DARKGRAY}Подключённые IP:${NC}"
+            echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
 
             # Считаем /24 подсети среди видимых IP
             declare -A _st_subnet_count=()
@@ -892,8 +593,8 @@ _mt_do_stats() {
             while IFS= read -r _ip; do
                 [ -z "$_ip" ] && continue
                 local _geo_str
-                _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str="..."
+                _geo_str=$(grep "^${_ip}|" "$_geo_cache" 2>/dev/null | head -1 | cut -d'|' -f2)
+                [ -z "$_geo_str" ] && _geo_str="..."
                 printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
             done <<< "$_visible_ips"
 
@@ -905,11 +606,9 @@ _mt_do_stats() {
             if [ ${#_st_subnets[@]} -gt 0 ]; then
                 IFS=$'\n' _st_subnets=($(printf '%s\n' "${_st_subnets[@]}" | sort))
                 unset IFS
-                local _hdr_sn="Подозрительные подсети:"
-                local _hdr_sn_pad=$(( (${#_sep_stat} - ${#_hdr_sn}) / 2 ))
-                echo -e "${DARKGRAY}${_sep_stat}${NC}"
-                printf "${DARKGRAY}%${_hdr_sn_pad}s%s${NC}\n" "" "$_hdr_sn"
-                echo -e "${DARKGRAY}${_sep_stat}${NC}"
+                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
+                echo -e " ${DARKGRAY}Подозрительные подсети:${NC}"
+                echo -e "${BLUE}──────────────────────────────────────────────────────${NC}"
                 for _sn in "${_st_subnets[@]}"; do
                     printf "   ${YELLOW}%-20s${DARKGRAY}%s IP из подсети${NC}\n" "$_sn" "${_st_subnet_count[$_sn]}"
                 done
@@ -947,9 +646,10 @@ _mt_do_change_config() {
     _mt_load_env
 
     local _old_port="${PROXY_PORT:-}"
-    local _step=1
+    local _step=1 _secret_input=""
     local NEW_SERVER_IP="$SERVER_IP"
     local NEW_PROXY_PORT="$PROXY_PORT"
+    local NEW_FAKE_DOMAIN="$FAKE_DOMAIN"
     local NEW_PROXY_TAG="${PROXY_TAG:-}"
 
     _mt_erase_lines() {
@@ -998,16 +698,22 @@ _mt_do_change_config() {
                         echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
                     fi
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            3) # Секрет
-                _mt_read_input PROXY_SECRET "Секрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:" "${PROXY_SECRET:-}"
-                if [ $? -eq 0 ]; then
-                    if [ -z "$PROXY_SECRET" ]; then
-                        PROXY_SECRET=$(openssl rand -hex 16 2>/dev/null)
-                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mСекрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:\033[0m ${YELLOW}${PROXY_SECRET}${NC}\n"
-                    fi
-                    (( _step++ ))
+            3) # Fake TLS домен
+                _mt_read_input NEW_FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${NEW_FAKE_DOMAIN}]${NC}:" "$NEW_FAKE_DOMAIN"
+                if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            4) # Telegram TAG
+            4) # Секрет
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+                if [ $? -eq 0 ]; then (( _step++ ))
+                else _mt_erase_lines 1; (( _step-- )); fi ;;
+            5) # Показать секрет + Telegram TAG
+                local _disp_secret
+                if [ -n "$_secret_input" ]; then
+                    _disp_secret="$_secret_input"
+                else
+                    _disp_secret=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
+                fi
+                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
                 echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
@@ -1015,8 +721,14 @@ _mt_do_change_config() {
         esac
     done
 
+    if [ -n "$_secret_input" ]; then
+        PROXY_SECRET="$_secret_input"
+    else
+        PROXY_SECRET=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
+    fi
     SERVER_IP="$NEW_SERVER_IP"
     PROXY_PORT="$NEW_PROXY_PORT"
+    FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
     PROXY_TAG="$NEW_PROXY_TAG"
     echo
     echo
@@ -1038,8 +750,7 @@ _mt_do_change_config() {
     fi
 
     echo
-    echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo
     _mt_press_enter
 }
@@ -1090,49 +801,47 @@ _mt_do_restart() {
 
 _mt_do_uninstall() {
     _mt_load_env
-
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
     if ! _mt_installed; then
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${RED}        🗑️  Удаление MTProto${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
         echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
         _mt_press_enter; return
     fi
 
-    local _del_items=("✅  Да, удалить" "❌  Нет, не удалять")
-    local _del_actions=("yes" "no")
-    MENU_ESC_LABEL="Отмена"
-    show_arrow_menu "🗑️  Удаление MTProto" "${_del_items[@]}"
-    local _choice=$?
-    unset MENU_ESC_LABEL
-    [[ $_choice -eq 255 ]] && return
-    local _act="${_del_actions[$_choice]:-no}"
-    [[ "$_act" != "yes" ]] && return
-
-    clear
+    echo -e "    ${YELLOW}MTProto будет удалён с сервера${NC}"
+    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}         🗑️  Удаление MTProto${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    tput civis 2>/dev/null || true
+    while true; do
+        local _k=""
+        IFS= read -rsn1 _k
+        case "$_k" in
+            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
+            "")      break ;;
+        esac
+    done
+    tput cnorm 2>/dev/null || true
+    echo
     echo
 
     (if [ -d "$_MT_DIR" ]; then
         cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
-    show_spinner "Остановка контейнера" "Остановка контейнера"
+    show_spinner "Остановка контейнера..." "Контейнер остановлен"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
     rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
-    _mt_block_clear_all 2>/dev/null || true
-    if _mt_nginx_available; then : ; fi
     rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
-    show_spinner "Удаление остаточных файлов" "Удаление остаточных файлов"
+    show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
@@ -1169,146 +878,15 @@ _mt_do_update() {
 }
 
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
-_MT_DB="${_MT_DIR}/mtproto.db"             # SQLite-база всех данных MTProto
-_MT_NGINX_CONF="/opt/nginx/nginx.conf"     # nginx конфиг (stream-блок MTProto)
-_MT_NGINX_CONTAINER="remnawave-nginx"      # имя nginx-контейнера
+_MT_BLOCK_FILE="${_MT_DIR}/blocked_ips"   # формат: одна запись на строку (IP или CIDR)
+_MT_SEEN_FILE="${_MT_DIR}/seen_ips"       # история всех виденных клиентских IP
 
-# Инициализация схемы БД (вызывать при установке и при первом обращении)
-_mt_db_init() {
-    sqlite3 "$_MT_DB" <<'SQL' >/dev/null 2>&1
-PRAGMA journal_mode=WAL;
-CREATE TABLE IF NOT EXISTS seen_ips (
-    ip         TEXT PRIMARY KEY,
-    geo        TEXT    DEFAULT '',
-    geo_ts     INTEGER DEFAULT 0,
-    first_seen INTEGER DEFAULT (strftime('%s','now')),
-    last_seen  INTEGER DEFAULT (strftime('%s','now'))
-);
-CREATE TABLE IF NOT EXISTS blocked (
-    entry      TEXT PRIMARY KEY,
-    blocked_at INTEGER DEFAULT (strftime('%s','now'))
-);
-CREATE TABLE IF NOT EXISTS stats (
-    key   TEXT PRIMARY KEY,
-    value TEXT DEFAULT ''
-);
-SQL
-}
-
-# Создаёт БД если ещё не существует
-_mt_db_ensure() { [ -f "$_MT_DB" ] || _mt_db_init; }
-
-# ── seen_ips ──────────────────────────────────────────────────────────────
-_mt_db_seen_add() {
-    local _ip; _ip=$(_mt_strip_ip "$1")
-    sqlite3 "$_MT_DB" \
-        "INSERT INTO seen_ips(ip) VALUES('$_ip')
-         ON CONFLICT(ip) DO UPDATE SET last_seen=strftime('%s','now');" 2>/dev/null || true
-}
-_mt_db_seen_list() { sqlite3 "$_MT_DB" "SELECT ip FROM seen_ips;" 2>/dev/null; }
-
-# ── geo ───────────────────────────────────────────────────────────────────
-_mt_db_geo_get() { sqlite3 "$_MT_DB" "SELECT geo FROM seen_ips WHERE ip='$1';" 2>/dev/null; }
-_mt_db_geo_ts()  { sqlite3 "$_MT_DB" "SELECT geo_ts FROM seen_ips WHERE ip='$1';" 2>/dev/null; }
-_mt_db_geo_set() {
-    local _ip="$1" _geo="${2//\'/\'\'}"
-    sqlite3 "$_MT_DB" \
-        "INSERT INTO seen_ips(ip,geo,geo_ts) VALUES('$_ip','$_geo',strftime('%s','now'))
-         ON CONFLICT(ip) DO UPDATE SET geo='$_geo', geo_ts=strftime('%s','now');" 2>/dev/null || true
-}
-
-# ── blocked ───────────────────────────────────────────────────────────────
-_mt_db_blocked_add()  { sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry) VALUES('$1');" 2>/dev/null || true; }
-_mt_db_blocked_rm()   { sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE entry='$1';" 2>/dev/null || true; }
-_mt_db_blocked_has()  { [ "$(sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE entry='$1';" 2>/dev/null)" = "1" ]; }
-_mt_db_blocked_list() { sqlite3 "$_MT_DB" "SELECT entry FROM blocked;" 2>/dev/null; }
-_mt_db_blocked_count(){ sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked;" 2>/dev/null; }
-
-# ── stats ─────────────────────────────────────────────────────────────────
-_mt_db_stat_get() { sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='$1';" 2>/dev/null; }
-_mt_db_stat_set() { sqlite3 "$_MT_DB" "INSERT OR REPLACE INTO stats(key,value) VALUES('$1','$2');" 2>/dev/null || true; }
-
-# Однократная миграция данных из старых файлов в БД
-_mt_db_migrate() {
-    _mt_db_init
-    local _ip _e _esc _geo _q _co _ci
-    # Очистка IPv6-mapped адресов из БД (::ffff:x.x.x.x → x.x.x.x)
-    if sqlite3 "$_MT_DB" "SELECT ip FROM seen_ips WHERE ip LIKE '%::ffff:%' OR ip LIKE '[%';" 2>/dev/null | grep -q .; then
-        sqlite3 "$_MT_DB" <<'SQL' 2>/dev/null || true
-UPDATE seen_ips SET ip = REPLACE(REPLACE(REPLACE(ip, '[', ''), ']', ''), '::ffff:', '')
-WHERE ip LIKE '%::ffff:%' OR ip LIKE '[%';
-SQL
-    fi
-    # seen_ips
-    if [ -f "${_MT_DIR}/seen_ips" ]; then
-        while IFS= read -r _ip; do
-            [[ "$_ip" =~ ^[0-9] ]] || continue
-            sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO seen_ips(ip) VALUES('$_ip');" 2>/dev/null || true
-        done < "${_MT_DIR}/seen_ips"
-        mv "${_MT_DIR}/seen_ips" "${_MT_DIR}/seen_ips.migrated" 2>/dev/null || true
-    fi
-    # blocked_ips
-    if [ -f "${_MT_DIR}/blocked_ips" ]; then
-        while IFS= read -r _e; do
-            [[ "$_e" =~ ^[0-9] ]] || continue
-            sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry) VALUES('$_e');" 2>/dev/null || true
-        done < "${_MT_DIR}/blocked_ips"
-        mv "${_MT_DIR}/blocked_ips" "${_MT_DIR}/blocked_ips.migrated" 2>/dev/null || true
-    fi
-    # geo cache
-    if [ -f "/tmp/mtproto_geo" ]; then
-        while IFS='|' read -r _ip _geo; do
-            [[ "$_ip" =~ ^[0-9] ]] || continue
-            _esc="${_geo//\'/\'\'}"
-            sqlite3 "$_MT_DB" "UPDATE seen_ips SET geo='$_esc', geo_ts=strftime('%s','now') WHERE ip='$_ip' AND geo='';" 2>/dev/null || true
-        done < "/tmp/mtproto_geo"
-    fi
-    # stats
-    if [ -f "${_MT_DIR}/stats_max_connections" ]; then
-        local _v; _v=$(cat "${_MT_DIR}/stats_max_connections" 2>/dev/null | tr -dc '0-9')
-        [ -n "$_v" ] && sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO stats(key,value) VALUES('max_connections','$_v');" 2>/dev/null || true
-        mv "${_MT_DIR}/stats_max_connections" "${_MT_DIR}/stats_max_connections.migrated" 2>/dev/null || true
-    fi
-    if [ -f "${_MT_DIR}/stats_uptime_ts" ]; then
-        local _ts; _ts=$(cat "${_MT_DIR}/stats_uptime_ts" 2>/dev/null)
-        [ -n "$_ts" ] && sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO stats(key,value) VALUES('uptime_ts','$_ts');" 2>/dev/null || true
-        mv "${_MT_DIR}/stats_uptime_ts" "${_MT_DIR}/stats_uptime_ts.migrated" 2>/dev/null || true
-    fi
-}
-
-# Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями к MTProto.
-# При nginx: смотрим хостовые соединения на порт 443 (реальные клиентские IP).
-# Без nginx: смотрим ss на хосте на порт PROXY_PORT.
-_mt_strip_ip() {
-    # Убираем квадратные скобки и ::ffff: префикс IPv4-mapped IPv6
-    local _ip="$1"
-    _ip="${_ip#[}"; _ip="${_ip%]}"
-    _ip="${_ip#::ffff:}"; _ip="${_ip#::FFFF:}"
-    echo "$_ip"
-}
-
+# Возвращает список уникальных IP клиентов с ESTABLISHED-соединениями на порт 443.
+# TCP keepalive в контейнере = 30с → мёртвые соединения закрываются за ~60с.
 _mt_get_active_ips() {
-    _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        # MTProto за nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
-        # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
-        ss -tn state established 'sport = :443' 2>/dev/null \
-            | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
-            | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
-            | sort -u
-    else
-        # Docker DNAT: хостовой ss не видит соединения на порту контейнера.
-        # Используем nsenter в network namespace контейнера — mtg слушает на 3128 внутри.
-        local _pid
-        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-            nsenter -t "$_pid" -n ss -tn state established 'sport = :3128' 2>/dev/null \
-                | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
-                | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
-                | sort -u
-        fi
-    fi
+    docker exec "$_MT_CONTAINER" ss -tn state established 2>/dev/null \
+        | awk 'NR>1 && $3 ~ /:443$/ { peer=$4; sub(/:[0-9]+$/,"",peer); print peer }' \
+        | sort -u
 }
 
 # Использует iptables-legacy если Docker работает через него (иначе правила попадают в другую таблицу)
@@ -1321,193 +899,45 @@ _mt_ipt() {
     fi
 }
 
-# Добавить правило блокировки для IP/CIDR с учётом режима работы MTProto:
-#   port 443 + nginx stream (host mode) → INPUT -p tcp --dport 443
-#   port ≠ 443 (Docker direct)          → DOCKER-USER (FORWARD) + PREROUTING mangle
-_mt_ipt_block_add() {
-    local _entry="$1"
-    _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        # nginx слушает 443 в host-mode — блокируем в INPUT
-        _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
-            || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
-    else
-        # Docker DNAT: HOST:PORT → container:3128 — пакеты идут через FORWARD, не INPUT
-        # DOCKER-USER вызывается первым в FORWARD для всех форвардированных пакетов
-        _mt_ipt -C DOCKER-USER -s "$_entry" -j DROP 2>/dev/null \
-            || _mt_ipt -I DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
-        # Дополнительно: блокируем до DNAT в mangle PREROUTING на реальном порту
-        _mt_ipt -t mangle -C PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null \
-            || _mt_ipt -t mangle -I PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
-    fi
-}
-
-# Удалить правило блокировки
-_mt_ipt_block_del() {
-    local _entry="$1"
-    _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        _mt_ipt -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
-    else
-        _mt_ipt -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
-        _mt_ipt -t mangle -D PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
-    fi
-}
-
-# Сбросить текущие соединения заблокированного IP
+# Сбросить текущие соединения с IP (использует conntrack если доступен)
 _mt_kill_src() {
     local _src="$1"
-    # Предпочитаем conntrack — удаляет запись из таблицы состояний, пакеты перестают проходить
     if command -v conntrack >/dev/null 2>&1; then
         conntrack -D -s "$_src" >/dev/null 2>&1 || true
-        return
     fi
-    # Fallback: ss -K убивает сокет напрямую
-    _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        # Host mode: сокеты nginx видны на хосте
-        ss -K "src ${_src}" >/dev/null 2>&1 || true
-    else
-        # Docker mode: сокеты внутри network namespace контейнера
-        local _pid
-        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-            nsenter -t "$_pid" -n ss -K "src ${_src}" >/dev/null 2>&1 || true
-        fi
-    fi
-}
-
-# Перезагружает nginx контейнер (применяет изменения конфига)
-_mt_nginx_reload() {
-    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
-    docker exec "$_nc" nginx -s reload 2>/dev/null || true
-}
-
-# Проверяет доступность nginx контейнера
-_mt_nginx_available() {
-    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${_nc}$"
-}
-
-# Пишет stream-блок в nginx.conf и убирает прямые listen 443 из http-блоков
-_mt_nginx_stream_write() {
-    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
-    local _conf="${_MT_NGINX_CONF:-/opt/nginx/nginx.conf}"
-    _mt_load_env
-    [ ! -f "$_conf" ] && return
-
-    # Удаляем старый stream-блок если есть
-    python3 - "$_conf" <<'PYEOF'
-import sys, re
-path = sys.argv[1]
-with open(path) as f: content = f.read()
-# Remove old mtproto stream block
-content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
-# Restore any commented-out listen 443
-content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
-content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
-# Collect all HTTP server_names (exclude _ and empty)
-http_domains = re.findall(r'server_name\s+([^;]+);', content)
-domain_set = set()
-for entry in http_domains:
-    for d in entry.split():
-        if d != '_' and '.' in d:
-            domain_set.add(d)
-map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_set))
-# Build stream block
-stream_block = f"""\n# BEGIN_MTPROTO_STREAM
-stream {{
-    map $ssl_preread_server_name $mt_upstream {{
-{map_entries}
-        default                 127.0.0.1:8445;
-    }}
-
-    server {{
-        listen 443;
-        ssl_preread on;
-        proxy_pass $mt_upstream;
-    }}
-
-    # HTTP gate: proxy_protocol для сохранения реального IP → nginx http
-    server {{
-        listen 127.0.0.1:8444;
-        proxy_pass unix:/dev/shm/nginx.sock;
-        proxy_protocol on;
-    }}
-
-    # MTG gate: proxy_protocol для передачи реального IP → mtg:2
-    server {{
-        listen 127.0.0.1:8445;
-        proxy_pass 127.0.0.1:3128;
-        proxy_protocol on;
-    }}
-}}
-# END_MTPROTO_STREAM"""
-# Comment out direct 443 listen in http blocks
-content = content.replace('    listen 443 ssl;', '    #mt# listen 443 ssl;')
-content = content.replace('    listen 443 ssl default_server;', '    #mt# listen 443 ssl default_server;')
-# Insert stream block before http {
-content = re.sub(r'(\nhttp \{)', stream_block + r'\1', content, count=1)
-with open(path, 'w') as f: f.write(content)
-PYEOF
-    docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
-}
-
-# Удаляет stream-блок из nginx.conf, восстанавливает прямые listen 443
-_mt_nginx_stream_remove() {
-    local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
-    local _conf="${_MT_NGINX_CONF:-/opt/nginx/nginx.conf}"
-    [ ! -f "$_conf" ] && return
-    python3 - "$_conf" <<'PYEOF'
-import sys, re
-path = sys.argv[1]
-with open(path) as f: content = f.read()
-content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
-content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
-content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
-with open(path, 'w') as f: f.write(content)
-PYEOF
-    docker exec "$_nc" nginx -t 2>/dev/null && _mt_nginx_reload || true
 }
 
 _mt_block_apply() {
-    _mt_db_ensure
+    # Применяем все заблокированные записи из файла через iptables (DOCKER-USER)
+    # Вызывается при старте контейнера и из меню
+    # ВАЖНО: в DOCKER-USER пакеты уже прошли DNAT, поэтому dport = внутренний порт контейнера (443),
+    # а не внешний PROXY_PORT. Маппинг: ${PROXY_PORT}:443 в docker-compose.
+    [ ! -f "$_MT_BLOCK_FILE" ] && return
+    _mt_ipt -N DOCKER-USER 2>/dev/null || true
     while IFS= read -r _entry; do
-        [ -z "$_entry" ] && continue
-        _mt_ipt_block_add "$_entry"
-    done < <(_mt_db_blocked_list)
+        [[ "$_entry" =~ ^#|^$ ]] && continue
+        _mt_ipt -C DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ipt -I DOCKER-USER -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+    done < "$_MT_BLOCK_FILE"
 }
 
 _mt_block_clear_all() {
-    _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        _mt_ipt -S INPUT 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
-            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
-        done
-    else
-        _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
-            _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
-        done
-        _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
-            _mt_ipt -t mangle ${_rule/-A/-D} 2>/dev/null || true
-        done
-    fi
+    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-p tcp --dport 443 -j DROP" | while read -r _rule; do
+        _mt_ipt ${_rule/-A/-D} 2>/dev/null || true
+    done
 }
 
-# Проверяет, заблокирован ли IP (точно или через CIDR в таблице blocked)
+# Проверяет, заблокирован ли IP (точно или через CIDR в blocked_ips)
 _mt_ip_is_blocked() {
     local _ip="$1"
-    _mt_db_ensure
+    [ ! -f "$_MT_BLOCK_FILE" ] && return 1
     # Точное совпадение
-    _mt_db_blocked_has "$_ip" && return 0
-    # CIDR — только точным совпадением (уже выше)
+    grep -qxF "$_ip" "$_MT_BLOCK_FILE" 2>/dev/null && return 0
+    # CIDR-аргумент: проверяем только точным совпадением (уже выше), не идём в цикл
     [[ "$_ip" == */* ]] && return 1
-    # Проверяем покрытие CIDR из таблицы
+    # Проверяем покрытие CIDR: читаем строки вида x.x.x.x/yy
     while IFS= read -r _entry; do
+        [[ "$_entry" =~ ^#|^$|^[^0-9] ]] && continue
         [[ "$_entry" != */* ]] && continue
         local _net _pfx _ip_int _net_int _mask
         _net="${_entry%/*}"; _pfx="${_entry#*/}"
@@ -1515,7 +945,7 @@ _mt_ip_is_blocked() {
         _net_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net//./ })" 2>/dev/null) || continue
         _mask=$(( 0xFFFFFFFF << (32 - _pfx) & 0xFFFFFFFF ))
         [ $(( _ip_int & _mask )) -eq $(( _net_int & _mask )) ] && return 0
-    done < <(_mt_db_blocked_list)
+    done < "$_MT_BLOCK_FILE"
     return 1
 }
 
@@ -1525,16 +955,11 @@ _mt_do_access() {
     fi
     _mt_load_env
     mkdir -p "$_MT_DIR"
-    _mt_db_ensure
+    touch "$_MT_BLOCK_FILE" 2>/dev/null || true
 
-    # Устанавливаем conntrack-tools если отсутствует (нужен для мгновенного обрыва соединений)
-    if ! command -v conntrack >/dev/null 2>&1; then
-        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q conntrack >/dev/null 2>&1) &
-    fi
-
-    # Синхронизируем iptables с БД: если заблокированных нет — снимаем все DROP-правила (тихо)
+    # Синхронизируем iptables с файлом: если файл пустой — снимаем все DROP-правила (тихо)
     local _file_entries
-    _file_entries=$(_mt_db_blocked_count)
+    _file_entries=$(grep -Ev '^#|^$' "$_MT_BLOCK_FILE" 2>/dev/null | wc -l)
     if [ "${_file_entries:-0}" -eq 0 ]; then
         _mt_block_clear_all 2>/dev/null
     fi
@@ -1543,25 +968,28 @@ _mt_do_access() {
         # ── Актуальные данные ──────────────────────────────────────────────
         local -a _blocked_list=()
         while IFS= read -r _e; do
-            [ -n "$_e" ] && _blocked_list+=("$_e")
-        done < <(_mt_db_blocked_list)
+            [[ "$_e" =~ ^#|^$ ]] && continue
+            _blocked_list+=("$_e")
+        done < "$_MT_BLOCK_FILE"
 
         local _client_ips _cur_ips=()
         _client_ips=$(_mt_get_active_ips)
         while IFS= read -r _ip; do [ -n "$_ip" ] && _cur_ips+=("$_ip"); done <<< "$_client_ips"
 
-        # Сохраняем историю виденных IP в БД
+        # Сохраняем историю виденных IP
         if [ -n "$_client_ips" ]; then
+            touch "$_MT_SEEN_FILE" 2>/dev/null || true
             while IFS= read -r _gip; do
                 [ -z "$_gip" ] && continue
-                _mt_db_seen_add "$_gip"
+                grep -qxF "$_gip" "$_MT_SEEN_FILE" 2>/dev/null || echo "$_gip" >> "$_MT_SEEN_FILE"
             done <<< "$_client_ips"
         fi
 
         # ── Все виденные IP (история ∪ онлайн) ────────────────────────────
         local -a _all_ips=()
+        touch "$_MT_SEEN_FILE" 2>/dev/null || true
         local _combined
-        _combined=$(printf '%s\n' "$(_mt_db_seen_list)" "${_cur_ips[@]}")
+        _combined=$(cat "$_MT_SEEN_FILE" 2>/dev/null; printf '%s\n' "${_cur_ips[@]}")
         while IFS= read -r _ip; do
             [[ -z "$_ip" || "$_ip" =~ ^# ]] && continue
             _all_ips+=("$_ip")
@@ -1598,17 +1026,14 @@ _mt_do_access() {
         if [ ${#_all_ips[@]} -eq 0 ]; then
             _ip_items+=("${DARKGRAY}(нет данных о подключениях)${NC}"); _ip_vals+=("sep")
         else
-            local _sep_ac="──────────────────────────────────────"
-            local _hdr_ac="Список IP адресов:"
-            local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"${DARKGRAY}Список IP адресов:${NC}"); _ip_vals+=("sep")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
                 [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
                 local _geo_str
-                _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
+                _geo_str=$(grep "^${_ip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
+                [ -z "$_geo_str" ] && _geo_str="—"
                 local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
                 if _mt_ip_is_blocked "$_ip"; then
                     _ip_items+=("${RED}${_line}${NC}")
@@ -1625,11 +1050,9 @@ _mt_do_access() {
 
         # Подозрительные подсети (2+ IP из истории)
         if [ ${#_subnet_groups[@]} -gt 0 ]; then
-            local _hdr_sn2="Подозрительные подсети:"
-            local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_sn2_pad '' "$_hdr_sn2")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"${DARKGRAY}Подозрительные подсети:${NC}"); _ip_vals+=("sep")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             for _sn in "${_subnet_groups[@]}"; do
                 local _total="${_sn_cnt[$_sn]}"
                 # Считаем онлайн и заблокированных в этой подсети
@@ -1645,7 +1068,7 @@ _mt_do_access() {
                 for _gip in "${_all_ips[@]}"; do
                     local _g24; _g24=$(echo "$_gip" | awk -F. '{print $1"."$2"."$3".0/24"}')
                     [ "$_g24" != "$_sn" ] && continue
-                    local _gg; _gg=$(_mt_db_geo_get "$_gip")
+                    local _gg; _gg=$(grep "^${_gip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                     if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
                 done
                 local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
@@ -1672,31 +1095,19 @@ _mt_do_access() {
             [ "$_is_group" -eq 0 ] && _extra_cidrs+=("$_bn")
         done
         if [ ${#_extra_cidrs[@]} -gt 0 ]; then
-            local _hdr_bl="Заблокированные подсети:"
-            local _hdr_bl_pad=$(( (${#_sep_ac} - ${#_hdr_bl}) / 2 ))
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_bl_pad '' "$_hdr_bl")"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"${DARKGRAY}Заблокированные подсети:${NC}"); _ip_vals+=("sep")
+            _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
             for _bn in "${_extra_cidrs[@]}"; do
                 _ip_items+=("${RED}${_bn}${NC}")
                 _ip_vals+=("$_bn")
             done
         fi
 
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
         _ip_items+=("✏️   Ввести IP или CIDR вручную");      _ip_vals+=("manual")
-        _ip_items+=("🗑️   Очистить историю IP");              _ip_vals+=("clear_history")
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("──────────────────────────────────────"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                           _ip_vals+=("back")
-
-        # Находим индекс первого IP (пропускаем sep/заголовки)
-        local _first_ip_idx=0
-        for _fi in "${!_ip_vals[@]}"; do
-            if [ "${_ip_vals[$_fi]}" != "sep" ] && [ "${_ip_vals[$_fi]}" != "manual" ] && [ "${_ip_vals[$_fi]}" != "back" ]; then
-                _first_ip_idx=$_fi; break
-            fi
-        done
-        export MENU_INITIAL_IDX=$_first_ip_idx
 
         # Заголовок: центрированный с статистикой
         local _blk_total=${#_blocked_list[@]}
@@ -1710,30 +1121,6 @@ _mt_do_access() {
         case "$_sel" in
         sep) ;;
         back) return ;;
-        clear_history)
-            clear
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${RED}       🗑️  Очистить историю IP${NC}"
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo
-            echo -e " ${DARKGRAY}Будет удалена история всех виденных IP адресов.${NC}"
-            echo -e " ${DARKGRAY}Текущие заблокированные правила НЕ изменятся.${NC}"
-            echo
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "    ${BLUE}Enter${DARKGRAY}: Очистить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-            local _flush; read -s -r -t 0.1 _flush 2>/dev/null || true
-            local _ck
-            while true; do
-                IFS= read -rsn1 _ck 2>/dev/null
-                if [[ "$_ck" == $'\x1b' ]]; then break
-                elif [[ "$_ck" == "" ]]; then
-                    sqlite3 "$_MT_DB" "DELETE FROM seen_ips;" 2>/dev/null || true
-                    echo -e "${GREEN}✅ История IP очищена${NC}"
-                    sleep 1
-                    break
-                fi
-            done
-            ;;
         manual)
             clear
             echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
@@ -1750,11 +1137,11 @@ _mt_do_access() {
             _new_entry=$(echo "$_new_entry" | tr -d ' ')
             if [[ -n "$_new_entry" ]]; then
                 if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
-                    if _mt_db_blocked_has "$_new_entry"; then
+                    if grep -qxF "$_new_entry" "$_MT_BLOCK_FILE" 2>/dev/null; then
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
-                        _mt_db_blocked_add "$_new_entry"
-                        _mt_ipt_block_add "$_new_entry"
+                        echo "$_new_entry" >> "$_MT_BLOCK_FILE"
+                        _mt_ipt -I DOCKER-USER -s "$_new_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_new_entry"
                         echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                     fi
@@ -1778,7 +1165,7 @@ _mt_do_access() {
 
                 local -a _sn_items=()
                 for _sip in "${_sn_ips[@]}"; do
-                    local _sg; _sg=$(_mt_db_geo_get "$_sip")
+                    local _sg; _sg=$(grep "^${_sip}|" /tmp/mtproto_geo 2>/dev/null | head -1 | cut -d'|' -f2)
                     [ -z "$_sg" ] && _sg="—"
                     local _sline; _sline=$(printf '%-22s  %s' "$_sip" "$_sg")
                     if _mt_ip_is_blocked "$_sip"; then
@@ -1809,12 +1196,13 @@ _mt_do_access() {
                 elif [ "$_sc" -eq "$_sn_action_idx" ]; then
                     # Блок/разблок всей подсети как CIDR
                     if _mt_ip_is_blocked "$_sn_cidr"; then
-                        _mt_db_blocked_rm "$_sn_cidr"
-                        _mt_ipt_block_del "$_sn_cidr"
+                        grep -vxF "$_sn_cidr" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
+                        mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
+                        _mt_ipt -D DOCKER-USER -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Подсеть разблокирована: ${_sn_cidr}${NC}"
                     else
-                        _mt_db_blocked_add "$_sn_cidr"
-                        _mt_ipt_block_add "$_sn_cidr"
+                        echo "$_sn_cidr" >> "$_MT_BLOCK_FILE"
+                        _mt_ipt -I DOCKER-USER -s "$_sn_cidr" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sn_cidr"
                         echo -e "${GREEN}✅ Подсеть заблокирована: ${_sn_cidr}${NC}"
                     fi
@@ -1824,12 +1212,13 @@ _mt_do_access() {
                     # Клик на IP — toggle block
                     local _sip="${_sn_ips[$_sc]}"
                     if _mt_ip_is_blocked "$_sip"; then
-                        _mt_db_blocked_rm "$_sip"
-                        _mt_ipt_block_del "$_sip"
+                        grep -vxF "$_sip" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
+                        mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
+                        _mt_ipt -D DOCKER-USER -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         echo -e "${GREEN}✅ Разблокировано: ${_sip}${NC}"
                     else
-                        _mt_db_blocked_add "$_sip"
-                        _mt_ipt_block_add "$_sip"
+                        echo "$_sip" >> "$_MT_BLOCK_FILE"
+                        _mt_ipt -I DOCKER-USER -s "$_sip" -p tcp --dport 443 -j DROP 2>/dev/null || true
                         _mt_kill_src "$_sip"
                         echo -e "${GREEN}✅ Заблокировано: ${_sip}${NC}"
                     fi
@@ -1843,13 +1232,14 @@ _mt_do_access() {
             ;;
         *)
             if [[ -n "$_sel" ]]; then
-                if _mt_ip_is_blocked "$_sel"; then
-                    _mt_db_blocked_rm "$_sel"
-                    _mt_ipt_block_del "$_sel"
+                if grep -qxF "$_sel" "$_MT_BLOCK_FILE" 2>/dev/null; then
+                    grep -vxF "$_sel" "$_MT_BLOCK_FILE" > "${_MT_BLOCK_FILE}.tmp" || true
+                    mv "${_MT_BLOCK_FILE}.tmp" "$_MT_BLOCK_FILE" || true
+                    _mt_ipt -D DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     echo -e "${GREEN}✅ Разблокировано: ${_sel}${NC}"
                 else
-                    _mt_db_blocked_add "$_sel"
-                    _mt_ipt_block_add "$_sel"
+                    echo "$_sel" >> "$_MT_BLOCK_FILE"
+                    _mt_ipt -I DOCKER-USER -s "$_sel" -p tcp --dport 443 -j DROP 2>/dev/null || true
                     _mt_kill_src "$_sel"
                     echo -e "${GREEN}✅ Заблокировано: ${_sel}${NC}"
                 fi
