@@ -445,7 +445,11 @@ _mt_do_install() {
                 _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
                 if [ $? -eq 0 ]; then
                     if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
-                        (( _step++ ))
+                        if ss -tuln 2>/dev/null | grep -q ":${PROXY_PORT} "; then
+                            echo -e "${RED}✖ Порт ${PROXY_PORT} занят. Освободите его или выберите другой.${NC}"
+                        else
+                            (( _step++ ))
+                        fi
                     else
                         echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
                     fi
