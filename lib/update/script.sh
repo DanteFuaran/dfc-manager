@@ -326,18 +326,48 @@ manage_delete_components() {
     done
 }
 
-# Создаёт wrapper-скрипты вместо симлинков — исправляет ошибку
-# "shell-init: error retrieving current directory" когда CWD пересоздана Docker'ом
+# Создаёт бинарные лаунчеры rw/dfc — исправляет ошибку
+# "shell-init: error retrieving current directory: getcwd: cannot access parent directories"
+# когда CWD пересоздана Docker'ом (например /opt/remnanode удалена и создана заново).
+# Компилируем статический C-бинарник: он вызывает chdir("/opt") до любых shell-инициализаций.
 _install_bin_wrappers() {
     ln -sf "${DIR_SCRIPT}dfc-manager.sh" /usr/local/bin/dfc-manager 2>/dev/null || true
+
+    local _launcher_src="/tmp/.dfc_launcher_$$.c"
+    local _launcher_bin="/tmp/.dfc_launcher_$$"
+
+    cat > "$_launcher_src" << 'CSRC'
+#include <unistd.h>
+#define SCRIPT "/usr/local/dfc-manager/dfc-manager.sh"
+int main(int argc, char *argv[], char *envp[]) {
+    chdir("/opt");
+    argv[0] = SCRIPT;
+    execve(SCRIPT, argv, envp);
+    return 1;
+}
+CSRC
+
+    local _compiled=0
+    if command -v gcc >/dev/null 2>&1; then
+        gcc -O2 -static -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
+    fi
+    if [ "$_compiled" -eq 0 ] && command -v cc >/dev/null 2>&1; then
+        cc -O2 -static -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
+    fi
+    rm -f "$_launcher_src"
+
     for _cmd in dfc rw; do
-        cat > "/usr/local/bin/${_cmd}" << 'WRAP'
-#!/bin/sh
-cd /opt 2>/dev/null || cd / 2>/dev/null || true
-exec /usr/local/dfc-manager/dfc-manager.sh "$@"
-WRAP
-        chmod +x "/usr/local/bin/${_cmd}"
+        if [ "$_compiled" -eq 1 ]; then
+            cp "$_launcher_bin" "/usr/local/bin/${_cmd}"
+            chmod +x "/usr/local/bin/${_cmd}"
+        else
+            # Fallback: sh-wrapper — всё равно работает, просто печатает косметическую ошибку
+            printf '#!/bin/sh\ncd /opt 2>/dev/null || cd / 2>/dev/null || true\nexec /usr/local/dfc-manager/dfc-manager.sh "$@"\n' \
+                > "/usr/local/bin/${_cmd}"
+            chmod +x "/usr/local/bin/${_cmd}"
+        fi
     done
+    rm -f "$_launcher_bin"
 }
 
 install_script() {
