@@ -232,9 +232,34 @@ _mt_issue_cert() {
     local _domain="${1:-}" _force="${2:-}"
     [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 1
     [ -z "$_domain" ] && return 1
+    
+    # Проверяем основной путь и варианты с суффиксом (т.к. certbot может создать domain-0001, domain-0002 и т.д.)
     local _cert_dir="/etc/letsencrypt/live/${_domain}"
-    # Если сертификат уже есть и не форсируем перевыпуск — сразу успех
-    [ -f "${_cert_dir}/fullchain.pem" ] && [ -z "$_force" ] && return 0
+    local _found_cert_dir=""
+    
+    # Сначала ищем основную директорию
+    if [ -f "${_cert_dir}/fullchain.pem" ]; then
+        _found_cert_dir="$_cert_dir"
+    else
+        # Затем ищем варианты с суффиксом (domain-0001, domain-0002 и т.д.)
+        # Берём самый свежий (самый высокий номер)
+        local _latest_num=0
+        while IFS= read -r -d '' _dir; do
+            local _num="${_dir##*-}"
+            [[ "$_num" =~ ^[0-9]+$ ]] && (( _num > _latest_num )) && _latest_num="$_num"
+        done < <(find /etc/letsencrypt/live -maxdepth 1 -type d -name "${_domain}-[0-9]*" -print0 2>/dev/null)
+        
+        if [ $_latest_num -gt 0 ]; then
+            _found_cert_dir="/etc/letsencrypt/live/${_domain}-$(printf '%04d' $_latest_num)"
+            # Создаём symlink на основной путь для удобства
+            [ ! -e "$_cert_dir" ] && ln -sf "${_domain}-$(printf '%04d' $_latest_num)" "$_cert_dir" 2>/dev/null || true
+        fi
+    fi
+    
+    # Если сертификат найден и не форсируем перевыпуск — сразу успех
+    if [ -n "$_found_cert_dir" ] && [ -f "${_found_cert_dir}/fullchain.pem" ] && [ -z "$_force" ]; then
+        return 0
+    fi
 
     # DNS-проверка: блокируем certbot только если домен явно указывает на ЧУЖОЙ IP.
     # Если DNS не резолвится с этого сервера — не блокируем, пусть certbot сам попробует.
