@@ -1648,14 +1648,14 @@ _mt_do_access() {
         done
         local -a _subnet_groups=()
         for _sn in "${!_sn_cnt[@]}"; do
-            [ "${_sn_cnt[$_sn]}" -ge 2 ] && _subnet_groups+=("$_sn")
+            [ "${_sn_cnt[$_sn]}" -ge 3 ] && _subnet_groups+=("$_sn")
         done
         IFS=$'\n' _subnet_groups=($(printf '%s\n' "${_subnet_groups[@]}" | sort)); unset IFS
 
         declare -A _in_subnet=()
         for _ip in "${_all_ips[@]}"; do
             local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
-            [ "${_sn_cnt[$_s24]:-0}" -ge 2 ] && _in_subnet["$_ip"]=1
+            [ "${_sn_cnt[$_s24]:-0}" -ge 3 ] && _in_subnet["$_ip"]=1
         done
 
         local -a _blocked_cidrs=()
@@ -1695,12 +1695,21 @@ _mt_do_access() {
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
+        # Строка режима (кликабельный тоггл)
+        local _mode_label
+        if [ "$_access_mode" = "allow" ]; then
+            _mode_label="Режим работы: ${DARKGRAY}Черный список${NC} / ${GREEN}Белый список${NC}"
+        else
+            _mode_label="Режим работы: ${RED}Черный список${NC} / ${DARKGRAY}Белый список${NC}"
+        fi
+        _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+
         # Заголовок списка
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Список разрешённых IP адресов"
         else
-            _hdr_ac="Обнаруженные IP адреса"
+            _hdr_ac="История активных IP адресов"
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
         [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
@@ -1715,14 +1724,16 @@ _mt_do_access() {
                 [ "$_em_pad" -lt 0 ] && _em_pad=0
                 _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
             else
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 for _le in "${_list[@]}"; do
                     local _geo_str=""
                     [[ "$_le" != */* ]] && _geo_str=$(_mt_db_geo_get "$_le")
                     [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf '%-22s  %s' "$_le" "$_geo_str")
+                    local _line; _line=$(printf '%-15s     %s' "$_le" "$_geo_str")
                     _ip_items+=("${GREEN}${_line}${NC}")
                     _ip_vals+=("$_le")
                 done
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
             fi
         else
             # Режим блокировки: история всех виденных IP
@@ -1734,11 +1745,12 @@ _mt_do_access() {
                 _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
             else
                 local _has_solo=0
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 for _ip in "${_all_ips[@]}"; do
                     [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
                     local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
                     [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
+                    local _line; _line=$(printf '%-15s     %s' "$_ip" "$_geo_str")
                     local _in_l=false; _ip_in_list "$_ip" && _in_l=true
                     if [ "$_in_l" = true ]; then
                         _ip_items+=("${RED}${_line}${NC}")
@@ -1749,14 +1761,16 @@ _mt_do_access() {
                     fi
                     _ip_vals+=("$_ip"); _has_solo=1
                 done
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 [ "$_has_solo" -eq 0 ] && { _ip_items+=("${DARKGRAY}(все IP сгруппированы по подсетям)${NC}"); _ip_vals+=("sep"); }
 
                 if [ ${#_subnet_groups[@]} -gt 0 ]; then
-                    local _hdr_sn2="Подозрительные подсети:"
-                    local _hdr_sn2_pad=$(( (${#_sep_ac} - ${#_hdr_sn2}) / 2 ))
+                    local _hdr_sn2="Подозрительные подсети"
+                    local _hdr_sn2_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_sn2" | wc -m)) / 2 ))
                     _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
                     _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_sn2_pad '' "$_hdr_sn2")"); _ip_vals+=("sep")
                     _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+                    _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                     for _sn in "${_subnet_groups[@]}"; do
                         local _total="${_sn_cnt[$_sn]}"
                         local _on_cnt=0 _bl_cnt=0
@@ -1773,7 +1787,7 @@ _mt_do_access() {
                             local _gg; _gg=$(_mt_db_geo_get "$_gip")
                             if [ -n "$_gg" ]; then _sn_geo="$_gg"; break; fi
                         done
-                        local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
+                        local _sn_line; _sn_line=$(printf '%-15s     %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
                         local _sn_in_l=false; _ip_in_list "$_sn" && _sn_in_l=true
                         if [ "$_sn_in_l" = true ]; then
                             _ip_items+=("${RED}${_sn_line}${NC}")
@@ -1784,6 +1798,7 @@ _mt_do_access() {
                         fi
                         _ip_vals+=("sn:${_sn}")
                     done
+                    _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 fi
 
                 local -a _extra_cidrs=()
@@ -1832,7 +1847,7 @@ _mt_do_access() {
         done
         if [ "$_first_ip_idx" -eq -1 ]; then
             for _fi in "${!_ip_vals[@]}"; do
-                [ "${_ip_vals[$_fi]}" = "manual" ] && { _first_ip_idx=$_fi; break; }
+                [ "${_ip_vals[$_fi]}" = "toggle_mode" ] && { _first_ip_idx=$_fi; break; }
             done
         fi
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
