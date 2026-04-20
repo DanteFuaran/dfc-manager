@@ -182,7 +182,6 @@ _mt_save_config() {
 PROXY_PORT=${PROXY_PORT}
 PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
-FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
 PROXY_NAME=${PROXY_NAME:-}
 EOF
@@ -425,9 +424,8 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
+    local PROXY_PORT PROXY_SECRET SERVER_IP PROXY_TAG PROXY_NAME
     PROXY_PORT="8443"
-    FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
@@ -451,7 +449,7 @@ _mt_do_install() {
         done
     }
 
-    local _step=1 _secret_input=""
+    local _step=1
 
     while true; do
         case $_step in
@@ -550,25 +548,12 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            3) # Fake TLS домен
-                _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
+            3) # Секрет
+                _mt_read_input PROXY_SECRET "Секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
-                    (( _step++ ))
-                else
-                    _mt_erase_lines 1
-                    (( _step-- ))
-                fi
-                ;;
-            4) # Секрет
-                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
-                if [ $? -eq 0 ]; then
-                    if [ -z "$_secret_input" ]; then
-                        # Генерируем секрет и показываем сырой (без ee-обёртки)
-                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
-                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
-                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
-                        # Пользователь ввёл полный FakeTLS секрет — извлекаем сырой
-                        _secret_input="${_secret_input:2:32}"
+                    if [ -z "$PROXY_SECRET" ]; then
+                        PROXY_SECRET=$(openssl rand -hex 16 2>/dev/null)
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mСекрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${PROXY_SECRET}${NC}\n"
                     fi
                     (( _step++ ))
                 else
@@ -576,7 +561,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            5) # Telegram TAG
+            4) # Telegram TAG
                 echo
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
@@ -589,10 +574,6 @@ _mt_do_install() {
         esac
     done
 
-    # Финализация: собираем полный FakeTLS секрет из сырого + домен
-    local _domain_hex
-    _domain_hex=$(printf '%s' "$FAKE_DOMAIN" | xxd -ps | tr -d '\n')
-    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     echo
     echo
 
@@ -641,7 +622,6 @@ _mt_do_install() {
         echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
-        echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         [ -n "$PROXY_TAG" ] && echo -e " ${DARKGRAY}$(_mpad "Tag:" $_cw)${NC} ${WHITE}${PROXY_TAG}${NC}"
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
@@ -649,9 +629,8 @@ _mt_do_install() {
         echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
-        local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
         echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
-        echo -e "   ${YELLOW}${_raw_s}${NC}"
+        echo -e "   ${YELLOW}${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -700,16 +679,15 @@ _mt_do_config() {
     echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP:-}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT:-}${NC}"
     echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
-    echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN:-}${NC}"
+    echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT:-}${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылка для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo
-    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
     echo -e "${WHITE}🔑 Секрет для @MTProxybot:${NC}"
-    echo -e "   ${YELLOW}${_raw_s}${NC}"
+    echo -e "   ${YELLOW}${PROXY_SECRET}${NC}"
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -970,10 +948,9 @@ _mt_do_change_config() {
     _mt_load_env
 
     local _old_port="${PROXY_PORT:-}"
-    local _step=1 _secret_input=""
+    local _step=1
     local NEW_SERVER_IP="$SERVER_IP"
     local NEW_PROXY_PORT="$PROXY_PORT"
-    local NEW_FAKE_DOMAIN="$FAKE_DOMAIN"
     local NEW_PROXY_TAG="${PROXY_TAG:-}"
 
     _mt_erase_lines() {
@@ -1022,22 +999,16 @@ _mt_do_change_config() {
                         echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
                     fi
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            3) # Fake TLS домен
-                _mt_read_input NEW_FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${NEW_FAKE_DOMAIN}]${NC}:" "$NEW_FAKE_DOMAIN"
-                if [ $? -eq 0 ]; then (( _step++ ))
-                else _mt_erase_lines 1; (( _step-- )); fi ;;
-            4) # Секрет
-                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
+            3) # Секрет
+                _mt_read_input PROXY_SECRET "Секрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:" "${PROXY_SECRET:-}"
                 if [ $? -eq 0 ]; then
-                    if [ -z "$_secret_input" ]; then
-                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
-                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
-                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
-                        _secret_input="${_secret_input:2:32}"
+                    if [ -z "$PROXY_SECRET" ]; then
+                        PROXY_SECRET=$(openssl rand -hex 16 2>/dev/null)
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mСекрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:\033[0m ${YELLOW}${PROXY_SECRET}${NC}\n"
                     fi
                     (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
-            5) # Telegram TAG
+            4) # Telegram TAG
                 echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
@@ -1045,12 +1016,8 @@ _mt_do_change_config() {
         esac
     done
 
-    local _domain_hex
-    _domain_hex=$(printf '%s' "$NEW_FAKE_DOMAIN" | xxd -ps | tr -d '\n')
-    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
     SERVER_IP="$NEW_SERVER_IP"
     PROXY_PORT="$NEW_PROXY_PORT"
-    FAKE_DOMAIN="$NEW_FAKE_DOMAIN"
     PROXY_TAG="$NEW_PROXY_TAG"
     echo
     echo
@@ -1073,8 +1040,7 @@ _mt_do_change_config() {
 
     echo
     echo -e " ${DARKGRAY}tg:${NC}    ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    local _raw_s; _raw_s=$(_mt_extract_raw_secret "$PROXY_SECRET")
-    echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${_raw_s}${NC}"
+    echo -e " ${DARKGRAY}Секрет для @MTProxybot:${NC} ${YELLOW}${PROXY_SECRET}${NC}"
     echo
     _mt_press_enter
 }
