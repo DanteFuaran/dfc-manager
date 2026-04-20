@@ -554,17 +554,7 @@ _mt_do_install() {
                     (( _step++ ))
                 else
                     _mt_erase_lines 1
-                    # Если шаг 2 (порт) был пропущен из-за nginx — возвращаемся сразу на шаг 1
-                    if _mt_nginx_available; then
-                        _step=1
-                        clear
-                        echo -e "${BLUE}══════════════════════════════════════${NC}"
-                        echo -e "${GREEN}       📦 Установка MTProto${NC}"
-                        echo -e "${BLUE}══════════════════════════════════════${NC}"
-                        echo
-                    else
-                        (( _step-- ))
-                    fi
+                    (( _step-- ))
                 fi
                 ;;
             4) # Секрет
