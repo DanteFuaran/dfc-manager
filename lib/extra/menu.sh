@@ -1678,9 +1678,9 @@ _mt_do_access() {
         # Заголовок списка (выводим до IP)
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
-            _hdr_ac="Список разрешённых IP адресов:"
+            _hdr_ac="Список разрешённых IP адресов"
         else
-            _hdr_ac="Список заблокированных IP адресов:"
+            _hdr_ac="Список заблокированных IP адресов"
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - ${#_hdr_ac}) / 2 ))
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
@@ -1805,7 +1805,7 @@ _mt_do_access() {
         else
             _mode_word="${RED}Блокирование${NC}"; _list_word="Заблокировано"
         fi
-        local _stat_line="• Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}  • Режим: ${_mode_word}"
+        local _stat_line="• Режим: ${_mode_word}  • Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
         local _title="🚫 Управление доступом\n${_stat_line}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
