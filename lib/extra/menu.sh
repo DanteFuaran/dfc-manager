@@ -441,22 +441,47 @@ _mt_do_install() {
                 done
                 ;;
             2) # Порт
-                local _port_default="${PROXY_PORT:-$(_mt_find_free_port "8443")}"
-                _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
-                if [ $? -eq 0 ]; then
-                    if [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 )); then
-                        if ss -tuln 2>/dev/null | grep -q ":${PROXY_PORT} "; then
-                            echo -e "${RED}✖ Порт ${PROXY_PORT} занят. Освободите его или выберите другой.${NC}"
-                        else
-                            (( _step++ ))
-                        fi
-                    else
-                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                local _port_default="8443"
+                while true; do
+                    _mt_read_input PROXY_PORT "Порт прокси ${DARKGRAY}[${_port_default}]${NC}:" "$_port_default"
+                    if [ $? -eq 1 ]; then
+                        _mt_erase_lines 1
+                        (( _step-- ))
+                        break
                     fi
-                else
-                    _mt_erase_lines 1
-                    (( _step-- ))
-                fi
+                    if ! ([[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && (( PROXY_PORT >= 1 && PROXY_PORT <= 65535 ))); then
+                        _mt_erase_lines 1
+                        echo -e "${RED}✖ Порт должен быть числом от 1 до 65535${NC}"
+                        sleep 1
+                        _mt_erase_lines 1
+                        continue
+                    fi
+                    if ss -tuln 2>/dev/null | grep -q ":${PROXY_PORT} "; then
+                        echo
+                        echo -e "${BLUE}══════════════════════════════════════${NC}"
+                        echo -e "   ${RED}✖ Порт ${PROXY_PORT} занят${DARKGRAY} — освободите или выберите другой${NC}"
+                        echo -e "${BLUE}══════════════════════════════════════${NC}"
+                        echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+                        tput civis 2>/dev/null || true
+                        local _pk
+                        while true; do
+                            IFS= read -rsn1 _pk
+                            if [[ "$_pk" == $'\x1b' ]]; then
+                                tput cnorm 2>/dev/null || true
+                                _mt_erase_lines 4
+                                (( _step-- ))
+                                break 2
+                            elif [[ "$_pk" == "" ]]; then
+                                tput cnorm 2>/dev/null || true
+                                _mt_erase_lines 4
+                                break
+                            fi
+                        done
+                        continue
+                    fi
+                    (( _step++ ))
+                    break
+                done
                 ;;
             3) # Fake TLS домен
                 _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
