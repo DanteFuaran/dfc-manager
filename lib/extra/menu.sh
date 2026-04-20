@@ -191,7 +191,7 @@ EOF
 # telegrammessenger/proxy принимает ТОЛЬКО raw 32-hex в SECRET (без ee-префикса)
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    local _raw_secret; _raw_secret=$(_mt_extract_raw_secret "$PROXY_SECRET")
+    local _raw_secret; _raw_secret=$PROXY_SECRET
     cat > "${_MT_DIR}/docker-compose.yml" << COMPOSE
 services:
   mtproto-proxy:
@@ -483,12 +483,9 @@ _mt_do_install() {
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$_secret_input" ]; then
-                        # Генерируем raw 32-hex и показываем на той же строке
-                        _secret_input=$(openssl rand -hex 16 2>/dev/null)
+                        # Генерируем FakeTLS secret (ee + domain_hex + random = 32 символа)
+                        _secret_input=$(_mt_generate_fake_tls_secret "$FAKE_DOMAIN")
                         printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter для создания нового]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
-                    elif [[ "$_secret_input" =~ ^[Ee]{2} ]] && [ ${#_secret_input} -gt 34 ]; then
-                        # Ввели полный FakeTLS секрет — извлекаем raw
-                        _secret_input="${_secret_input:2:32}"
                     fi
                     (( _step++ ))
                 else
@@ -509,10 +506,8 @@ _mt_do_install() {
         esac
     done
 
-    # Финализация: полный FakeTLS secret (ee + raw + domain_hex) хранится в .env и ссылке
-    local _domain_hex
-    _domain_hex=$(printf '%s' "$FAKE_DOMAIN" | xxd -ps | tr -d '\n')
-    PROXY_SECRET="ee${_secret_input}${_domain_hex}"
+    # Финализация: PROXY_SECRET = введённый или автогенерированный FakeTLS (32 символа)
+    PROXY_SECRET="$_secret_input"
     echo
     echo
 
@@ -969,17 +964,15 @@ _mt_do_change_config() {
                 if [ $? -eq 0 ]; then (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             4) # Секрет
-                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
-                if [ $? -eq 0 ]; then (( _step++ ))
+                _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:" ""
+                if [ $? -eq 0 ]; then
+                    if [ -z "$_secret_input" ]; then
+                        _secret_input=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
+                        printf "\033[A\r\033[K\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33mВведите секрет ${DARKGRAY}[Enter — сохранить текущий]${NC}:\033[0m ${YELLOW}${_secret_input}${NC}\n"
+                    fi
+                    (( _step++ ))
                 else _mt_erase_lines 1; (( _step-- )); fi ;;
             5) # Показать секрет + Telegram TAG
-                local _disp_secret
-                if [ -n "$_secret_input" ]; then
-                    _disp_secret="$_secret_input"
-                else
-                    _disp_secret=$(_mt_generate_fake_tls_secret "$NEW_FAKE_DOMAIN")
-                fi
-                echo -e "   ${DARKGRAY}Секрет:${NC} ${YELLOW}${_disp_secret}${NC}"
                 echo
                 _mt_read_input NEW_PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${NEW_PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then break
