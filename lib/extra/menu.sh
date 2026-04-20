@@ -536,15 +536,17 @@ _mt_do_install() {
                 fi
                 ;;
             4) # Fake TLS домен
+                echo
                 _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then
                     (( _step++ ))
                 else
-                    _mt_erase_lines 1
+                    _mt_erase_lines 2
                     (( _step-- ))
                 fi
                 ;;
             5) # Секрет — inline отображение при авто-генерации
+                echo
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$_secret_input" ]; then
@@ -553,7 +555,7 @@ _mt_do_install() {
                     fi
                     (( _step++ ))
                 else
-                    _mt_erase_lines 1
+                    _mt_erase_lines 2
                     (( _step-- ))
                 fi
                 ;;
