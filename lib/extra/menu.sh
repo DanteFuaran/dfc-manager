@@ -1347,7 +1347,7 @@ _mt_get_active_ips() {
         local _pid
         _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
         if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-            nsenter -t "$_pid" -n ss -tn state established 'sport = :3128' 2>/dev/null \
+            nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
                 | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
                 | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
                 | sort -u
