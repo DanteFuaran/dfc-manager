@@ -1672,10 +1672,22 @@ _mt_do_access() {
             return 1
         }
 
+        local _list_count=${#_list[@]}
+        local _mode_word _list_word
+        if [ "$_access_mode" = "allow" ]; then
+            _mode_word="${GREEN}Разрешение${NC}"; _list_word="Разрешено"
+        else
+            _mode_word="${RED}Блокирование${NC}"; _list_word="Заблокировано"
+        fi
+        local _stat_line="• Режим: ${_mode_word}  • Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
+
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Заголовок списка (выводим до IP)
+        # Строка статистики (вне рамки заголовка)
+        _ip_items+=($'\x01'$'\e[0m'"${_stat_line}"); _ip_vals+=("sep")
+
+        # Заголовок списка
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Список разрешённых IP адресов"
@@ -1689,8 +1701,8 @@ _mt_do_access() {
 
         if [ ${#_all_ips[@]} -eq 0 ]; then
             local _empty_msg
-            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых адресов" || _empty_msg="Нет заблокированных адресов"
-            _ip_items+=("${DARKGRAY}${_empty_msg}${NC}"); _ip_vals+=("sep")
+            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых пользователей" || _empty_msg="Нет заблокированных пользователей"
+            _ip_items+=($'\x01'"${_empty_msg}"); _ip_vals+=("sep")
         else
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
@@ -1785,28 +1797,27 @@ _mt_do_access() {
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("$_toggle_label");                              _ip_vals+=("toggle_mode")
         _ip_items+=("✏️   Добавить IP или группу в список");       _ip_vals+=("manual")
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("🗑️   Очистить список");                       _ip_vals+=("clear_list")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад");                                  _ip_vals+=("back")
 
-        local _first_ip_idx=0
+        local _first_ip_idx=-1
         for _fi in "${!_ip_vals[@]}"; do
             local _v="${_ip_vals[$_fi]}"
             if [[ "$_v" != "sep" && "$_v" != "toggle_mode" && "$_v" != "manual" && "$_v" != "clear_list" && "$_v" != "back" ]]; then
                 _first_ip_idx=$_fi; break
             fi
         done
+        if [ "$_first_ip_idx" -eq -1 ]; then
+            for _fi in "${!_ip_vals[@]}"; do
+                [ "${_ip_vals[$_fi]}" = "toggle_mode" ] && { _first_ip_idx=$_fi; break; }
+            done
+        fi
+        [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
         export MENU_INITIAL_IDX=$_first_ip_idx
 
-        local _list_count=${#_list[@]}
-        local _mode_word _list_word _mode_color
-        if [ "$_access_mode" = "allow" ]; then
-            _mode_word="${GREEN}Разрешение${NC}"; _list_word="Разрешено"
-        else
-            _mode_word="${RED}Блокирование${NC}"; _list_word="Заблокировано"
-        fi
-        local _stat_line="• Режим: ${_mode_word}  • Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
-        local _title="🚫 Управление доступом\n${_stat_line}"
+        local _title="🚫 Управление доступом"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
