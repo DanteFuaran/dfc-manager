@@ -336,17 +336,23 @@ _mt_write_proxy_page() {
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#17212b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
 .card{text-align:center;padding:2.5rem 2rem;max-width:360px;width:100%}
-.logo{width:72px;height:72px;margin:0 auto 1.5rem;display:block}
 h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
 .sub{color:#7a9db8;font-size:.95rem;margin-bottom:2rem}
 .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 2rem;background:#2b5278;border-radius:10px;color:#fff;text-decoration:none;font-size:1rem;font-weight:500;transition:background .2s,transform .1s}
 .btn:hover{background:#3a6d9e}.btn:active{transform:scale(.97)}
 .btn svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo-wrap{width:96px;height:96px;margin:0 auto 1.5rem;position:relative;display:flex;align-items:center;justify-content:center}
+.logo-wrap .logo{width:72px;height:72px;margin:0;display:block}
+.spinner{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(42,171,238,.2);border-top-color:#2AABEE;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div class="card">
+  <div class="logo-wrap">
+  <div class="spinner"></div>
   <svg class="logo" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="tg" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse"><stop stop-color="#2AABEE"/><stop offset="1" stop-color="#229ED9"/></linearGradient></defs><circle cx="120" cy="120" r="120" fill="url(#tg)"/><path d="M54 117.5c27.9-12.2 46.5-20.2 55.9-24.1 26.6-11.1 32.1-13 35.7-13.1 0.8 0 2.6 0.2 3.7 1.2 1 0.8 1.2 1.9 1.3 2.7 0.1 0.8 0.3 2.5 0.1 3.9-1.5 16-8.1 54.8-11.5 72.7-1.4 7.6-4.2 10.1-6.9 10.4-5.9 0.5-10.3-3.9-16-7.6-8.9-5.8-13.9-9.4-22.5-15.1-9.9-6.5-3.5-10.1 2.2-16 1.5-1.5 27.2-24.9 27.7-27 0.1-0.3 0.1-1.4-0.5-1.9-0.6-0.6-1.5-0.4-2.2-0.2-0.9 0.2-15.7 10-44.3 29.4-4.2 2.9-8 4.3-11.4 4.2-3.7-0.1-10.9-2.1-16.3-3.9-6.5-2.1-11.7-3.3-11.3-6.9 0.2-1.9 2.8-3.8 7.3-5.8z" fill="white"/></svg>
+  </div>
   <h1>${_display_name}</h1>
   <div class="sub">Телеграм прокси</div>
   <a class="btn" id="btn" href="${_tg_url}">
@@ -1698,9 +1704,9 @@ _mt_do_access() {
         # Строка режима (кликабельный тоггл)
         local _mode_label
         if [ "$_access_mode" = "allow" ]; then
-            _mode_label="Режим работы: ${DARKGRAY}Черный список${NC} / ${GREEN}Белый список${NC}"
+            _mode_label="🔄  Режим работы: ${GREEN}Белый список${NC}"
         else
-            _mode_label="Режим работы: ${RED}Черный список${NC} / ${DARKGRAY}Белый список${NC}"
+            _mode_label="🔄  Режим работы: ${RED}Черный список${NC}"
         fi
         _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
 
@@ -1823,20 +1829,14 @@ _mt_do_access() {
             fi
         fi
 
-        local _toggle_label
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         if [ "$_access_mode" = "allow" ]; then
-            _toggle_label="🔄  Переключить режим на ${RED}Блокирование${NC}"
-        else
-            _toggle_label="🔄  Переключить режим на ${GREEN}Разрешение${NC}"
+            _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         fi
-
+        _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("✏️   Добавить IP или группу в список");       _ip_vals+=("manual")
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("$_toggle_label");                              _ip_vals+=("toggle_mode")
-        _ip_items+=("🗑️   Очистить список");                       _ip_vals+=("clear_list")
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("⬅️   Назад");                                  _ip_vals+=("back")
+        _ip_items+=("⬅️   Назад"); _ip_vals+=("back")
 
         local _first_ip_idx=-1
         for _fi in "${!_ip_vals[@]}"; do
