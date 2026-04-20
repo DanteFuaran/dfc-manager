@@ -1727,11 +1727,6 @@ _mt_do_access() {
             _mode_label="🔄  Режим работы: ${RED}Черный список${NC}"
         fi
 
-        # Статистика вверху списка
-        _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
-        _ip_items+=($'\x01'"${_stat_padded}"); _ip_vals+=("sep")
-        _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
-
         # Заголовок списка
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
@@ -1741,7 +1736,6 @@ _mt_do_access() {
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
         [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
@@ -1751,7 +1745,9 @@ _mt_do_access() {
                 local _empty_msg="Нет разрешённых IP адресов"
                 local _em_pad=$(( (${#_sep_ac} - $(printf '%s' "$_empty_msg" | wc -m)) / 2 ))
                 [ "$_em_pad" -lt 0 ] && _em_pad=0
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
+                _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
             else
                 _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
                 for _le in "${_list[@]}"; do
@@ -1853,11 +1849,16 @@ _mt_do_access() {
         fi
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
         if [ "$_access_mode" = "allow" ]; then
             _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
+            _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+        else
+            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         fi
-        _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=("⬅️   Назад"); _ip_vals+=("back")
 
@@ -1876,7 +1877,7 @@ _mt_do_access() {
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
         export MENU_INITIAL_IDX=$_first_ip_idx
 
-        local _title="🚫 Управление доступом"
+        local _title="🚫 Управление доступом\n${_stat_padded}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
