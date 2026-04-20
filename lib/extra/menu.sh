@@ -1841,7 +1841,6 @@ _mt_do_access() {
             done
         fi
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
-        export MENU_NO_BLANK=1
         export MENU_INITIAL_IDX=$_first_ip_idx
 
         local _title="🚫 Управление доступом\n${_stat_padded}"
