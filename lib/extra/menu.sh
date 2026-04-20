@@ -1243,8 +1243,10 @@ CREATE TABLE IF NOT EXISTS seen_ips (
     last_seen  INTEGER DEFAULT (strftime('%s','now'))
 );
 CREATE TABLE IF NOT EXISTS blocked (
-    entry      TEXT PRIMARY KEY,
-    blocked_at INTEGER DEFAULT (strftime('%s','now'))
+    entry      TEXT,
+    mode       TEXT    DEFAULT 'block',
+    blocked_at INTEGER DEFAULT (strftime('%s','now')),
+    PRIMARY KEY (entry, mode)
 );
 CREATE TABLE IF NOT EXISTS stats (
     key   TEXT PRIMARY KEY,
@@ -1253,8 +1255,24 @@ CREATE TABLE IF NOT EXISTS stats (
 SQL
 }
 
-# Создаёт БД если ещё не существует
-_mt_db_ensure() { [ -f "$_MT_DB" ] || _mt_db_init; }
+# Создаёт БД если ещё не существует, и мигрирует схему если нужно
+_mt_db_ensure() {
+    [ -f "$_MT_DB" ] || _mt_db_init
+    # Миграция: добавляем колонку mode в blocked если ещё нет
+    if ! sqlite3 "$_MT_DB" "SELECT mode FROM blocked LIMIT 1;" >/dev/null 2>&1; then
+        sqlite3 "$_MT_DB" <<'SQL' 2>/dev/null || true
+CREATE TABLE IF NOT EXISTS blocked_v2 (
+    entry      TEXT,
+    mode       TEXT    DEFAULT 'block',
+    blocked_at INTEGER DEFAULT (strftime('%s','now')),
+    PRIMARY KEY (entry, mode)
+);
+INSERT OR IGNORE INTO blocked_v2(entry, mode, blocked_at) SELECT entry, 'block', blocked_at FROM blocked;
+DROP TABLE blocked;
+ALTER TABLE blocked_v2 RENAME TO blocked;
+SQL
+    fi
+}
 
 # ── seen_ips ──────────────────────────────────────────────────────────────
 _mt_db_seen_add() {
@@ -1276,11 +1294,11 @@ _mt_db_geo_set() {
 }
 
 # ── blocked ───────────────────────────────────────────────────────────────
-_mt_db_blocked_add()  { sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry) VALUES('$1');" 2>/dev/null || true; }
-_mt_db_blocked_rm()   { sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE entry='$1';" 2>/dev/null || true; }
-_mt_db_blocked_has()  { [ "$(sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE entry='$1';" 2>/dev/null)" = "1" ]; }
-_mt_db_blocked_list() { sqlite3 "$_MT_DB" "SELECT entry FROM blocked;" 2>/dev/null; }
-_mt_db_blocked_count(){ sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked;" 2>/dev/null; }
+_mt_db_blocked_add()  { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry,mode) VALUES('$_e','$_m');" 2>/dev/null || true; }
+_mt_db_blocked_rm()   { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE entry='$_e' AND mode='$_m';" 2>/dev/null || true; }
+_mt_db_blocked_has()  { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; [ "$(sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE entry='$_e' AND mode='$_m';" 2>/dev/null)" = "1" ]; }
+_mt_db_blocked_list() { local _m="${1:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "SELECT entry FROM blocked WHERE mode='$_m';" 2>/dev/null; }
+_mt_db_blocked_count(){ local _m="${1:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE mode='$_m';" 2>/dev/null; }
 _mt_db_mode_get()  { local _m; _m=$(sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='access_mode';" 2>/dev/null); echo "${_m:-block}"; }
 _mt_db_mode_set()  { sqlite3 "$_MT_DB" "INSERT OR REPLACE INTO stats(key,value) VALUES('access_mode','$1');" 2>/dev/null || true; }
 
@@ -1543,7 +1561,7 @@ _mt_ipt_allow_apply() {
             [ -z "$_e" ] && continue
             _mt_ipt -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
                 || _mt_ipt -I INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-        done < <(_mt_db_blocked_list)
+        done < <(_mt_db_blocked_list allow)
         _mt_ipt -C INPUT -p tcp --dport 443 -j DROP 2>/dev/null \
             || _mt_ipt -A INPUT -p tcp --dport 443 -j DROP 2>/dev/null || true
     else
@@ -1551,7 +1569,7 @@ _mt_ipt_allow_apply() {
             [ -z "$_e" ] && continue
             _mt_ipt -t mangle -C PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null \
                 || _mt_ipt -t mangle -I PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null || true
-        done < <(_mt_db_blocked_list)
+        done < <(_mt_db_blocked_list allow)
         _mt_ipt -t mangle -C PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null \
             || _mt_ipt -t mangle -A PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
     fi
@@ -1566,7 +1584,7 @@ _mt_block_apply() {
         while IFS= read -r _entry; do
             [ -z "$_entry" ] && continue
             _mt_ipt_block_add "$_entry"
-        done < <(_mt_db_blocked_list)
+        done < <(_mt_db_blocked_list block)
     fi
 }
 
@@ -1592,7 +1610,7 @@ _mt_ip_is_blocked() {
     local _ip="$1"
     _mt_db_ensure
     # Точное совпадение
-    _mt_db_blocked_has "$_ip" && return 0
+    _mt_db_blocked_has "$_ip" block && return 0
     # CIDR — только точным совпадением (уже выше)
     [[ "$_ip" == */* ]] && return 1
     # Проверяем покрытие CIDR из таблицы
@@ -1604,7 +1622,7 @@ _mt_ip_is_blocked() {
         _net_int=$(printf '%d' "0x$(printf '%02x%02x%02x%02x' ${_net//./ })" 2>/dev/null) || continue
         _mask=$(( 0xFFFFFFFF << (32 - _pfx) & 0xFFFFFFFF ))
         [ $(( _ip_int & _mask )) -eq $(( _net_int & _mask )) ] && return 0
-    done < <(_mt_db_blocked_list)
+    done < <(_mt_db_blocked_list block)
     return 1
 }
 
@@ -1626,7 +1644,7 @@ _mt_do_access() {
         local -a _list=()
         while IFS= read -r _e; do
             [ -n "$_e" ] && _list+=("$_e")
-        done < <(_mt_db_blocked_list)
+        done < <(_mt_db_blocked_list "$_access_mode")
 
         local _client_ips _cur_ips=()
         _client_ips=$(_mt_get_active_ips)
@@ -1701,14 +1719,18 @@ _mt_do_access() {
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Строка режима (кликабельный тоггл)
+        # Строка режима (кликабельный тоггл) — будет добавлена внизу
         local _mode_label
         if [ "$_access_mode" = "allow" ]; then
             _mode_label="🔄  Режим работы: ${GREEN}Белый список${NC}"
         else
             _mode_label="🔄  Режим работы: ${RED}Черный список${NC}"
         fi
-        _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+
+        # Статистика вверху списка
+        _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
+        _ip_items+=($'\x01'"${_stat_padded}"); _ip_vals+=("sep")
+        _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
 
         # Заголовок списка
         local _hdr_ac
@@ -1719,6 +1741,7 @@ _mt_do_access() {
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
         [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
+        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
@@ -1830,9 +1853,9 @@ _mt_do_access() {
         fi
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+        _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
         if [ "$_access_mode" = "allow" ]; then
             _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         fi
         _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
@@ -1853,7 +1876,7 @@ _mt_do_access() {
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
         export MENU_INITIAL_IDX=$_first_ip_idx
 
-        local _title="🚫 Управление доступом\n${_stat_padded}"
+        local _title="🚫 Управление доступом"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
@@ -1894,7 +1917,7 @@ _mt_do_access() {
                 IFS= read -rsn1 _ck 2>/dev/null
                 if [[ "$_ck" == $'\x1b' ]]; then break
                 elif [[ "$_ck" == "" ]]; then
-                    sqlite3 "$_MT_DB" "DELETE FROM blocked;" 2>/dev/null || true
+                    sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE mode='${_access_mode}';" 2>/dev/null || true
                     _mt_block_clear_all 2>/dev/null
                     echo -e "${GREEN}✅ Список очищен${NC}"
                     sleep 1; break
