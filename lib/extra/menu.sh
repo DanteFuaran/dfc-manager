@@ -1690,14 +1690,12 @@ _mt_do_access() {
         local _stat_plain="• Онлайн: ${#_cur_ips[@]}  • ${_list_word}: ${_list_count}"
         local _stat_pad; _stat_pad=$(( (38 - $(printf '%s' "$_stat_plain" | wc -m)) / 2 ))
         [ "$_stat_pad" -lt 0 ] && _stat_pad=0
+        local _stat_padded; printf -v _stat_padded '%*s%s' "$_stat_pad" '' "$_stat_plain"
 
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Строка статистики (выровненная, без пустой строки до нее — MENU_NO_BLANK)
-        _ip_items+=($'\x01'"$(printf '%*s%s' "$_stat_pad" '' "$_stat_plain")"); _ip_vals+=("sep")
-
-        # Заголовок списка
+        # Заголовок списка (cразу после рамки — MENU_NO_BLANK)
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Список разрешённых IP адресов"
@@ -1705,14 +1703,19 @@ _mt_do_access() {
             _hdr_ac="Список заблокированных IP адресов"
         fi
         local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
         if [ ${#_all_ips[@]} -eq 0 ]; then
             local _empty_msg
-            [ "$_access_mode" = "allow" ] && _empty_msg="Нет разрешённых IP" || _empty_msg="Нет запрещённых IP"
-            _ip_items+=($'\x01'"${_empty_msg}"); _ip_vals+=("sep")
+            if [ "$_access_mode" = "allow" ]; then
+                _empty_msg="Нет разрешённых IP адресов"
+            else
+                _empty_msg="Нет заблокированных IP адресов"
+            fi
+            local _em_pad=$(( (${#_sep_ac} - $(printf '%s' "$_empty_msg" | wc -m)) / 2 ))
+            [ "$_em_pad" -lt 0 ] && _em_pad=0
+            _ip_items+=($'\x01'"$(printf '%*s%s' "$_em_pad" '' "$_empty_msg")"); _ip_vals+=("sep")
         else
             local _has_solo=0
             for _ip in "${_all_ips[@]}"; do
@@ -1722,10 +1725,13 @@ _mt_do_access() {
                 local _line; _line=$(printf '%-22s  %s' "$_ip" "$_geo_str")
                 local _in_l=false; _ip_in_list "$_ip" && _in_l=true
                 if [ "$_access_mode" = "allow" ]; then
-                    [ "$_in_l" = true ] && _ip_items+=("${GREEN}${_line}${NC}") \
-                        || ( printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip" \
-                             && _ip_items+=("${RED}${_line}${NC}") \
-                             || _ip_items+=("$_line") )
+                    if [ "$_in_l" = true ]; then
+                        _ip_items+=("${GREEN}${_line}${NC}")
+                    elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
+                        _ip_items+=("${RED}${_line}${NC}")
+                    else
+                        _ip_items+=("$_line")
+                    fi
                 else
                     if [ "$_in_l" = true ]; then
                         _ip_items+=("${RED}${_line}${NC}")
@@ -1765,11 +1771,21 @@ _mt_do_access() {
                 local _sn_line; _sn_line=$(printf '%-22s  %s (%d/%d)' "$_sn" "$_sn_geo" "$_bl_cnt" "$_total")
                 local _sn_in_l=false; _ip_in_list "$_sn" && _sn_in_l=true
                 if [ "$_access_mode" = "allow" ]; then
-                    [ "$_sn_in_l" = true ] && _ip_items+=("${GREEN}${_sn_line}${NC}") \
-                        || ( [ "$_on_cnt" -gt 0 ] && _ip_items+=("${RED}${_sn_line}${NC}") || _ip_items+=("$_sn_line") )
+                    if [ "$_sn_in_l" = true ]; then
+                        _ip_items+=("${GREEN}${_sn_line}${NC}")
+                    elif [ "$_on_cnt" -gt 0 ]; then
+                        _ip_items+=("${RED}${_sn_line}${NC}")
+                    else
+                        _ip_items+=("$_sn_line")
+                    fi
                 else
-                    [ "$_sn_in_l" = true ] && _ip_items+=("${RED}${_sn_line}${NC}") \
-                        || ( [ "$_on_cnt" -gt 0 ] && _ip_items+=("${GREEN}${_sn_line}${NC}") || _ip_items+=("$_sn_line") )
+                    if [ "$_sn_in_l" = true ]; then
+                        _ip_items+=("${RED}${_sn_line}${NC}")
+                    elif [ "$_on_cnt" -gt 0 ]; then
+                        _ip_items+=("${GREEN}${_sn_line}${NC}")
+                    else
+                        _ip_items+=("$_sn_line")
+                    fi
                 fi
                 _ip_vals+=("sn:${_sn}")
             done
@@ -1828,7 +1844,7 @@ _mt_do_access() {
         export MENU_NO_BLANK=1
         export MENU_INITIAL_IDX=$_first_ip_idx
 
-        local _title="🚫 Управление доступом"
+        local _title="🚫 Управление доступом\n${_stat_padded}"
 
         show_arrow_menu "$_title" "${_ip_items[@]}"
         local _ic=$?
