@@ -319,6 +319,9 @@ HOOK
 
     # Добавляем server block если не добавлен
     if ! grep -q "$_connect_marker" "$_nginx_conf"; then
+        # listen 443 ssl нужен только если нет stream-блока (порт MTProto не 443)
+        local _listen443=""
+        grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null || _listen443="    listen 443 ssl;"
         # Записываем block во временный файл, затем вставляем через awk перед маркером закрытия http
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
@@ -327,6 +330,7 @@ ${_connect_marker}
 server {
     server_name ${_domain};
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+${_listen443}
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
