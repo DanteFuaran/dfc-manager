@@ -347,16 +347,16 @@ _mt_nginx_add_domain() {
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     local _block_added=false
 
-    # Определяем архитектуру: nginx-only (nginx держит 443 напрямую) или unix-socket-only
-    # (nginx работает только через unix-сокет, порт 443 держит remnawave-core или другой процесс).
-    # Признак unix-socket-only: ни один существующий server-блок не содержит "listen 443"
-    local _has_listen_443=false
-    if grep -qP '^\s+listen\s+443\b' "$_nginx_conf" 2>/dev/null; then
-        _has_listen_443=true
-    fi
-    # Также проверяем по процессу: если порт 443 занят не nginx — unix-socket-only
-    if ss -tlnp 2>/dev/null | grep ':443' | grep -qv 'nginx'; then
-        _has_listen_443=false
+    # Определяем нужно ли добавлять "listen 443 ssl;" в MT-блок.
+    # Убираем его ТОЛЬКО если порт 443 уже занят НЕ-nginx процессом (rw-core, xray и т.п.).
+    # Во всех остальных случаях (порт свободен или занят nginx) — добавляем.
+    local _has_listen_443=true
+    if ss -tlnp 2>/dev/null | grep -q ':443'; then
+        # Порт занят — проверяем кем
+        if ! ss -tlnp 2>/dev/null | grep ':443' | grep -q 'nginx'; then
+            # Занят не-nginx процессом — unix-socket-only режим
+            _has_listen_443=false
+        fi
     fi
 
     # Если блок уже существует — проверяем актуальность.
