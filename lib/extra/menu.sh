@@ -899,8 +899,9 @@ _mt_do_stats() {
     _container_started=$(docker inspect --format '{{.State.StartedAt}}' \
         "$_MT_CONTAINER" 2>/dev/null | sed 's/[^0-9]//g' | cut -c1-14)
     local _saved_ts; _saved_ts=$(_mt_db_stat_get "uptime_ts")
+    # Обновляем метку запуска контейнера для отображения аптайма,
+    # но НЕ сбрасываем max_connections — он хранит пожизненный максимум.
     if [ "$_container_started" != "$_saved_ts" ]; then
-        _max_sim=0
         _mt_db_stat_set "uptime_ts" "$_container_started"
     fi
 
@@ -926,17 +927,28 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Активные клиенты: только IP с keepalive-таймером < 3 минут (Telegram посылает данные каждые ~60 сек)
-        local _client_ips
-        _client_ips=$(_mt_get_active_ips)
+        # Активные клиенты: текущие established + недавно виденные (до 5 минут назад).
+        # Telegram переподключается каждые 2-5 минут, во время реконнекта соединение
+        # кратко пропадает из ss — берём из кеша seen_ips, чтобы не мигать.
+        local _client_ips _cur_ips _recent_ips
+        _cur_ips=$(_mt_get_active_ips)
+        _recent_ips=$(sqlite3 "$_MT_DB" \
+            "SELECT ip FROM seen_ips WHERE last_seen > strftime('%s','now') - 300 AND ip != '';" \
+            2>/dev/null)
+        if [ -n "$_cur_ips" ] || [ -n "$_recent_ips" ]; then
+            _client_ips=$(printf '%s\n%s' "$_cur_ips" "$_recent_ips" | sort -u | grep -v '^$')
+        else
+            _client_ips=""
+        fi
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
-        # Сохраняем историю виденных IP в БД
-        if [ -n "$_client_ips" ]; then
+        # Сохраняем в БД только ТЕКУЩИЕ IP (обновляем last_seen).
+        # IP из кеша already have last_seen — не трогаем, чтобы окно 5 мин работало корректно.
+        if [ -n "$_cur_ips" ]; then
             while IFS= read -r _gip; do
                 [ -z "$_gip" ] && continue
                 _mt_db_seen_add "$_gip"
-            done <<< "$_client_ips"
+            done <<< "$_cur_ips"
         fi
 
         # Геолокация: кеш в seen_ips.geo (geo_ts = timestamp последнего обновления)
