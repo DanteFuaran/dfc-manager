@@ -580,6 +580,7 @@ remove_script_all() {
     rm -rf "${DIR_NODE}"
     rm -f /usr/local/bin/dfc-manager
     rm -f /usr/local/bin/dfc
+    rm -f /usr/local/bin/rw
     rm -rf "${DIR_SCRIPT}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases
@@ -604,6 +605,7 @@ remove_script() {
 
     rm -f /usr/local/bin/dfc-manager
     rm -f /usr/local/bin/dfc
+    rm -f /usr/local/bin/rw
     rm -rf "${DIR_SCRIPT}"
     rm -f "${UPDATE_AVAILABLE_FILE}" "${UPDATE_CHECK_TIME_FILE}" 2>/dev/null
     cleanup_old_aliases

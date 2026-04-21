@@ -36,28 +36,16 @@ cleanup_old_aliases() {
     # Удаляем старые команды dfc-remna-install / dfc-ri
     rm -f /usr/local/bin/dfc-remna-install 2>/dev/null || true
     rm -f /usr/local/bin/dfc-ri 2>/dev/null || true
-    # Удаляем старые команды remnawave / rw
-    rm -f /usr/local/bin/remnawave /usr/local/bin/rw 2>/dev/null || true
+    # Удаляем старые команды remnawave (rw теперь — launcher dfc-manager, не удаляем)
+    rm -f /usr/local/bin/remnawave 2>/dev/null || true
     rm -rf /usr/local/remnawave 2>/dev/null || true
     unalias ri 2>/dev/null || true
 }
 
-# Тихая самоочистка если ничего не установлено
+# Тихая самоочистка при выходе — dfc-manager остаётся на сервере всегда,
+# чтобы rw/dfc работали даже если ни одна программа не установлена.
 cleanup_uninstalled() {
-    # Удаляем скрипт и симлинки только если ни одно из приложений не установлено
-    local _any=false
-    [ -f "${DIR_PANEL}docker-compose.yml" ]                      && _any=true
-    [ -f "${DIR_NODE}docker-compose.yml" ]                       && _any=true
-    [ -f "/opt/remnasubpage/docker-compose.yml" ]                && _any=true
-    [ -f "/opt/subscribe-page/docker-compose.yml" ]             && _any=true
-    [ -f "/opt/beszel/docker-compose.yml" ]                      && _any=true
-    [ -f "/opt/beszel-agent/docker-compose.yml" ]               && _any=true
-    [ -f "/opt/MTProto/docker-compose.yml" ]                     && _any=true
-    [ -d "/opt/MTProto" ] && ls /opt/MTProto/*.conf 2>/dev/null | grep -q . && _any=true
-    if [ "$_any" = false ]; then
-        rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc 2>/dev/null || true
-        rm -rf "${DIR_SCRIPT}" 2>/dev/null || true
-    fi
+    return 0
 }
 
 handle_interrupt() {
