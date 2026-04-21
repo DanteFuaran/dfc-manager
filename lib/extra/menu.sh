@@ -1817,9 +1817,9 @@ _mt_nginx_stream_write() {
     [ ! -f "$_conf" ] && return
 
     # Удаляем старый stream-блок если есть
-    python3 - "$_conf" <<'PYEOF'
+    python3 - "$_conf" "${PROXY_PORT:-443}" <<'PYEOF'
 import sys, re
-path = sys.argv[1]
+path, proxy_port = sys.argv[1], sys.argv[2]
 with open(path) as f: content = f.read()
 # Remove old mtproto stream block
 content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
@@ -1834,6 +1834,16 @@ for entry in http_domains:
         if d != '_' and '.' in d:
             domain_set.add(d)
 map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_set))
+# Build direct proxy_port listener block (if port != 443)
+direct_port_block = ''
+if proxy_port and proxy_port != '443':
+    direct_port_block = f"""
+    # Прямой listener на PROXY_PORT — клиенты Telegram подключаются сюда
+    server {{
+        listen {proxy_port};
+        proxy_pass 127.0.0.1:3128;
+    }}
+"""
 # Build stream block
 stream_block = f"""\n# BEGIN_MTPROTO_STREAM
 stream {{
@@ -1860,8 +1870,7 @@ stream {{
         listen 127.0.0.1:8445;
         proxy_pass 127.0.0.1:3128;
         proxy_protocol on;
-    }}
-}}
+    }}{direct_port_block}}}
 # END_MTPROTO_STREAM"""
 # Comment out direct 443 listen in http blocks
 content = content.replace('    listen 443 ssl;', '    #mt# listen 443 ssl;')
