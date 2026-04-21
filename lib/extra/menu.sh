@@ -313,19 +313,23 @@ _mt_nginx_add_domain() {
     local _nginx_conf="/opt/nginx/nginx.conf"
     local _cert_src="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_src}/fullchain.pem" ] || return 1
-    # Дополнительная проверка: cert не повреждён и читается openssl (nginx 1.28 не валидирует cert при -t/reload)
+    # Проверка: cert не повреждён и читается openssl (nginx 1.28 не валидирует cert при -t/reload)
     openssl x509 -noout -in "${_cert_src}/fullchain.pem" 2>/dev/null || return 1
+
+    # Копируем сертификаты в /opt/nginx/ssl/ — nginx container монтирует эту папку как /etc/nginx/ssl/
+    # Используем физические файлы (не симлинки), чтобы избежать проблем с путями внутри контейнера
+    local _ssl_dest="/opt/nginx/ssl/${_domain}"
+    mkdir -p "$_ssl_dest"
+    cp -f "${_cert_src}/fullchain.pem" "${_ssl_dest}/fullchain.pem"
+    cp -f "${_cert_src}/privkey.pem"   "${_ssl_dest}/privkey.pem"
 
     local _nc; _nc=$(_mt_nginx_container)
 
-    # Перед изменением конфига — починить битые MT-блоки, которым не хватает cert-файлов.
-    # Ищем ошибки обоих типов путей, которые может использовать nginx.conf:
-    #   /etc/nginx/ssl/<domain>/   (новый формат — копии из letsencrypt)
-    #   /etc/letsencrypt/live/<domain>/  (старый формат — прямая ссылка)
+    # Перед изменением конфига — починить битые MT-блоки (отсутствует файл cert в /opt/nginx/ssl/).
+    # nginx 1.28 не падает при nginx -t с несуществующим cert — загружает его лениво при TLS-хендшейке.
     if [ -n "$_nc" ]; then
         local _nginx_test_pre
         _nginx_test_pre=$(docker exec "$_nc" nginx -t 2>&1)
-        # Починяем /etc/nginx/ssl/<domain> — пытаемся скопировать из letsencrypt
         while IFS= read -r _broken_domain; do
             local _broken_cert="/etc/letsencrypt/live/${_broken_domain}"
             local _broken_ssl="/opt/nginx/ssl/${_broken_domain}"
@@ -336,19 +340,6 @@ _mt_nginx_add_domain() {
             fi
         done < <(echo "$_nginx_test_pre" | \
             grep -oP 'cannot load certificate "/etc/nginx/ssl/\K[^/]+' | sort -u)
-        # Починяем /etc/letsencrypt/live/<domain> — пересоздаём симлинки из archive если нужно
-        while IFS= read -r _broken_domain; do
-            local _live_dir="/etc/letsencrypt/live/${_broken_domain}"
-            local _arc_dir="/etc/letsencrypt/archive/${_broken_domain}"
-            if [ ! -f "${_live_dir}/fullchain.pem" ] && [ -d "$_arc_dir" ]; then
-                mkdir -p "$_live_dir"
-                local _latest; _latest=$(ls -v "${_arc_dir}/fullchain"*.pem 2>/dev/null | tail -1)
-                [ -n "$_latest" ] && ln -sf "$_latest" "${_live_dir}/fullchain.pem" || true
-                _latest=$(ls -v "${_arc_dir}/privkey"*.pem 2>/dev/null | tail -1)
-                [ -n "$_latest" ] && ln -sf "$_latest" "${_live_dir}/privkey.pem" || true
-            fi
-        done < <(echo "$_nginx_test_pre" | \
-            grep -oP 'cannot load certificate "/etc/letsencrypt/live/\K[^/]+' | sort -u)
     fi
 
     _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
@@ -359,7 +350,7 @@ _mt_nginx_add_domain() {
     # Если блок уже существует — проверяем что cert path актуален.
     # Если cert path отличается от ожидаемого — удаляем старый блок, чтобы добавить свежий.
     if grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
-        local _expected_cert="/etc/letsencrypt/live/${_domain}/fullchain.pem"
+        local _expected_cert="/etc/nginx/ssl/${_domain}/fullchain.pem"
         if ! grep -A6 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qF "\"${_expected_cert}\""; then
             # Блок устарел (другой cert path) — удалить и переписать
             python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null || true
@@ -384,8 +375,8 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/letsencrypt/live/${_domain}/fullchain.pem";
-    ssl_certificate_key "/etc/letsencrypt/live/${_domain}/privkey.pem";
+    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
 
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 
