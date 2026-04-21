@@ -218,15 +218,12 @@ _nginx_restore_stream_block() {
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
-    # Определяем нужен ли listen 443 ssl; — только если порт 443 НЕ занят сторонним процессом.
-    # ss показывает "docker-proxy" для любого контейнера, поэтому используем docker port
-    # чтобы надёжно определить занят ли порт 443 именно нашим nginx-контейнером.
+    # Определяем нужен ли listen 443 ssl; — не добавляем если:
+    # - stream-блок активен (nginx stream уже владеет 443)
+    # - remnanode установлен (stream будет активирован)
     local _has_listen_443=true
-    if ss -tlnp 2>/dev/null | grep -q ':443'; then
-        local _nginx_holds_443=false
-        docker port remnawave-nginx 2>/dev/null | grep -q '^443/tcp' && _nginx_holds_443=true
-        [ "$_nginx_holds_443" = "false" ] && _has_listen_443=false
-    fi
+    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && _has_listen_443=false
+    [ -f "/opt/remnanode/docker-compose.yml" ] && _has_listen_443=false
     local _listen443_line=""
     [ "$_has_listen_443" = "true" ] && _listen443_line=$'\n    listen 443 ssl;'
 
