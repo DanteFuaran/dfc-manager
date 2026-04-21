@@ -219,13 +219,13 @@ _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
     # Определяем нужен ли listen 443 ssl; — только если порт 443 НЕ занят сторонним процессом.
-    # Логика идентична _mt_nginx_add_domain в menu.sh: на нод-серверах rw-core держит 443 напрямую,
-    # поэтому nginx не должен на него слушать. На панельных серверах и чистых — nginx держит 443 сам.
+    # ss показывает "docker-proxy" для любого контейнера, поэтому используем docker port
+    # чтобы надёжно определить занят ли порт 443 именно нашим nginx-контейнером.
     local _has_listen_443=true
     if ss -tlnp 2>/dev/null | grep -q ':443'; then
-        if ! ss -tlnp 2>/dev/null | grep ':443' | grep -q 'nginx'; then
-            _has_listen_443=false
-        fi
+        local _nginx_holds_443=false
+        docker port remnawave-nginx 2>/dev/null | grep -q '^443/tcp' && _nginx_holds_443=true
+        [ "$_nginx_holds_443" = "false" ] && _has_listen_443=false
     fi
     local _listen443_line=""
     [ "$_has_listen_443" = "true" ] && _listen443_line=$'\n    listen 443 ssl;'

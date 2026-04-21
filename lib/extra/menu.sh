@@ -348,13 +348,16 @@ _mt_nginx_add_domain() {
     local _block_added=false
 
     # Определяем нужно ли добавлять "listen 443 ssl;" в MT-блок.
-    # Убираем его ТОЛЬКО если порт 443 уже занят НЕ-nginx процессом (rw-core, xray и т.п.).
-    # Во всех остальных случаях (порт свободен или занят nginx) — добавляем.
+    # Убираем его ТОЛЬКО если порт 443 занят НЕ nginx-контейнером (rw-core, xray и т.п.).
+    # ss показывает "docker-proxy" для любого контейнера, поэтому используем docker port
+    # чтобы надёжно определить занят ли порт 443 именно нашим nginx-контейнером.
     local _has_listen_443=true
     if ss -tlnp 2>/dev/null | grep -q ':443'; then
-        # Порт занят — проверяем кем
-        if ! ss -tlnp 2>/dev/null | grep ':443' | grep -q 'nginx'; then
-            # Занят не-nginx процессом — unix-socket-only режим
+        # Порт занят — проверяем: наш ли nginx-контейнер его держит
+        local _nginx_holds_443=false
+        docker port remnawave-nginx 2>/dev/null | grep -q '^443/tcp' && _nginx_holds_443=true
+        if [ "$_nginx_holds_443" = "false" ]; then
+            # Порт держит не nginx (rw-core, xray) — unix-socket-only режим
             _has_listen_443=false
         fi
     fi
