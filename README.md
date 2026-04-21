@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.0.30-blue?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
 </p>
@@ -20,10 +20,10 @@
 ## 🚀 Установка
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-install/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
 ```
 
-<sub>При запуске будет запрошен ключ доступа. После установки управление доступно через команду <b><code>dfc-manager</code></b> или <b><code>dfc</code></b></sub>
+<sub>После установки управление доступно через команду <b><code>dfc-manager</code></b> или <b><code>dfc</code></b></sub>
 
 ---
 
