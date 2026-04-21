@@ -126,51 +126,15 @@ _mt_resolve_domain_ips() {
     fi
 }
 
-# Устанавливает nginx если не запущен
+# Устанавливает/запускает nginx для MT Proto.
+# Использует тот же ensure_nginx что и remnawave/remnanode — единый docker-compose с network_mode:host и nginx:1.28.
 _mt_setup_nginx() {
-    local _nginx_dir="/opt/nginx"
-    mkdir -p "${_nginx_dir}/ssl"
-    # Базовый nginx.conf если отсутствует
-    if [ ! -f "${_nginx_dir}/nginx.conf" ]; then
-        cat > "${_nginx_dir}/nginx.conf" << 'NGCONF'
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log warn;
-pid /var/run/nginx.pid;
-events { worker_connections 1024; }
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-}
-NGCONF
+    ensure_nginx
+    # Создаём минимальный nginx.conf если его ещё нет (без remnawave-блоков)
+    if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
+        nginx_generate_minimal_conf
     fi
-    # docker-compose.yml для nginx если отсутствует
-    if [ ! -f "${_nginx_dir}/docker-compose.yml" ]; then
-        cat > "${_nginx_dir}/docker-compose.yml" << 'DCNGINX'
-services:
-  nginx:
-    image: nginx:stable-alpine
-    container_name: remnawave-nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/html:/var/www/html:ro
-      - /dev/shm:/dev/shm
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-DCNGINX
-    fi
-    (cd "$_nginx_dir" && docker compose up -d 2>/dev/null) || true
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) || true
 }
 
 # Проверяет/устанавливает Docker
@@ -347,12 +311,9 @@ _mt_nginx_add_domain() {
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     local _block_added=false
 
-    # Определяем нужно ли "listen 443 ssl;" в MT-блоке.
-    # НЕ добавляем если: stream-блок активен (nginx stream владеет 443)
-    # или remnanode установлен (xray на 8443, nginx stream будет активирован)
-    local _has_listen_443=true
-    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && _has_listen_443=false
-    [ -f "/opt/remnanode/docker-compose.yml" ] && _has_listen_443=false
+    # MT Proto ВСЕГДА работает через nginx stream — listen 443 ssl в HTTP-блоке не нужен.
+    # nginx stream владеет 443 и маршрутизирует по SNI к unix socket (HTTP) или MT Proto (3128).
+    local _has_listen_443=false
 
     # Если блок уже существует — проверяем актуальность.
     # Условия замены: неверный cert path ИЛИ блок содержит "listen 443 ssl;" когда не должен.
@@ -529,7 +490,8 @@ ACME_EMAIL=${ACME_EMAIL:-}
 EOF
 }
 
-# Записывает docker-compose.yml
+# Записывает docker-compose.yml.
+# MT Proto ВСЕГДА биндится на 127.0.0.1:3128 — nginx stream владеет портом 443.
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
     cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
@@ -539,7 +501,7 @@ services:
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "${PROXY_PORT}:443"
+      - "127.0.0.1:3128:443"
     environment:
       - SECRET=${PROXY_SECRET}
       - TAG=${PROXY_TAG}
@@ -557,11 +519,6 @@ services:
         max-size: "10m"
         max-file: "3"
 COMPOSE
-    # Если remnanode установлен — биндим MT Proto на localhost:3128 (не на публичный 443)
-    # в этом случае nginx stream займёт 443 и будет маршрутизировать по SNI
-    if [ -f "/opt/remnanode/docker-compose.yml" ] || grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-        sed -i 's|"${PROXY_PORT}:443"|"127.0.0.1:3128:443"|' "${_MT_DIR}/docker-compose.yml"
-    fi
 }
 
 # Установка / переустановка MTProto (встроенная реализация)
@@ -796,7 +753,7 @@ _mt_do_install() {
 
         echo
         printf "${GREEN}✅ Установка завершена!${NC}\n"
-        # Если remnanode уже установлен — переключаем MT Proto в stream-режим
+        # MT Proto всегда работает через nginx stream — активируем stream-блок
         (_mt_ensure_stream_mode 2>/dev/null) &
         wait $! 2>/dev/null || true
         _install_bin_wrappers 2>/dev/null || true
@@ -1835,20 +1792,15 @@ _mt_nginx_reload() {
 # Переключает MT Proto в stream-режим если remnanode установлен.
 # nginx stream занимает 443 и маршрутизирует по SNI: HTTP → unix socket, MT Proto → localhost:3128.
 # Режим не отменяется при удалении ноды — nginx всё равно владеет 443.
+# Активирует nginx stream-режим для MT Proto.
+# MT Proto всегда работает через nginx stream — вызывается после каждого cert/nginx шага.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
-    [ -f "/opt/mtproto/docker-compose.yml" ] || return 0
-    [ -f "/opt/remnanode/docker-compose.yml" ] || return 0  # stream нужен только с remnanode
-    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && return 0  # уже активен
-    # Останавливаем MT Proto, чтобы освободить порт 443 если он его занимает
-    (cd /opt/mtproto && docker compose down >/dev/null 2>&1) || true
-    # Формируем nginx stream-блок (443 → nginx http | MT Proto на localhost:3128)
+    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && return 0
+    # Записываем stream-блок: nginx stream владеет 443, маршрутизирует по SNI
     _mt_nginx_stream_write 2>/dev/null || true
-    # Патчим compose если ещё не патчен
-    grep -q '127.0.0.1:3128:443' /opt/mtproto/docker-compose.yml 2>/dev/null || \
-        sed -i 's|"${PROXY_PORT}:443"|"127.0.0.1:3128:443"|' /opt/mtproto/docker-compose.yml 2>/dev/null || true
-    # Запускаем MT Proto на новом адресе
-    (cd /opt/mtproto && docker compose up -d >/dev/null 2>&1) || true
+    # Перезапускаем nginx чтобы stream-блок вступил в силу
+    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
 }
 
 # Проверяет доступность nginx контейнера

@@ -218,14 +218,9 @@ _nginx_restore_stream_block() {
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
-    # Определяем нужен ли listen 443 ssl; — не добавляем если:
-    # - stream-блок активен (nginx stream уже владеет 443)
-    # - remnanode установлен (stream будет активирован)
-    local _has_listen_443=true
-    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && _has_listen_443=false
-    [ -f "/opt/remnanode/docker-compose.yml" ] && _has_listen_443=false
+    # MT Proto ВСЕГДА работает через nginx stream — listen 443 ssl в HTTP-блоке не нужен.
+    local _has_listen_443=false
     local _listen443_line=""
-    [ "$_has_listen_443" = "true" ] && _listen443_line=$'\n    listen 443 ssl;'
 
     # Fallback: если блоки не сохранены (MTProto установлен без nginx), генерируем из .env
     local _mt_env="/opt/mtproto/.env"
