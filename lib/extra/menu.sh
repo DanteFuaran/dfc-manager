@@ -430,24 +430,6 @@ with open(blockfile) as f: block = f.read()
 # Если unix-socket-only — убираем пустую строку от listen 443
 if has443 != 'true':
     import re
-    block = re.sub(r'\n\s*\n', '\n', block
-    location = /connect {
-        default_type text/html;
-        alias ${_html_path};
-    }
-
-    location / { return 444; }
-}
-# END_MT_CONNECT_${_domain}
-NGINX_BLOCK
-        python3 - "$_nginx_conf" "$_tmpf" "$_has_listen_443" <<'PYEOF' 2>/dev/null || true
-import sys
-path, blockfile, has443 = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f: content = f.read()
-with open(blockfile) as f: block = f.read()
-# Если unix-socket-only — убираем пустую строку от listen 443
-if has443 != 'true':
-    import re
     block = re.sub(r'\n\s*\n', '\n', block)
 idx = content.rfind('\n}')
 if idx >= 0:
