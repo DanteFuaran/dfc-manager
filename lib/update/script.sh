@@ -348,11 +348,19 @@ int main(int argc, char *argv[], char *envp[]) {
 CSRC
 
     local _compiled=0
+    # Пробуем статическую компиляцию (бинарь работает без зависимостей)
     if command -v gcc >/dev/null 2>&1; then
         gcc -O2 -static -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
     fi
     if [ "$_compiled" -eq 0 ] && command -v cc >/dev/null 2>&1; then
         cc -O2 -static -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
+    fi
+    # Если статика недоступна (нет libc-static) — динамическая компиляция
+    if [ "$_compiled" -eq 0 ] && command -v gcc >/dev/null 2>&1; then
+        gcc -O2 -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
+    fi
+    if [ "$_compiled" -eq 0 ] && command -v cc >/dev/null 2>&1; then
+        cc -O2 -o "$_launcher_bin" "$_launcher_src" 2>/dev/null && _compiled=1
     fi
     rm -f "$_launcher_src"
 
@@ -363,9 +371,14 @@ CSRC
         if [ "$_compiled" -eq 1 ]; then
             cp "$_launcher_bin" "/usr/local/bin/${_cmd}"
             chmod +x "/usr/local/bin/${_cmd}"
+        elif command -v python3 >/dev/null 2>&1; then
+            # Python3 fallback: делает chdir до запуска bash, не печатает getcwd-ошибки
+            printf '#!/usr/bin/env python3\nimport os,sys\nos.chdir("/opt")\nos.execvpe("/usr/local/dfc-manager/dfc-manager.sh",["/usr/local/dfc-manager/dfc-manager.sh"]+sys.argv[1:],os.environ)\n' \
+                > "/usr/local/bin/${_cmd}"
+            chmod +x "/usr/local/bin/${_cmd}"
         else
-            # Fallback: sh-wrapper — всё равно работает, просто печатает косметическую ошибку
-            printf '#!/bin/sh\ncd /opt 2>/dev/null || cd / 2>/dev/null || true\nexec /usr/local/dfc-manager/dfc-manager.sh "$@"\n' \
+            # Последний резерв: bash-обёртка (bash мягче обрабатывает getcwd чем sh)
+            printf '#!/bin/bash\ncd /opt 2>/dev/null || cd / 2>/dev/null || true\nexec /usr/local/dfc-manager/dfc-manager.sh "$@"\n' \
                 > "/usr/local/bin/${_cmd}"
             chmod +x "/usr/local/bin/${_cmd}"
         fi
