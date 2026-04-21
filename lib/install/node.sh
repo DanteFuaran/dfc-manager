@@ -942,6 +942,11 @@ EOL
     randomhtml
     echo
 
+    # Если MT Proto установлен и занимает 443 напрямую — переключаем его в stream-режим.
+    # Нода запускает xray с network_mode:host, поэтому xray тоже хочет 443.
+    (_mt_ensure_stream_mode 2>/dev/null) &
+    show_spinner "Проверка совместимости MTProto" || true
+
     # Если MTProto stream-блок есть в nginx.conf — запускаем nginx ПЕРВЫМ,
     # чтобы он занял 443 через stream, а Xray использовал только 8443
     local _mt_stream_present=false
@@ -1162,6 +1167,10 @@ installation_node_with_existing_subpage() {
 
     randomhtml
     echo
+
+    # Если MT Proto установлен и занимает 443 напрямую — переключаем его в stream-режим.
+    (_mt_ensure_stream_mode 2>/dev/null) &
+    show_spinner "Проверка совместимости MTProto" || true
 
     # Запуск контейнеров
     (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &

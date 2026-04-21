@@ -565,6 +565,11 @@ services:
         max-size: "10m"
         max-file: "3"
 COMPOSE
+    # В stream-режиме (nginx stream занимает 443, нода использует network_mode:host)
+    # MT Proto должен биндиться на localhost:3128 вместо публичного 443
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        sed -i 's|"${PROXY_PORT}:443"|"127.0.0.1:3128:443"|' "${_MT_DIR}/docker-compose.yml"
+    fi
 }
 
 # Установка / переустановка MTProto (встроенная реализация)
@@ -1816,6 +1821,40 @@ _mt_kill_src() {
 _mt_nginx_reload() {
     local _nc="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
     docker exec "$_nc" nginx -s reload 2>/dev/null || true
+}
+
+# Переключает MT Proto в stream-режим если он установлен и занимает 443 напрямую.
+# Вызывается из node.sh перед запуском ремнаноды, чтобы xray смог занять 443.
+_mt_ensure_stream_mode() {
+    local _mt_env="/opt/mtproto/.env"
+    [ -f "$_mt_env" ] || return 0
+    [ -f "/opt/mtproto/docker-compose.yml" ] || return 0
+    # Уже в stream-режиме — ничего делать
+    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && return 0
+    local _mt_port
+    _mt_port=$(grep '^PROXY_PORT=' "$_mt_env" 2>/dev/null | cut -d= -f2)
+    # Если MT Proto на другом порту (не 443) — конфликта нет
+    [ "$_mt_port" = "443" ] || return 0
+    # Останавливаем MT Proto, освобождаем порт 443
+    (cd /opt/mtproto && docker compose down >/dev/null 2>&1) || true
+    # Формируем nginx stream-блок (назначает 443 → nginx http | MT Proto на localhost:3128)
+    _mt_nginx_stream_write 2>/dev/null || true
+    # Патчим compose: биндинг порта → localhost:3128:443 вместо 443:443
+    sed -i 's|"${PROXY_PORT}:443"|"127.0.0.1:3128:443"|' /opt/mtproto/docker-compose.yml 2>/dev/null || true
+    # Запускаем MT Proto на новом адресе
+    (cd /opt/mtproto && docker compose up -d >/dev/null 2>&1) || true
+}
+
+# Восстанавливает MT Proto из stream-режима на прямой порт 443 (при удалении ноды).
+_mt_disable_stream_mode() {
+    [ -f "/opt/mtproto/docker-compose.yml" ] || return 0
+    grep -q "127.0.0.1:3128:443" /opt/mtproto/docker-compose.yml 2>/dev/null || return 0
+    # Убираем stream-блок из nginx.conf
+    _mt_nginx_stream_remove 2>/dev/null || true
+    # Восстанавливаем прямой биндинг: 443:443
+    sed -i 's|"127.0.0.1:3128:443"|"${PROXY_PORT}:443"|' /opt/mtproto/docker-compose.yml 2>/dev/null || true
+    # Перезапускаем MT Proto
+    (cd /opt/mtproto && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) || true
 }
 
 # Проверяет доступность nginx контейнера

@@ -284,6 +284,9 @@ manage_delete_components() {
                 if is_node_installed; then
                     ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
                     show_spinner "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
+                    # Если MT Proto был в stream-режиме — восстанавливаем прямой биндинг 443
+                    (_mt_disable_stream_mode 2>/dev/null) &
+                    show_spinner "Восстановление MTProto" || true
                 fi
                 if is_subpage_remote_installed || [ -d "/opt/subscribe-page" ] || [ -d "/opt/remnasubpage" ]; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
