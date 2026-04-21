@@ -234,11 +234,18 @@ _mt_issue_cert() {
     [ -z "$_domain" ] && return 1
     
     local _cert_dir="/etc/letsencrypt/live/${_domain}"
-    
-    # *** ГЛАВНОЕ: Сначала проверяем основной путь (БЕЗ суффиксов) ***
-    # Если сертификат существует в основной директории и не форсируем перевыпуск — используем его
-    if [ -f "${_cert_dir}/fullchain.pem" ] && [ -z "$_force" ]; then
-        return 0
+    local _renewal_conf="/etc/letsencrypt/renewal/${_domain}.conf"
+
+    # Проверяем существующий сертификат только когда не форсируем перевыпуск.
+    # Условие "cert OK" = файл есть + certbot управляет им (есть renewal conf) + не истёк.
+    # Если cert существует но невалиден (сломан, нет renewal conf, истёк) — чистим и перевыпускаем.
+    if [ -z "$_force" ] && [ -f "${_cert_dir}/fullchain.pem" ]; then
+        if [ -f "$_renewal_conf" ] && \
+           openssl x509 -noout -checkend 86400 -in "${_cert_dir}/fullchain.pem" 2>/dev/null; then
+            return 0
+        fi
+        # Cert сломан или без renewal conf — удалить, чтобы certbot пересоздал корректно
+        rm -rf "${_cert_dir}" 2>/dev/null || true
     fi
 
     # DNS-проверка: блокируем certbot только если домен явно указывает на ЧУЖОЙ IP.
@@ -306,6 +313,8 @@ _mt_nginx_add_domain() {
     local _nginx_conf="/opt/nginx/nginx.conf"
     local _cert_src="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_src}/fullchain.pem" ] || return 1
+    # Дополнительная проверка: cert не повреждён и читается openssl (nginx 1.28 не валидирует cert при -t/reload)
+    openssl x509 -noout -in "${_cert_src}/fullchain.pem" 2>/dev/null || return 1
 
     local _nc; _nc=$(_mt_nginx_container)
 
@@ -346,6 +355,24 @@ _mt_nginx_add_domain() {
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     local _block_added=false
+
+    # Если блок уже существует — проверяем что cert path актуален.
+    # Если cert path отличается от ожидаемого — удаляем старый блок, чтобы добавить свежий.
+    if grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
+        local _expected_cert="/etc/letsencrypt/live/${_domain}/fullchain.pem"
+        if ! grep -A6 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qF "\"${_expected_cert}\""; then
+            # Блок устарел (другой cert path) — удалить и переписать
+            python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null || true
+import sys, re
+path, domain = sys.argv[1], sys.argv[2]
+with open(path) as f: content = f.read()
+pattern = re.compile(r'\n?# BEGIN_MT_CONNECT_' + re.escape(domain) + r'\n.*?# END_MT_CONNECT_' + re.escape(domain) + r'\n?', re.S)
+content = pattern.sub('\n', content)
+with open(path, 'w') as f: f.write(content)
+PYEOF
+        fi
+    fi
+
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
