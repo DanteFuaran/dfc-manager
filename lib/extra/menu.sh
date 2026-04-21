@@ -1837,9 +1837,13 @@ map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_
 # Когда remnanode есть — xray занимает PROXY_PORT (обычно 8443), конфликт → SPAWN_ERROR.
 # MT Proto клиенты достигают прокси через порт 443 (SNI default → 8445 → 3128).
 import os
-has_remnanode = os.path.exists('/opt/remnanode/docker-compose.yml')
+# Пропускаем listen PROXY_PORT только когда панель+нода на одном сервере:
+# в этом случае xray занимает PROXY_PORT (обычно 8443) т.к. 443 занят панелью.
+# На standalone-ноде (без панели) xray использует 443, поэтому PROXY_PORT свободен.
+has_panel_and_node = (os.path.exists('/opt/remnawave/docker-compose.yml') and
+                      os.path.exists('/opt/remnanode/docker-compose.yml'))
 direct_port_block = ''
-if proxy_port and proxy_port != '443' and not has_remnanode:
+if proxy_port and proxy_port != '443' and not has_panel_and_node:
     direct_port_block = f"""
     # Прямой listener на PROXY_PORT — клиенты Telegram подключаются сюда
     server {{
