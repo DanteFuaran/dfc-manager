@@ -494,17 +494,24 @@ EOF
 # MT Proto ВСЕГДА биндится на 127.0.0.1:3128 — nginx stream владеет портом 443.
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    cat > "${_MT_DIR}/docker-compose.yml" << 'COMPOSE'
+    # Standalone нода (без панели): xray занимает порт 443 напрямую (REALITY).
+    # MT Proto биндит PROXY_PORT публично — nginx stream в этом сценарии невозможен.
+    # Иначе (панель+нода или только MT Proto): nginx stream владеет 443, MT Proto на localhost:3128.
+    local _mt_port="127.0.0.1:3128:443"
+    if is_node_installed && ! is_panel_installed; then
+        _mt_port="${PROXY_PORT:-8443}:443"
+    fi
+    cat > "${_MT_DIR}/docker-compose.yml" <<COMPOSE
 services:
   mtproto-proxy:
     image: telegrammessenger/proxy:latest
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3128:443"
+      - "${_mt_port}"
     environment:
-      - SECRET=${PROXY_SECRET}
-      - TAG=${PROXY_TAG}
+      - SECRET=\${PROXY_SECRET}
+      - TAG=\${PROXY_TAG}
     sysctls:
       - net.ipv4.tcp_keepalive_time=30
       - net.ipv4.tcp_keepalive_intvl=10
@@ -1796,7 +1803,29 @@ _mt_nginx_reload() {
 # MT Proto всегда работает через nginx stream — вызывается после каждого cert/nginx шага.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
-    # Всегда перезаписываем stream-блок — нужно подхватить новые домены (node, subpage и т.д.)
+
+    # Standalone нода (без панели): xray занимает порт 443 напрямую (REALITY).
+    # Nginx stream на 443 невозможен — убираем блок, MT Proto работает на PROXY_PORT напрямую.
+    if is_node_installed && ! is_panel_installed; then
+        # Убираем stream-блок если он был добавлен ранее
+        if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+            _mt_nginx_stream_remove 2>/dev/null || true
+        fi
+        # Патчим compose: MT Proto должен биндить PROXY_PORT напрямую (не localhost:3128)
+        _mt_load_env
+        local _port="${PROXY_PORT:-8443}"
+        if ! grep -q "\"${_port}:443\"" /opt/mtproto/docker-compose.yml 2>/dev/null; then
+            sed -i "s|127.0.0.1:3128:443|${_port}:443|" /opt/mtproto/docker-compose.yml 2>/dev/null || true
+            (cd /opt/mtproto && docker compose up -d --force-recreate >/dev/null 2>&1) || true
+        fi
+        # Перезапускаем nginx без stream-блока
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
+        return 0
+    fi
+
+    # Панель+нода на одном сервере или только MT Proto:
+    # nginx stream владеет 443 и маршрутизирует по SNI.
+    # Всегда перезаписываем блок — нужно подхватить новые домены (node, subpage и т.д.)
     _mt_nginx_stream_write 2>/dev/null || true
     # Перезапускаем nginx чтобы актуальный stream-блок вступил в силу
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
