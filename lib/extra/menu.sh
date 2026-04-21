@@ -347,6 +347,18 @@ _mt_nginx_add_domain() {
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
     local _block_added=false
 
+    # Определяем архитектуру: nginx-only (nginx держит 443 напрямую) или unix-socket-only
+    # (nginx работает только через unix-сокет, порт 443 держит remnawave-core или другой процесс).
+    # Признак unix-socket-only: ни один существующий server-блок не содержит "listen 443"
+    local _has_listen_443=false
+    if grep -qP '^\s+listen\s+443\b' "$_nginx_conf" 2>/dev/null; then
+        _has_listen_443=true
+    fi
+    # Также проверяем по процессу: если порт 443 занят не nginx — unix-socket-only
+    if ss -tlnp 2>/dev/null | grep ':443' | grep -qv 'nginx'; then
+        _has_listen_443=false
+    fi
+
     # Если блок уже существует — проверяем что cert path актуален.
     # Если cert path отличается от ожидаемого — удаляем старый блок, чтобы добавить свежий.
     if grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
@@ -365,6 +377,8 @@ PYEOF
     fi
 
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
+        local _listen_443_line=""
+        [ "$_has_listen_443" = true ] && _listen_443_line="    listen 443 ssl;"
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
 
@@ -372,7 +386,7 @@ ${_connect_marker}
 server {
     server_name ${_domain};
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    listen 443 ssl;
+${_listen_443_line}
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
@@ -389,11 +403,33 @@ server {
 }
 # END_MT_CONNECT_${_domain}
 NGINX_BLOCK
-        python3 - "$_nginx_conf" "$_tmpf" <<'PYEOF' 2>/dev/null || true
+        python3 - "$_nginx_conf" "$_tmpf" "$_has_listen_443" <<'PYEOF' 2>/dev/null || true
 import sys
-path, blockfile = sys.argv[1], sys.argv[2]
+path, blockfile, has443 = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f: content = f.read()
 with open(blockfile) as f: block = f.read()
+# Если unix-socket-only — убираем пустую строку от listen 443
+if has443 != 'true':
+    import re
+    block = re.sub(r'\n\s*\n', '\n', block
+    location = /connect {
+        default_type text/html;
+        alias ${_html_path};
+    }
+
+    location / { return 444; }
+}
+# END_MT_CONNECT_${_domain}
+NGINX_BLOCK
+        python3 - "$_nginx_conf" "$_tmpf" "$_has_listen_443" <<'PYEOF' 2>/dev/null || true
+import sys
+path, blockfile, has443 = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f: content = f.read()
+with open(blockfile) as f: block = f.read()
+# Если unix-socket-only — убираем пустую строку от listen 443
+if has443 != 'true':
+    import re
+    block = re.sub(r'\n\s*\n', '\n', block)
 idx = content.rfind('\n}')
 if idx >= 0:
     content = content[:idx] + block + content[idx:]
