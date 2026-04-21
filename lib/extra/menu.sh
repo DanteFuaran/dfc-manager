@@ -927,28 +927,17 @@ _mt_do_stats() {
         fi
         _uptime=$(( _now - _start_ts ))
 
-        # Активные клиенты: текущие established + недавно виденные (до 5 минут назад).
-        # Telegram переподключается каждые 2-5 минут, во время реконнекта соединение
-        # кратко пропадает из ss — берём из кеша seen_ips, чтобы не мигать.
-        local _client_ips _cur_ips _recent_ips
-        _cur_ips=$(_mt_get_active_ips)
-        _recent_ips=$(sqlite3 "$_MT_DB" \
-            "SELECT ip FROM seen_ips WHERE last_seen > strftime('%s','now') - 300 AND ip != '';" \
-            2>/dev/null)
-        if [ -n "$_cur_ips" ] || [ -n "$_recent_ips" ]; then
-            _client_ips=$(printf '%s\n%s' "$_cur_ips" "$_recent_ips" | sort -u | grep -v '^$')
-        else
-            _client_ips=""
-        fi
+        # Активные клиенты: только ESTABLISHED соединения сейчас.
+        local _client_ips
+        _client_ips=$(_mt_get_active_ips)
         _active=$(printf '%s\n' "$_client_ips" | awk 'NF{c++} END{print c+0}')
 
-        # Сохраняем в БД только ТЕКУЩИЕ IP (обновляем last_seen).
-        # IP из кеша already have last_seen — не трогаем, чтобы окно 5 мин работало корректно.
-        if [ -n "$_cur_ips" ]; then
+        # Сохраняем в БД все обнаруженные IP (обновляем last_seen).
+        if [ -n "$_client_ips" ]; then
             while IFS= read -r _gip; do
                 [ -z "$_gip" ] && continue
                 _mt_db_seen_add "$_gip"
-            done <<< "$_cur_ips"
+            done <<< "$_client_ips"
         fi
 
         # Геолокация: кеш в seen_ips.geo (geo_ts = timestamp последнего обновления)
@@ -1725,18 +1714,23 @@ _mt_get_active_ips() {
             | sort -u
     else
         # Прямой Docker DNAT (HOST:PROXY_PORT → container:443).
-        # Ни хостовой ss, ни nsenter не видят реальные IP: контейнер видит только
-        # исходящие соединения к Telegram (8888). conntrack видит NAT-сессии с реальными IP.
+        # conntrack видит NAT-сессии: src=CLIENT_IP dport=PROXY_PORT ESTABLISHED
+        # Таймаут ESTABLISHED-соединений = 432000с (5 дней), TIME_WAIT << 120с
         if command -v conntrack >/dev/null 2>&1; then
             conntrack -L -p tcp 2>/dev/null \
                 | grep " ESTABLISHED " \
-                | grep "dport=${_port}" \
-                | awk '{for(i=1;i<=NF;i++) if($i~/^src=/){sub("src=","",$i); print $i; break}}' \
-                | grep -v '^172\.' | grep -v '^10\.' | grep -v '^192\.168\.' \
-                | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
+                | awk -v port="$_port" '
+                    {
+                        dport=""; src=""
+                        for(i=1;i<=NF;i++) {
+                            if($i ~ /^dport=/) dport=substr($i,7)
+                            if($i ~ /^src=/ && src=="") src=substr($i,5)
+                        }
+                        if(dport==port && src!="" && src!~/^172\./ && src!~/^10\./ && src!~/^192\.168\./ && src!~/^127\./) print src
+                    }' \
                 | sort -u
         else
-            # Fallback: nsenter (side effect: видим только соединения канала, не клиентские IP)
+            # Fallback: nsenter (показывает сторону канала, не клиентские IP)
             local _pid
             _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
             if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
@@ -2083,6 +2077,7 @@ _mt_do_access() {
             _all_ips+=("$_ip")
         done < <(printf '%s\n' "${_combined}" | sort -u)
 
+        unset _sn_cnt
         declare -A _sn_cnt=()
         for _ip in "${_all_ips[@]}"; do
             local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
@@ -2094,6 +2089,7 @@ _mt_do_access() {
         done
         IFS=$'\n' _subnet_groups=($(printf '%s\n' "${_subnet_groups[@]}" | sort)); unset IFS
 
+        unset _in_subnet
         declare -A _in_subnet=()
         for _ip in "${_all_ips[@]}"; do
             local _s24; _s24=$(echo "$_ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
