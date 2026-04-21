@@ -42,10 +42,21 @@ cleanup_old_aliases() {
     unalias ri 2>/dev/null || true
 }
 
-# Тихая самоочистка при выходе — dfc-manager остаётся на сервере всегда,
-# чтобы rw/dfc работали даже если ни одна программа не установлена.
+# Тихая самоочистка если ничего не установлено
 cleanup_uninstalled() {
-    return 0
+    # Удаляем скрипт и симлинки только если ни одно из приложений не установлено
+    local _any=false
+    [ -f "${DIR_PANEL}docker-compose.yml" ]                  && _any=true
+    [ -f "${DIR_NODE}docker-compose.yml" ]                   && _any=true
+    [ -f "/opt/remnasubpage/docker-compose.yml" ]            && _any=true
+    [ -f "/opt/subscribe-page/docker-compose.yml" ]          && _any=true
+    [ -f "/opt/beszel/docker-compose.yml" ]                  && _any=true
+    [ -f "/opt/beszel-agent/docker-compose.yml" ]            && _any=true
+    [ -f "/opt/mtproto/docker-compose.yml" ]                 && _any=true
+    if [ "$_any" = false ]; then
+        rm -f /usr/local/bin/dfc-manager /usr/local/bin/dfc /usr/local/bin/rw 2>/dev/null || true
+        rm -rf "${DIR_SCRIPT}" 2>/dev/null || true
+    fi
 }
 
 handle_interrupt() {
