@@ -306,31 +306,46 @@ _mt_nginx_add_domain() {
     local _nginx_conf="/opt/nginx/nginx.conf"
     local _cert_src="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_src}/fullchain.pem" ] || return 1
-    # Копируем сертификаты в /opt/nginx/ssl/ (монтируется в контейнер как /etc/nginx/ssl/)
-    local _ssl_dest="/opt/nginx/ssl/${_domain}"
-    mkdir -p "$_ssl_dest"
-    cp -f "${_cert_src}/fullchain.pem" "${_ssl_dest}/fullchain.pem"
-    cp -f "${_cert_src}/privkey.pem" "${_ssl_dest}/privkey.pem"
-    
+
     local _nc; _nc=$(_mt_nginx_container)
-    
-    # Перед изменением конфига — починить все битые MT блоки (у которых нет сертов в /opt/nginx/ssl/)
+
+    # Перед изменением конфига — починить битые MT-блоки, которым не хватает cert-файлов.
+    # Ищем ошибки обоих типов путей, которые может использовать nginx.conf:
+    #   /etc/nginx/ssl/<domain>/   (новый формат — копии из letsencrypt)
+    #   /etc/letsencrypt/live/<domain>/  (старый формат — прямая ссылка)
     if [ -n "$_nc" ]; then
+        local _nginx_test_pre
+        _nginx_test_pre=$(docker exec "$_nc" nginx -t 2>&1)
+        # Починяем /etc/nginx/ssl/<domain> — пытаемся скопировать из letsencrypt
         while IFS= read -r _broken_domain; do
             local _broken_cert="/etc/letsencrypt/live/${_broken_domain}"
             local _broken_ssl="/opt/nginx/ssl/${_broken_domain}"
             if [ -f "${_broken_cert}/fullchain.pem" ]; then
                 mkdir -p "$_broken_ssl"
                 cp -f "${_broken_cert}/fullchain.pem" "${_broken_ssl}/fullchain.pem"
-                cp -f "${_broken_cert}/privkey.pem" "${_broken_ssl}/privkey.pem"
+                cp -f "${_broken_cert}/privkey.pem"   "${_broken_ssl}/privkey.pem"
             fi
-        done < <(docker exec "$_nc" nginx -t 2>&1 | \
+        done < <(echo "$_nginx_test_pre" | \
             grep -oP 'cannot load certificate "/etc/nginx/ssl/\K[^/]+' | sort -u)
+        # Починяем /etc/letsencrypt/live/<domain> — пересоздаём симлинки из archive если нужно
+        while IFS= read -r _broken_domain; do
+            local _live_dir="/etc/letsencrypt/live/${_broken_domain}"
+            local _arc_dir="/etc/letsencrypt/archive/${_broken_domain}"
+            if [ ! -f "${_live_dir}/fullchain.pem" ] && [ -d "$_arc_dir" ]; then
+                mkdir -p "$_live_dir"
+                local _latest; _latest=$(ls -v "${_arc_dir}/fullchain"*.pem 2>/dev/null | tail -1)
+                [ -n "$_latest" ] && ln -sf "$_latest" "${_live_dir}/fullchain.pem" || true
+                _latest=$(ls -v "${_arc_dir}/privkey"*.pem 2>/dev/null | tail -1)
+                [ -n "$_latest" ] && ln -sf "$_latest" "${_live_dir}/privkey.pem" || true
+            fi
+        done < <(echo "$_nginx_test_pre" | \
+            grep -oP 'cannot load certificate "/etc/letsencrypt/live/\K[^/]+' | sort -u)
     fi
-    
+
     _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
+    local _block_added=false
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
@@ -342,8 +357,8 @@ server {
     listen 443 ssl;
     http2 on;
 
-    ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
+    ssl_certificate "/etc/letsencrypt/live/${_domain}/fullchain.pem";
+    ssl_certificate_key "/etc/letsencrypt/live/${_domain}/privkey.pem";
 
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 
@@ -367,6 +382,7 @@ if idx >= 0:
 with open(path, 'w') as f: f.write(content)
 PYEOF
         rm -f "$_tmpf"
+        _block_added=true
     fi
     if [ -n "$_nc" ]; then
         local _nginx_test
@@ -374,6 +390,17 @@ PYEOF
         if echo "$_nginx_test" | grep -q "test is successful"; then
             docker exec "$_nc" nginx -s reload 2>/dev/null || true
         else
+            # nginx -t упал — откатываем добавленный блок чтобы не сломать конфиг
+            if [ "$_block_added" = true ]; then
+                python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null || true
+import sys, re
+path, domain = sys.argv[1], sys.argv[2]
+with open(path) as f: content = f.read()
+pattern = re.compile(r'\n?# BEGIN_MT_CONNECT_' + re.escape(domain) + r'\n.*?# END_MT_CONNECT_' + re.escape(domain) + r'\n?', re.S)
+content = pattern.sub('\n', content)
+with open(path, 'w') as f: f.write(content)
+PYEOF
+            fi
             echo "$_nginx_test" > "/tmp/nginx-test-${_domain}.log" 2>/dev/null || true
             return 1
         fi
