@@ -218,6 +218,18 @@ _nginx_restore_stream_block() {
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
+    # Определяем нужен ли listen 443 ssl; — только если порт 443 НЕ занят сторонним процессом.
+    # Логика идентична _mt_nginx_add_domain в menu.sh: на нод-серверах rw-core держит 443 напрямую,
+    # поэтому nginx не должен на него слушать. На панельных серверах и чистых — nginx держит 443 сам.
+    local _has_listen_443=true
+    if ss -tlnp 2>/dev/null | grep -q ':443'; then
+        if ! ss -tlnp 2>/dev/null | grep ':443' | grep -q 'nginx'; then
+            _has_listen_443=false
+        fi
+    fi
+    local _listen443_line=""
+    [ "$_has_listen_443" = "true" ] && _listen443_line=$'\n    listen 443 ssl;'
+
     # Fallback: если блоки не сохранены (MTProto установлен без nginx), генерируем из .env
     local _mt_env="/opt/mtproto/.env"
     if [ ${#_NGINX_MT_CONNECT_BLOCKS[@]} -eq 0 ] && [ -f "$_mt_env" ]; then
@@ -235,12 +247,10 @@ _nginx_restore_mt_connect_blocks() {
                 cp -fL "/etc/letsencrypt/live/${_si}/fullchain.pem" "/opt/nginx/ssl/${_si}/fullchain.pem"
                 cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
             fi
-            local _listen443=""
-            grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null || _listen443=$'\n    listen 443 ssl;'
             local _html_path="/var/www/html/mtproto-connect.html"
             _NGINX_MT_CONNECT_BLOCKS["$_si"]="server {
     server_name ${_si};
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;${_listen443}
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;${_listen443_line}
     http2 on;
 
     ssl_certificate \"/etc/nginx/ssl/${_si}/fullchain.pem\";
@@ -268,6 +278,15 @@ _nginx_restore_mt_connect_blocks() {
     for domain in "${!_NGINX_MT_CONNECT_BLOCKS[@]}"; do
         grep -qF "# BEGIN_MT_CONNECT_${domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
         content="${_NGINX_MT_CONNECT_BLOCKS[$domain]}"
+        # Корректируем listen 443 ssl; в сохранённом блоке под текущее состояние сервера.
+        # Это необходимо когда архитектура изменилась (например, установили ноду после MT).
+        if [ "$_has_listen_443" = "false" ]; then
+            # Удаляем listen 443 ssl; если порт 443 занят сторонним процессом
+            content=$(printf '%s\n' "$content" | grep -v '^\s*listen 443 ssl;')
+        elif ! printf '%s\n' "$content" | grep -q 'listen 443 ssl'; then
+            # Добавляем listen 443 ssl; после unix socket строки если его нет
+            content=$(printf '%s\n' "$content" | sed '/listen unix:\/dev\/shm\/nginx.sock/a\    listen 443 ssl;')
+        fi
         tmp=$(mktemp); block_file=$(mktemp)
         printf '# BEGIN_MT_CONNECT_%s\n%s\n# END_MT_CONNECT_%s\n' "$domain" "$content" "$domain" > "$block_file"
         awk -v bf="$block_file" '
