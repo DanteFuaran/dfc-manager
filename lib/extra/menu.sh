@@ -796,6 +796,7 @@ _mt_do_install() {
 
         echo
         printf "${GREEN}✅ Установка завершена!${NC}\n"
+        _install_bin_wrappers 2>/dev/null || true
         sleep 0.6
 
         clear
