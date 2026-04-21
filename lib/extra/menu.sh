@@ -948,18 +948,18 @@ _mt_do_stats() {
             [ -z "$_ts" ] || [ "$_ts" = "0" ] && _new_ips="${_new_ips} ${_gip}"
         done <<< "$_client_ips"
         if [ -n "$_new_ips" ]; then
-            # Формируем JSON-массив и делаем батч-запрос в фоне
-            (
-                local _jarr
-                _jarr=$(echo "$_new_ips" | tr ' ' '\n' | grep -v '^$' \
-                    | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
-                local _resp
-                _resp=$(curl -s --max-time 6 -X POST \
-                    "http://ip-api.com/batch?fields=query,country,city" \
-                    -H "Content-Type: application/json" \
-                    -d "[${_jarr}]" 2>/dev/null)
-                # Парсим: {"query":"1.2.3.4","country":"Russia","city":"Moscow"}
-                echo "$_resp" | grep -oP '\{[^}]+\}' | while read -r _obj; do
+            # Формируем JSON-массив и делаем синхронный запрос (только для новых IP — быстро)
+            local _jarr
+            _jarr=$(echo "$_new_ips" | tr ' ' '\n' | grep -v '^$' \
+                | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
+            local _resp
+            _resp=$(curl -s --max-time 4 -X POST \
+                "http://ip-api.com/batch?fields=query,country,city" \
+                -H "Content-Type: application/json" \
+                -d "[${_jarr}]" 2>/dev/null)
+            # Парсим: {"query":"1.2.3.4","country":"Russia","city":"Moscow"}
+            if [ -n "$_resp" ]; then
+                while IFS= read -r _obj; do
                     local _q _co _ci
                     _q=$(echo "$_obj"  | grep -oP '"query"\s*:\s*"\K[^"]+')
                     _co=$(echo "$_obj" | grep -oP '"country"\s*:\s*"\K[^"]+')
@@ -969,8 +969,8 @@ _mt_do_stats() {
                     [ -n "$_co" ] && _geo_str="${_co}"
                     [ -n "$_ci" ] && _geo_str="${_geo_str}, ${_ci}"
                     _mt_db_geo_set "$_q" "$_geo_str"
-                done
-            ) &
+                done < <(echo "$_resp" | grep -oP '\{[^}]+\}')
+            fi
         fi
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
