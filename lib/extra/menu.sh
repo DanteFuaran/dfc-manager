@@ -1360,7 +1360,7 @@ _mt_do_uninstall() {
     echo
 
     (if [ -d "$_MT_DIR" ]; then
-        cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || true
+        cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 1 >/dev/null 2>&1 || true
     fi
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
     show_spinner "Остановка контейнера..." "Контейнер остановлен"
@@ -1715,23 +1715,36 @@ _mt_has_stream() {
 
 _mt_get_active_ips() {
     _mt_load_env
+    local _port="${PROXY_PORT:-8443}"
     if _mt_has_stream; then
-        # Настоящие IP клиентов видны на хостовом порту 443 (nginx stream).
+        # nginx stream владеет 443: реальные IP клиентов видны на хостовом порту 443.
         # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
         ss -tn state established 'sport = :443' 2>/dev/null \
             | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
-        # Прямой Docker DNAT (стандалон нода): хостовой ss не видит реальные IP клиентов.
-        # nsenter в network namespace контейнера — видим прямые соединения на 443 внутри.
-        local _pid
-        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-            nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
-                | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
+        # Прямой Docker DNAT (HOST:PROXY_PORT → container:443).
+        # Ни хостовой ss, ни nsenter не видят реальные IP: контейнер видит только
+        # исходящие соединения к Telegram (8888). conntrack видит NAT-сессии с реальными IP.
+        if command -v conntrack >/dev/null 2>&1; then
+            conntrack -L -p tcp 2>/dev/null \
+                | grep " ESTABLISHED " \
+                | grep "dport=${_port}" \
+                | awk '{for(i=1;i<=NF;i++) if($i~/^src=/){sub("src=","",$i); print $i; break}}' \
+                | grep -v '^172\.' | grep -v '^10\.' | grep -v '^192\.168\.' \
                 | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
                 | sort -u
+        else
+            # Fallback: nsenter (side effect: видим только соединения канала, не клиентские IP)
+            local _pid
+            _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
+            if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
+                nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
+                    | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
+                    | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
+                    | sort -u
+            fi
         fi
     fi
 }
