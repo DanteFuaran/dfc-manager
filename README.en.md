@@ -20,7 +20,7 @@
 ## 🚀 Quick Start
 
 ```bash
-cd /opt && bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
+cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 ```
 
 <sub>After installation, manage everything with <b><code>dfc-manager</code></b> or <b><code>dfc</code></b></sub>
