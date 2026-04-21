@@ -466,10 +466,10 @@ h1{font-size:1.4rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.01em}
 </div>
 <script>
 var TG="${_tg_url}",done=false;
-function go(){if(done)return;done=true;window.location.href=TG;}
+function go(){if(done)return;done=true;window.location.href=TG;setTimeout(function(){window.close()},3000);}
 setTimeout(go,1200);
-setTimeout(function(){window.close()},10000);
-document.getElementById('btn').addEventListener('click',function(e){e.preventDefault();go();});
+// Нажатие кнопки — пускаем вручную, не прерываем дефолтный href (tg:// открывается нативно по ссылке)
+document.getElementById('btn').addEventListener('click',function(){done=true;setTimeout(function(){window.close()},3000);});
 </script>
 </body>
 </html>
@@ -1353,8 +1353,9 @@ _mt_do_uninstall() {
     docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
     show_spinner "Остановка контейнера..." "Контейнер остановлен"
 
-    (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
-    rm -rf "$_MT_DIR" 2>/dev/null || true
+    (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
+    # Дальнейшее удаление выполняем без ожидания
+    (rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
     fi
@@ -1695,19 +1696,23 @@ _mt_strip_ip() {
     echo "$_ip"
 }
 
+# Проверяет, активен ли nginx stream-блок (MT Proto за nginx)
+_mt_has_stream() {
+    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null
+}
+
 _mt_get_active_ips() {
     _mt_load_env
-    local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
-        # MTProto за nginx stream: клиенты подключаются на 443, реальные IP видны на этом порту.
+    if _mt_has_stream; then
+        # Настоящие IP клиентов видны на хостовом порту 443 (nginx stream).
         # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
         ss -tn state established 'sport = :443' 2>/dev/null \
             | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
-        # Docker DNAT: хостовой ss не видит соединения на порту контейнера.
-        # Используем nsenter в network namespace контейнера — mtg слушает на 3128 внутри.
+        # Прямой Docker DNAT (стандалон нода): хостовой ss не видит реальные IP клиентов.
+        # nsenter в network namespace контейнера — видим прямые соединения на 443 внутри.
         local _pid
         _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
         if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
@@ -1736,7 +1741,7 @@ _mt_ipt_block_add() {
     local _entry="$1"
     _mt_load_env
     local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+    if _mt_has_stream; then
         # nginx слушает 443 в host-mode — блокируем в INPUT
         _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
             || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
@@ -1756,7 +1761,7 @@ _mt_ipt_block_del() {
     local _entry="$1"
     _mt_load_env
     local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+    if _mt_has_stream; then
         _mt_ipt -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
     else
         _mt_ipt -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
@@ -1775,7 +1780,7 @@ _mt_kill_src() {
     # Fallback: ss -K убивает сокет напрямую
     _mt_load_env
     local _port="${PROXY_PORT:-3128}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+    if _mt_has_stream; then
         # Host mode: сокеты nginx видны на хосте
         ss -K "src ${_src}" >/dev/null 2>&1 || true
     else
@@ -1944,7 +1949,7 @@ _mt_ipt_allow_apply() {
     _mt_block_clear_all 2>/dev/null
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+    if _mt_has_stream; then
         while IFS= read -r _e; do
             [ -z "$_e" ] && continue
             _mt_ipt -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
@@ -1979,7 +1984,7 @@ _mt_block_apply() {
 _mt_block_clear_all() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    if _mt_nginx_available && [ "${_port}" = "443" ]; then
+    if _mt_has_stream; then
         _mt_ipt -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
             eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
         done
