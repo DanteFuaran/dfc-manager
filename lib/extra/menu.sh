@@ -1794,13 +1794,9 @@ _mt_nginx_reload() {
     docker exec "$_nc" nginx -s reload 2>/dev/null || true
 }
 
-# Переключает MT Proto в stream-режим если он установлен и занимает 443 напрямую.
-# Вызывается из node.sh перед запуском ремнаноды, чтобы xray смог занять 443.
-# Переключает MT Proto в stream-режим если remnanode установлен.
-# nginx stream занимает 443 и маршрутизирует по SNI: HTTP → unix socket, MT Proto → localhost:3128.
-# Режим не отменяется при удалении ноды — nginx всё равно владеет 443.
-# Активирует nginx stream-режим для MT Proto.
-# MT Proto всегда работает через nginx stream — вызывается после каждого cert/nginx шага.
+# Вызывается при установке ноды и после cert/nginx шагов MT Proto.
+# Панель+нода или только MT Proto: nginx stream владеет 443, SNI-маршрутизация.
+# Standalone нода (без панели): xray владеет 443, MT Proto на PROXY_PORT напрямую.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
 
@@ -1829,6 +1825,14 @@ _mt_ensure_stream_mode() {
     _mt_nginx_stream_write 2>/dev/null || true
     # Перезапускаем nginx чтобы актуальный stream-блок вступил в силу
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
+
+    # Восстанавливаем HTML файл /connect если randomhtml его удалил
+    if [ ! -f "/var/www/html/mtproto-connect.html" ] && [ -f "$_MT_ENV" ]; then
+        _mt_load_env
+        if [ -n "${SERVER_IP:-}" ] && [ -n "${PROXY_SECRET:-}" ]; then
+            _mt_write_proxy_page "${SERVER_IP}" "${PROXY_SECRET}" "${PROXY_PORT:-8443}" "${PROXY_NAME:-}" 2>/dev/null || true
+        fi
+    fi
 }
 
 # Проверяет доступность nginx контейнера

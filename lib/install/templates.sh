@@ -43,8 +43,8 @@ apply_template() {
     # Создаём директорию если не существует
     mkdir -p /var/www/html/
     
-    # Очищаем директорию (кроме метаданных)
-    find /var/www/html/ -mindepth 1 -not -name '.current_template' -not -name '.template_changed' -delete 2>/dev/null
+    # Очищаем директорию (кроме метаданных и MT Proto connect-страницы)
+    find /var/www/html/ -mindepth 1 -not -name '.current_template' -not -name '.template_changed' -not -name 'mtproto-connect.html' -delete 2>/dev/null
     
     # Скачиваем шаблон с GitHub (через API, т.к. репо приватный)
     local _api_url="https://api.github.com/repos/DanteFuaran/dfc-manager/contents/templates/${template_id}/index.html?ref=${SCRIPT_BRANCH}"
