@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
 #   https://github.com/DanteFuaran/dfc-manager
-#   Установка: bash <(curl -Ls https://raw.githubusercontent.com/DanteFuaran/dfc-manager/refs/heads/main/dfc-manager.sh)
+#   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
 
 # ─── Bootstrap: запуск через curl или не из установленной копии ─────────
