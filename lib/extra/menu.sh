@@ -1207,7 +1207,7 @@ _mt_do_change_config() {
             echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана:${NC}"
             echo -e "   ${DARKGRAY}Домен указывает на:${NC} ${WHITE}${_dns_ips:-?}${NC}"
             echo -e "   ${DARKGRAY}IP этого сервера:${NC}   ${WHITE}${_srv_ip:-?}${NC}"
-            echo -e "   ${DARKGRAY}Исправьте A-запись и используйте пункт \"🌐 Страница /connect\".${NC}"
+            echo -e "   ${DARKGRAY}Исправьте A-запись и повторите изменение конфигурации.${NC}"
         fi
     fi
 
@@ -1309,38 +1309,39 @@ _mt_do_uninstall() {
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
     show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
 
-    # Удаляем nginx блок и SSL сертификаты для домена
-    local _domain="${SERVER_IP:-}"
-    if [ -n "$_domain" ] && ! [[ "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        (local _nginx_conf="/opt/nginx/nginx.conf"
-        local _begin_marker="# BEGIN_MT_CONNECT_${_domain}"
-        local _end_marker="# END_MT_CONNECT_${_domain}"
-        if grep -q "$_begin_marker" "$_nginx_conf" 2>/dev/null; then
-            python3 - "$_nginx_conf" "$_begin_marker" "$_end_marker" <<'PYEOF' 2>/dev/null || true
+    # Удаляем все MTProto-блоки из nginx и связанные сертификаты
+    (local _nginx_conf="/opt/nginx/nginx.conf"
+    local _mt_domains=""
+    if [ -f "$_nginx_conf" ]; then
+        _mt_domains=$(python3 - "$_nginx_conf" <<'PYEOF' 2>/dev/null || true
+import re
 import sys
-path, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f: content = f.read()
-while begin in content:
-    i_start = content.find('\n' + begin)
-    if i_start == -1: i_start = content.find(begin)
-    else: i_start += 1
-    i_end = content.find(end, i_start)
-    if i_end == -1: break
-    i_end += len(end)
-    if i_end < len(content) and content[i_end] == '\n': i_end += 1
-    content = content[:i_start] + content[i_end:]
-with open(path, 'w') as f: f.write(content)
+
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+
+pattern = re.compile(r'\n?# BEGIN_MT_CONNECT_([^\n]+)\n.*?# END_MT_CONNECT_\1\n?', re.S)
+domains = pattern.findall(content)
+content = pattern.sub('\n', content)
+
+with open(path, 'w') as f:
+    f.write(content)
+
+print('\n'.join(domains))
 PYEOF
-        fi
-        # Удаляем скопированные SSL сертификаты
-        rm -rf "/opt/nginx/ssl/${_domain}" 2>/dev/null || true
-        # Перезагружаем nginx
-        local _nc; _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
-        if [ -n "$_nc" ]; then
-            docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
-        fi) &
-        show_spinner "Удаление из Nginx..." "Удалено из Nginx"
+)
+        while IFS= read -r _mt_domain; do
+            [ -n "$_mt_domain" ] || continue
+            rm -rf "/opt/nginx/ssl/${_mt_domain}" 2>/dev/null || true
+        done <<< "$_mt_domains"
     fi
+    rm -f /var/www/html/mtproto-connect.html 2>/dev/null || true
+    local _nc; _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
+    if [ -n "$_nc" ]; then
+        docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
+    fi) &
+    show_spinner "Удаление из Nginx..." "Удалено из Nginx"
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
@@ -1470,7 +1471,7 @@ _mt_do_setup_connect() {
             # Показываем лог certbot
             local _clog="/tmp/certbot-${SERVER_IP}.log"
             if [ -s "$_clog" ]; then
-                echo -e "${YELLOW}Лог certbot:${NC}"
+            echo -e "   ${DARKGRAY}Исправьте A-запись и повторите изменение конфигурации.${NC}"
                 echo -e "${DARKGRAY}$(tail -20 "$_clog")${NC}"
             else
                 echo -e "${DARKGRAY}  Проверьте: DNS указывает на этот сервер, порт 80 открыт.${NC}"
@@ -2431,9 +2432,6 @@ manage_mtproto() {
             _items+=("🚫  Управление доступом");               _actions+=("access")
             _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
             _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
-            if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                _items+=("🌐  Страница /connect");             _actions+=("setup_connect")
-            fi
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             if [ "$_running" = true ]; then
                 _items+=("⏹️   Остановить прокси");    _actions+=("stop")
@@ -2458,7 +2456,6 @@ manage_mtproto() {
             access)        _mt_do_access ;;
             config)        _mt_do_config || return ;;
             change_config) _mt_do_change_config ;;
-            setup_connect) _mt_do_setup_connect ;;
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
             restart)       _mt_do_restart ;;

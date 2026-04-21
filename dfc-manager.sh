@@ -14,8 +14,8 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         # Запущено через curl/pipe — обновляем существующую копию через git
         if command -v git >/dev/null 2>&1 && [ -d "${_INSTALL_DIR}/.git" ]; then
             git -C "${_INSTALL_DIR}" remote set-url origin "https://github.com/DanteFuaran/dfc-manager.git" 2>/dev/null || true
-            git -C "${_INSTALL_DIR}" fetch --depth 1 origin main 2>/dev/null \
-                && git -C "${_INSTALL_DIR}" reset --hard origin/main 2>/dev/null || true
+            git -C "${_INSTALL_DIR}" fetch --depth 1 origin main >/dev/null 2>&1 \
+                && git -C "${_INSTALL_DIR}" reset --hard origin/main >/dev/null 2>&1 || true
         fi
         exec "$_INSTALL_SCRIPT" "$@"
     fi
