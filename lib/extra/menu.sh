@@ -547,6 +547,7 @@ PROXY_SECRET=${PROXY_SECRET}
 SERVER_IP=${SERVER_IP}
 FAKE_DOMAIN=${FAKE_DOMAIN}
 PROXY_TAG=${PROXY_TAG}
+PROXY_NAME=${PROXY_NAME:-}
 ACME_EMAIL=${ACME_EMAIL:-}
 EOF
 }
@@ -586,12 +587,13 @@ COMPOSE
 # При Esc стираем строки текущего шага и повторно выводим предыдущий инпут.
 _mt_do_install() {
     set +e
-    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG
+    local PROXY_PORT PROXY_SECRET SERVER_IP FAKE_DOMAIN PROXY_TAG PROXY_NAME
     PROXY_PORT="8443"
     FAKE_DOMAIN="google.com"
     PROXY_SECRET=""
     SERVER_IP=""
     PROXY_TAG=""
+    PROXY_NAME=""
     [ -f "$_MT_ENV" ] && source "$_MT_ENV" 2>/dev/null || true
 
     clear
@@ -701,7 +703,16 @@ _mt_do_install() {
                     break
                 done
                 ;;
-            3) # Fake TLS домен
+            3) # Название сервиса (для страницы /connect)
+                _mt_read_input PROXY_NAME "Название сервиса ${DARKGRAY}[Enter — MTProto Proxy]${NC}:" "${PROXY_NAME:-}"
+                if [ $? -eq 0 ]; then
+                    (( _step++ ))
+                else
+                    _mt_erase_lines 1
+                    (( _step-- ))
+                fi
+                ;;
+            4) # Fake TLS домен
                 echo
                 _mt_read_input FAKE_DOMAIN "Fake TLS домен ${DARKGRAY}[${FAKE_DOMAIN}]${NC}:" "$FAKE_DOMAIN"
                 if [ $? -eq 0 ]; then
@@ -711,7 +722,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            4) # Секрет — inline отображение при авто-генерации
+            5) # Секрет — inline отображение при авто-генерации
                 echo
                 _mt_read_input _secret_input "Введите секрет ${DARKGRAY}[Enter для создания нового]${NC}:" ""
                 if [ $? -eq 0 ]; then
@@ -725,7 +736,7 @@ _mt_do_install() {
                     (( _step-- ))
                 fi
                 ;;
-            5) # Telegram TAG
+            6) # Telegram TAG
                 _mt_read_input PROXY_TAG "Telegram TAG ${DARKGRAY}[Enter - пропустить]${NC}:" "${PROXY_TAG:-}"
                 if [ $? -eq 0 ]; then
                     break
@@ -774,6 +785,25 @@ _mt_do_install() {
         rm -f "${_compose_err:-}"
         _mt_save_config
 
+        # Сертификат и страница /connect (только для доменного SERVER_IP)
+        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ -z "$(_mt_nginx_container)" ]; then
+                (_mt_setup_nginx) &
+                show_spinner "Установка Nginx" "Установка Nginx"
+            fi
+            (_mt_issue_cert "$SERVER_IP") &
+            show_spinner "Получение сертификатов" "Получение сертификатов"
+            local _cert_rc=$?
+            if [ "$_cert_rc" -eq 0 ]; then
+                (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+                show_spinner "Создание страницы подключения" "Создание страницы подключения"
+            elif [ "$_cert_rc" -eq 2 ]; then
+                echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
+                echo -e "${DARKGRAY}   Страница /connect будет создана после исправления DNS.${NC}"
+                echo
+            fi
+        fi
+
         echo
         printf "${GREEN}✅ Установка завершена!${NC}\n"
         sleep 0.6
@@ -789,6 +819,7 @@ _mt_do_install() {
         local _cw=12
         echo -e " ${DARKGRAY}$(_mpad "Домен/IP:" $_cw)${NC} ${WHITE}${SERVER_IP}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Порт:" $_cw)${NC} ${WHITE}${PROXY_PORT}${NC}"
+        echo -e " ${DARKGRAY}$(_mpad "Название:" $_cw)${NC} ${WHITE}${PROXY_NAME:-MTProto Proxy}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Fake TLS:" $_cw)${NC} ${WHITE}${FAKE_DOMAIN}${NC}"
         echo -e " ${DARKGRAY}$(_mpad "Секрет:" $_cw)${NC} ${YELLOW}${PROXY_SECRET}${NC}"
         if [ -n "$PROXY_TAG" ]; then
@@ -799,6 +830,12 @@ _mt_do_install() {
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
+        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+           [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+            echo -e "${WHITE}🌐 Страница подключения:${NC}"
+            echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
+            echo
+        fi
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
@@ -865,6 +902,12 @@ _mt_do_config() {
     echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
     echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+       [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+        echo
+        echo -e "${WHITE}🌐 Страница подключения:${NC}"
+        echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
+    fi
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1238,8 +1281,29 @@ _mt_do_change_config() {
         fi
     fi
 
+    # Пересоздаём страницу /connect если домен изменился или блок ещё не создан
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [ -z "$(_mt_nginx_container)" ]; then
+            (_mt_setup_nginx) &
+            show_spinner "Установка Nginx..." "Nginx установлен"
+        fi
+        (_mt_issue_cert "$SERVER_IP") &
+        show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+        local _cert_rc=$?
+        if [ "$_cert_rc" -eq 0 ]; then
+            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+            show_spinner "Создание страницы /connect..." "Страница /connect обновлена"
+        elif [ "$_cert_rc" -eq 2 ]; then
+            echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана.${NC}"
+        fi
+    fi
+
     echo
     echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+       [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+        echo -e " ${DARKGRAY}Страница:${NC}  ${GREEN}https://${SERVER_IP}/connect${NC}"
+    fi
     echo
     _mt_press_enter
 }
