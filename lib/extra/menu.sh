@@ -241,8 +241,8 @@ _mt_issue_cert() {
     # Если cert существует но невалиден (сломан, нет renewal conf, истёк) — чистим и перевыпускаем.
     if [ -z "$_force" ] && [ -f "${_cert_dir}/fullchain.pem" ]; then
         if [ -f "$_renewal_conf" ] && \
-           openssl x509 -noout -checkend 86400 -in "${_cert_dir}/fullchain.pem" 2>/dev/null; then
-            return 0
+           openssl x509 -noout -checkend 86400 -in "${_cert_dir}/fullchain.pem" >/dev/null 2>&1; then
+            return 0  # cert существует и валиден
         fi
         # Cert сломан или без renewal conf — удалить, чтобы certbot пересоздал корректно
         rm -rf "${_cert_dir}" 2>/dev/null || true
@@ -774,7 +774,15 @@ _mt_do_install() {
                 show_spinner "Установка Nginx" "Установка Nginx"
             fi
             (_mt_issue_cert "$SERVER_IP") &
-            show_spinner "Получение сертификатов" "Получение сертификатов"
+            local _cert_exists=false
+            { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
+              openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
+            if $_cert_exists; then
+                wait $! 2>/dev/null || true
+                printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
+            else
+                show_spinner "Получение сертификатов" "Получение сертификатов"
+            fi
             local _cert_rc=$?
             if [ "$_cert_rc" -eq 0 ]; then
                 (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
@@ -1270,7 +1278,15 @@ _mt_do_change_config() {
             show_spinner "Установка Nginx..." "Nginx установлен"
         fi
         (_mt_issue_cert "$SERVER_IP") &
-        show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+        local _cert_exists=false
+        { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
+          openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
+        if $_cert_exists; then
+            wait $! 2>/dev/null || true
+            printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
+        else
+            show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+        fi
         local _cert_rc=$?
         if [ "$_cert_rc" -eq 0 ]; then
             (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
