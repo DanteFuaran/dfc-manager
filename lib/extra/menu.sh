@@ -1796,10 +1796,9 @@ _mt_nginx_reload() {
 # MT Proto всегда работает через nginx stream — вызывается после каждого cert/nginx шага.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
-    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && return 0
-    # Записываем stream-блок: nginx stream владеет 443, маршрутизирует по SNI
+    # Всегда перезаписываем stream-блок — нужно подхватить новые домены (node, subpage и т.д.)
     _mt_nginx_stream_write 2>/dev/null || true
-    # Перезапускаем nginx чтобы stream-блок вступил в силу
+    # Перезапускаем nginx чтобы актуальный stream-блок вступил в силу
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
 }
 
@@ -1834,9 +1833,13 @@ for entry in http_domains:
         if d != '_' and '.' in d:
             domain_set.add(d)
 map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_set))
-# Build direct proxy_port listener block (if port != 443)
+# Прямой listener на PROXY_PORT — только если remnanode НЕ установлен.
+# Когда remnanode есть — xray занимает PROXY_PORT (обычно 8443), конфликт → SPAWN_ERROR.
+# MT Proto клиенты достигают прокси через порт 443 (SNI default → 8445 → 3128).
+import os
+has_remnanode = os.path.exists('/opt/remnanode/docker-compose.yml')
 direct_port_block = ''
-if proxy_port and proxy_port != '443':
+if proxy_port and proxy_port != '443' and not has_remnanode:
     direct_port_block = f"""
     # Прямой listener на PROXY_PORT — клиенты Telegram подключаются сюда
     server {{
