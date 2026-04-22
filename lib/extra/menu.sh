@@ -2306,10 +2306,11 @@ _mt_block_clear_all() {
     _mt_ip6t -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
         eval _mt_ip6t "${_rule/-A/-D}" 2>/dev/null || true
     done
-    _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
+    # mangle PREROUTING: удаляем и DROP/RETURN, и любые временные LOG-правила (например, диагностика)
+    _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN\|--dport ${_port} .* -j LOG" | while read -r _rule; do
         eval _mt_ipt -t mangle "${_rule/-A/-D}" 2>/dev/null || true
     done
-    _mt_ip6t -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
+    _mt_ip6t -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN\|--dport ${_port} .* -j LOG" | while read -r _rule; do
         eval _mt_ip6t -t mangle "${_rule/-A/-D}" 2>/dev/null || true
     done
 }
