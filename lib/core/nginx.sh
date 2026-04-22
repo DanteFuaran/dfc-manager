@@ -218,9 +218,22 @@ _nginx_restore_stream_block() {
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
-    # MT Proto ВСЕГДА работает через nginx stream — listen 443 ssl в HTTP-блоке не нужен.
-    local _has_listen_443=false
-    local _listen443_line=""
+    # Определяем текущий режим nginx.conf:
+    # - unix socket (нода standalone или нода+панель): xray владеет портом 443,
+    #   значит MT /connect блок ДОЛЖЕН слушать unix-сокет с proxy_protocol
+    # - listen 443 в других server-блоках (только панель, или панель+подписка):
+    #   порт 443 свободен — MT /connect может слушать 443 напрямую
+    # - MTPROTO_STREAM блок: nginx терминирует 443 через stream и прокидывает на сокет
+    local _uses_socket=false _has_listen_443=false _has_stream_block=false
+    if grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _uses_socket=true
+    fi
+    if grep -Eq '^\s*listen\s+443\s+ssl' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _has_listen_443=true
+    fi
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _has_stream_block=true
+    fi
 
     # Fallback: если блоки не сохранены (MTProto установлен без nginx), генерируем из .env
     local _mt_env="/opt/mtproto/.env"
@@ -240,11 +253,9 @@ _nginx_restore_mt_connect_blocks() {
                 cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
             fi
             local _html_path="/var/www/html/mtproto-connect.html"
-            # Режим listen: stream (unix-сокет) или прямой TCP 443
-            local _fb_use_stream=false
-            grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && _fb_use_stream=true
+            # Режим listen: unix socket (нода/стрим-блок) или прямой TCP 443
             local _fb_listen _fb_real_ip=""
-            if [ "$_fb_use_stream" = true ]; then
+            if [ "$_uses_socket" = true ] || [ "$_has_stream_block" = true ]; then
                 _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
                 _fb_real_ip="    real_ip_header proxy_protocol;
     set_real_ip_from unix:;"
@@ -284,14 +295,33 @@ ${_fb_real_ip}
     for domain in "${!_NGINX_MT_CONNECT_BLOCKS[@]}"; do
         grep -qF "# BEGIN_MT_CONNECT_${domain}" "${DIR_NGINX}nginx.conf" 2>/dev/null && continue
         content="${_NGINX_MT_CONNECT_BLOCKS[$domain]}"
-        # Корректируем listen 443 ssl; в сохранённом блоке под текущее состояние сервера.
+        # Адаптируем listen-директивы под текущее состояние сервера.
         # Это необходимо когда архитектура изменилась (например, установили ноду после MT).
-        if [ "$_has_listen_443" = "false" ]; then
-            # Удаляем listen 443 ssl; если порт 443 занят сторонним процессом
-            content=$(printf '%s\n' "$content" | grep -v '^\s*listen 443 ssl;')
-        elif ! printf '%s\n' "$content" | grep -q 'listen 443 ssl'; then
-            # Добавляем listen 443 ssl; после unix socket строки если его нет
-            content=$(printf '%s\n' "$content" | sed '/listen unix:\/dev\/shm\/nginx.sock/a\    listen 443 ssl;')
+        if [ "$_uses_socket" = true ] || [ "$_has_stream_block" = true ]; then
+            # Режим unix-сокета: порт 443 занят xray или nginx stream-модулем.
+            # Удаляем любые listen 443 (IPv4 и IPv6), добавляем unix socket + proxy_protocol.
+            content=$(printf '%s\n' "$content" \
+                | sed -E '/^\s*listen\s+(\[::\]:)?443\s+ssl/d')
+            if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;')
+            fi
+            if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
+                content=$(printf '%s\n' "$content" | sed '/http2 on;/a\
+    real_ip_header proxy_protocol;\
+    set_real_ip_from unix:;')
+            fi
+        else
+            # Прямой режим: порт 443 свободен — MT может слушать его напрямую.
+            # Убираем unix socket / proxy_protocol, оставляем/добавляем listen 443.
+            content=$(printf '%s\n' "$content" \
+                | sed -e '/listen unix:\/dev\/shm\/nginx.sock/d' \
+                      -e '/real_ip_header proxy_protocol/d' \
+                      -e '/set_real_ip_from unix:/d')
+            if ! printf '%s' "$content" | grep -qE '^\s*listen\s+443\s+ssl'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/server_name /a\    listen 443 ssl;\n    listen [::]:443 ssl;')
+            fi
         fi
         tmp=$(mktemp); block_file=$(mktemp)
         printf '# BEGIN_MT_CONNECT_%s\n%s\n# END_MT_CONNECT_%s\n' "$domain" "$content" "$domain" > "$block_file"
@@ -532,10 +562,22 @@ nginx_ensure_conf_for_remaining() {
     if ! is_panel_installed && ! is_node_installed && \
        ! [ -f "/opt/subscribe-page/docker-compose.yml" ] && \
        ! [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
-        # Только BESZEL_BLOCK (управляемый dfc-manager) является причиной держать nginx
+        # Проверяем прочих "пользователей" nginx:
+        # - BESZEL_BLOCK (панель/агент Beszel)
+        # - MT_CONNECT_* или MTPROTO_STREAM (MTProto)
+        local _has_beszel=false _has_mtproto=false
         if [ -f "${DIR_NGINX}nginx.conf" ] && \
            grep -q "^# BEGIN_BESZEL_BLOCK$" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-            nginx_generate_minimal_conf  # сохраняет блоки из памяти и восстанавливает их
+            _has_beszel=true
+        fi
+        if type _mt_installed &>/dev/null && _mt_installed; then
+            _has_mtproto=true
+        elif [ -f "${DIR_NGINX}nginx.conf" ] && \
+             grep -qE "# BEGIN_(MT_CONNECT_|MTPROTO_STREAM)" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+            _has_mtproto=true
+        fi
+        if $_has_beszel || $_has_mtproto; then
+            nginx_generate_minimal_conf  # сохраняет блоки из памяти и восстанавливает их (включая MT_CONNECT)
             nginx_reload
         else
             nginx_teardown

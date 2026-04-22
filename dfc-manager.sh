@@ -139,6 +139,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
     export DFC_AUTO_UPDATED=1
     _UPDATE_FLAG="/tmp/.dfc_upd_$$"
     export _START_TIME=$(date +%s)
+    clear
     (
         _api_repo="DanteFuaran/dfc-manager"
         _remote_sha=$(curl -sL --max-time 5 \

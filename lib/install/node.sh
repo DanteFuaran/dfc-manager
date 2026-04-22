@@ -942,9 +942,17 @@ EOL
     randomhtml
     echo
 
-    # Если MT Proto установлен и занимает 443 напрямую — переключаем его в stream-режим.
-    # Нода запускает xray с network_mode:host, поэтому xray тоже хочет 443.
-    (_mt_ensure_stream_mode 2>/dev/null) &
+    # ─── Согласование с MTProto: если MT Proto установлен, его nginx /connect блок
+    # мог занимать 443 напрямую. Перезапускаем nginx с новым конфигом (где /connect
+    # переключён на unix-сокет), чтобы освободить 443 до старта xray на ноде.
+    # generate_nginx_conf_node уже записал новый nginx.conf выше (с unix-сокетом),
+    # плюс nginx_restore_server_blocks адаптировал MT_CONNECT блоки под сокет.
+    (
+        _mt_ensure_stream_mode >/dev/null 2>&1 || true
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
+            cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
+        fi
+    ) &
     show_spinner "Проверка совместимости MTProto" || true
 
     # Если MTProto stream-блок есть в nginx.conf — запускаем nginx ПЕРВЫМ,
@@ -1168,8 +1176,14 @@ installation_node_with_existing_subpage() {
     randomhtml
     echo
 
-    # Если MT Proto установлен и занимает 443 напрямую — переключаем его в stream-режим.
-    (_mt_ensure_stream_mode 2>/dev/null) &
+    # Согласование с MTProto: перезапустим nginx с новым конфигом, чтобы /connect-блок
+    # переключился на unix-сокет и 443 освободился для xray.
+    (
+        _mt_ensure_stream_mode >/dev/null 2>&1 || true
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
+            cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
+        fi
+    ) &
     show_spinner "Проверка совместимости MTProto" || true
 
     # Запуск контейнеров

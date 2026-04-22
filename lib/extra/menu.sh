@@ -299,22 +299,29 @@ _mt_nginx_add_domain() {
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
 
-    # Определяем режим: stream (unix-сокет) или прямой TCP 443
-    local _use_stream=false
-    grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null && _use_stream=true
+    # Определяем режим nginx.conf:
+    # - stream-блок MTPROTO_STREAM → unix socket с proxy_protocol
+    # - уже есть unix socket listen в других блоках (панель/нода) → unix socket
+    #   (xray/другой сервис занимает 443; нельзя добавить listen 443 напрямую)
+    # - иначе → прямой listen 443
+    local _use_unix=false
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null \
+       || grep -q "listen unix:/dev/shm/nginx.sock" "$_nginx_conf" 2>/dev/null; then
+        _use_unix=true
+    fi
 
     # Строки listen для выбранного режима
     local _listen_lines
-    if [ "$_use_stream" = true ]; then
+    if [ "$_use_unix" = true ]; then
         _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
     else
         _listen_lines="    listen 443 ssl;
     listen [::]:443 ssl;"
     fi
 
-    # Строки real_ip (только для stream-режима)
+    # Строки real_ip (только для unix socket режима)
     local _real_ip_lines=""
-    [ "$_use_stream" = true ] && _real_ip_lines="    real_ip_header proxy_protocol;
+    [ "$_use_unix" = true ] && _real_ip_lines="    real_ip_header proxy_protocol;
     set_real_ip_from unix:;"
 
     # Если блок уже существует — проверяем актуальность.
@@ -327,8 +334,8 @@ _mt_nginx_add_domain() {
             _block_stale=true
         fi
         # Режим listen не совпадает?
-        if [ "$_use_stream" = true ]; then
-            # Stream-режим требует unix-сокета, а блок его не содержит?
+        if [ "$_use_unix" = true ]; then
+            # Unix-сокет режим требует unix-сокета, а блок его не содержит?
             if ! grep -A5 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "unix:/dev/shm/nginx.sock"; then
                 _block_stale=true
             fi
@@ -696,20 +703,27 @@ _mt_do_install() {
     echo
     echo
 
-    # Подготавливаем файлы
-    _mt_write_compose
-    _mt_save_config
-    printf "${GREEN}\u2705${NC} Подготовка компонентов\n"
+    # Подготавливаем файлы (быстро, без внешних процессов)
+    (
+        _mt_write_compose
+        _mt_save_config
+    ) &
+    show_spinner "Подготовка компонентов" "Подготовка компонентов"
 
-    # База данных
-    (_mt_db_migrate) &
+    # База данных: если sqlite3 отсутствует — автоустановка через apt-get
+    # выполняется внутри _mt_db_ensure/_mt_db_migrate; держим процесс в фоне и
+    # показываем спиннер, чтобы пользователь не думал, что установка зависла.
+    (
+        _mt_db_ensure >/dev/null 2>&1 || true
+        _mt_db_migrate >/dev/null 2>&1 || true
+    ) &
     show_spinner "Создание базы данных" "Создание базы данных"
 
-    # Чистим старый контейнер если есть (тихо)
+    # Чистим старый контейнер если есть
     if _mt_installed; then
         (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
          docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        wait $! 2>/dev/null || true
+        show_spinner "Остановка старого контейнера" "Остановка старого контейнера"
     fi
 
     # Тянем образ и запускаем
@@ -717,12 +731,16 @@ _mt_do_install() {
     (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && \
      docker compose up -d 2>"$_compose_err" >/dev/null) &
     show_spinner "Подключение MT Proto" "Подключение MT Proto"
-    _mt_block_apply
 
-    # UFW
-    if command -v ufw >/dev/null 2>&1; then
-        ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
-    fi
+    # Применяем правила доступа (iptables + UFW) в фоне со спиннером —
+    # тут же может докачиваться conntrack через apt-get.
+    (
+        _mt_block_apply >/dev/null 2>&1 || true
+        if command -v ufw >/dev/null 2>&1; then
+            ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+        fi
+    ) &
+    show_spinner "Настройка правил доступа" "Настройка правил доступа"
 
     if _mt_running; then
         rm -f "${_compose_err:-}"
@@ -755,14 +773,15 @@ _mt_do_install() {
             fi
         fi
 
-        echo
-        printf "${GREEN}✅ Установка завершена!${NC}\n"
         # MT Proto работает напрямую (Docker-NAT на PROXY_PORT). Если от прежних
         # установок остался nginx stream-блок — удаляем его, чтобы 443 не был занят.
-        (_mt_ensure_stream_mode 2>/dev/null) &
-        wait $! 2>/dev/null || true
-        _install_bin_wrappers 2>/dev/null || true
-        sleep 0.6
+        # Одновременно компилируем бинарные враппера /usr/local/bin/{dfc,rw}
+        # (gcc/cc занимает несколько секунд на первой установке — нужен спиннер).
+        (
+            _mt_ensure_stream_mode >/dev/null 2>&1 || true
+            _install_bin_wrappers >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Завершение установки" "Установка завершена"
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -2514,8 +2533,8 @@ _mt_do_access() {
                         || _sn_items+=("${GREEN}✅ Добавить в разрешённые: ${_sn_cidr}${NC}")
                 else
                     [ "$_sn_in_l" = true ] \
-                        && _sn_items+=("${GREEN}✅ Разблокировать подсеть ${_sn_cidr}${NC}") \
-                        || _sn_items+=("🚫 Заблокировать подсеть ${_sn_cidr}")
+                        && _sn_items+=("${GREEN}✅  Разблокировать подсеть ${_sn_cidr}${NC}") \
+                        || _sn_items+=("🚫  Заблокировать подсеть ${_sn_cidr}")
                 fi
                 _sn_items+=("${_sep_ac}")
                 _sn_items+=("⬅️   Назад")
@@ -2587,7 +2606,7 @@ _mt_do_access() {
                     _conf_btn="${RED}🚫  Удалить: ${_sel}${NC}"
                 elif [ "$_in_l" = true ]; then
                     _conf_title="Разблокировать IP?"
-                    _conf_btn="${GREEN}✅ Разблокировать: ${_sel}${NC}"
+                    _conf_btn="${GREEN}✅  Разблокировать: ${_sel}${NC}"
                 else
                     _conf_title="Заблокировать IP?"
                     _conf_btn="${RED}🚫  Заблокировать: ${_sel}${NC}"
