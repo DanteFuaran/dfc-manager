@@ -1901,51 +1901,54 @@ _mt_has_stream() {
 _mt_get_active_ips() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    # ВАЖНО: conntrack держит ESTABLISHED очень долго (до 5 дней),
-    # поэтому после отключения IP может "залипать" в статистике.
+
+    # Диагностика показала: в режиме Docker-NAT (HOST:PROXY_PORT → CONTAINER:443)
+    # реальные established-сокеты видны ТОЛЬКО внутри netns контейнера.
+    # Формат `ss -tn state established` внутри контейнера (без Netid/State колонки):
+    #   Recv-Q  Send-Q  Local Address:Port      Peer Address:Port
+    #   0       0       172.18.0.2:443          45.14.109.154:51011
+    # → peer = $4, NOT $5.
     #
-    # В режиме Docker-NAT активные соединения надёжнее всего смотреть внутри netns контейнера:
-    # там локальный порт всегда :443, а source IP остаётся реальным клиентским.
+    # Чтобы не зависеть от позиции колонок, сканируем все поля: если поле заканчивается
+    # на ":443" — это локальный адрес, следующее поле — клиентский peer.
     local _pid
     _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-    if [ -n "$_pid" ] && [ "$_pid" != "0" ] && command -v nsenter >/dev/null 2>&1 && command -v ss >/dev/null 2>&1; then
-        nsenter -t "$_pid" -n ss -Htn state established "sport = :443" 2>/dev/null \
+    if [ -n "$_pid" ] && [ "$_pid" != "0" ] && command -v nsenter >/dev/null 2>&1 \
+       && nsenter -t "$_pid" -n true 2>/dev/null; then
+        nsenter -t "$_pid" -n ss -tn state established 2>/dev/null \
             | awk '
                 {
-                    # Обычно: ... local_addr:port peer_addr:port ...
-                    peer=$5
-                    sub(/:[0-9]+$/,"",peer)
-                    # Убираем [] у IPv6 и ::ffff:
-                    gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
-                    sub(/^::ffff:/,"",peer); sub(/^::FFFF:/,"",peer)
-                    if (peer != "" \
-                        && peer !~ /^172\./ && peer !~ /^10\./ \
-                        && peer !~ /^192\.168\./ && peer !~ /^127\./ \
-                        && peer !~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print peer
+                    for (i = 1; i <= NF; i++) {
+                        # Ищем локальный адрес, заканчивающийся на :443
+                        if ($i ~ /:443$/) {
+                            peer = $(i + 1)
+                            # Убираем порт (всё после последнего двоеточия у простых IP,
+                            # или :PORT в конце строки для IPv6)
+                            sub(/:[^:]+$/, "", peer)
+                            # Убираем IPv6-скобки и ::ffff: префикс
+                            gsub(/^\[|\]$/, "", peer)
+                            sub(/^::ffff:/, "", peer)
+                            sub(/^::FFFF:/, "", peer)
+                            # Пропускаем приватные/loopback диапазоны
+                            if (peer == "" \
+                                || peer ~ /^127\./ || peer ~ /^172\./ \
+                                || peer ~ /^10\./ || peer ~ /^192\.168\./ \
+                                || peer ~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./ \
+                                || peer ~ /^::1$/) {
+                                break
+                            }
+                            print peer
+                            break
+                        }
+                    }
                 }' \
             | sort -u
         return 0
     fi
 
-    # Fallback: host ss (работает если соединения видны на host:PROXY_PORT)
-    if command -v ss >/dev/null 2>&1; then
-        ss -Htn state established "sport = :${_port}" 2>/dev/null \
-            | awk '
-                {
-                    peer=$5
-                    sub(/:[0-9]+$/,"",peer)
-                    gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
-                    sub(/^::ffff:/,"",peer); sub(/^::FFFF:/,"",peer)
-                    if (peer != "" \
-                        && peer !~ /^172\./ && peer !~ /^10\./ \
-                        && peer !~ /^192\.168\./ && peer !~ /^127\./ \
-                        && peer !~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print peer
-                }' \
-            | sort -u
-        return 0
-    fi
-
-    # Fallback (если ss отсутствует): conntrack, но он может залипать.
+    # Fallback: conntrack — надёжно находит клиентов, но ESTABLISHED-записи
+    # могут оставаться до 5 дней после тихого разрыва (без FIN/RST).
+    # Используем только если nsenter недоступен.
     if command -v conntrack >/dev/null 2>&1; then
         conntrack -L -p tcp 2>/dev/null \
             | grep " ESTABLISHED " \
