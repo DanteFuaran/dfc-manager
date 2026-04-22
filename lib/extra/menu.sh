@@ -433,9 +433,8 @@ _mt_write_proxy_page() {
     # Используем домен как указан (SERVER_IP может быть доменом или IP).
     # Порт: 443 если stream активен (MTProto доступен через nginx stream на 443),
     #         PROXY_PORT иначе (MTProto на прямом Docker-NAT порту).
-    local _link_port="$_port"
-    _mt_has_stream && _link_port="443"
-    local _tg_url="tg://proxy?server=${_domain}&port=${_link_port}&secret=${_secret}"
+    # Всегда используем порт, выбранный при установке (PROXY_PORT).
+    local _tg_url="tg://proxy?server=${_domain}&port=${_port}&secret=${_secret}"
     local _html_path="/var/www/html/mtproto-connect.html"
     mkdir -p /var/www/html
     cat > "$_html_path" << HTMLEOF
@@ -813,11 +812,9 @@ _mt_do_install() {
             echo
         fi
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-        local _tg_port="${PROXY_PORT}"
-        _mt_has_stream && _tg_port="443"
-        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
-        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -889,10 +886,8 @@ _mt_do_config() {
             [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
         fi
     fi
-    local _tg_port="${PROXY_PORT:-8443}"
-    _mt_has_stream && _tg_port="443"
-    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
-    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
        [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
         echo
@@ -1331,9 +1326,7 @@ _mt_do_change_config() {
     fi
 
     echo
-    local _tg_port_c="${PROXY_PORT}"
-    _mt_has_stream && _tg_port_c="443"
-    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${_tg_port_c}&secret=${PROXY_SECRET}${NC}"
+    echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
        [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
         echo -e " ${DARKGRAY}Страница:${NC}  ${GREEN}https://${SERVER_IP}/connect${NC}"
@@ -1927,33 +1920,14 @@ _mt_nginx_reload() {
     docker exec "$_nc" nginx -s reload 2>/dev/null || true
 }
 
-# Управляет nginx stream-блоком для MTProto.
-#
-# Когда MTProto установлен ОДИН (без ноды и панели):
-#   nginx stream слушает 443, SNI-маршрутизация:
-#     - известные HTTPS домены → nginx http (unix socket, proxy_protocol)
-#     - остальное (FakeTLS/google.com) → MTProto container на PROXY_PORT
-#   Telegram ссылка: domain:443
-#
-# Когда рядом стоит Remnawave Node или панель:
-#   Они сами управляют портом 443 (xray или собственный nginx stream).
-#   MTProto работает напрямую на PROXY_PORT без stream.
-#   Telegram ссылка: domain:PROXY_PORT
+# Удаляет legacy nginx stream-блок для MTProto (если остался от предыдущих версий).
+# MTProto работает напрямую через Docker-NAT на выбранном PROXY_PORT, nginx обслуживает
+# только HTTPS страницу /connect.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
     local _nginx_conf="${DIR_NGINX:-/opt/nginx/}nginx.conf"
-
-    # Если установлена нода или панель — они управляют 443, stream MTProto не нужен
-    if [ -f "/opt/remnanode/docker-compose.yml" ] || [ -f "/opt/remnawave/docker-compose.yml" ]; then
-        if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
-            _mt_nginx_stream_remove >/dev/null 2>&1 || true
-        fi
-        return 0
-    fi
-
-    # Только MTProto (+ возможно /connect nginx) — включаем/обновляем stream на 443
-    if _mt_nginx_available && [ -f "$_nginx_conf" ]; then
-        _mt_nginx_stream_write >/dev/null 2>&1 || true
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
+        _mt_nginx_stream_remove >/dev/null 2>&1 || true
     fi
     return 0
 }
