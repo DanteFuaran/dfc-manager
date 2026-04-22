@@ -37,6 +37,10 @@ _MT_CONTAINER="mtproto-proxy"
 _MT_IMAGE="telegrammessenger/proxy:latest"
 _MT_DIR="/opt/mtproto"
 _MT_ENV="${_MT_DIR}/.env"
+# Маркер «простого» режима (как в v0.0.99): минимальный compose, без БД/статистики/iptables-доступа.
+_MT_LEGACY_MARKER="${_MT_DIR}/.legacy_simple"
+
+_mt_legacy_simple_enabled() { [ -f "$_MT_LEGACY_MARKER" ]; }
 
 _mt_installed() { docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${_MT_CONTAINER}$"; }
 _mt_running()   { docker ps    --format '{{.Names}}' 2>/dev/null | grep -q "^${_MT_CONTAINER}$"; }
@@ -603,12 +607,31 @@ EOF
 # Nginx stream больше не используется — MTProto работает независимо.
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
+    _mt_load_env
+    local _p="${PROXY_PORT:-8443}"
+
+    if _mt_legacy_simple_enabled; then
+        # Как в v0.0.99: один порт PROXY_PORT→443 в контейнере, без ulimits/sysctls/extra IPv6.
+        cat > "${_MT_DIR}/docker-compose.yml" <<COMPOSE
+services:
+  mtproto-proxy:
+    image: telegrammessenger/proxy:latest
+    container_name: mtproto-proxy
+    restart: unless-stopped
+    ports:
+      - "${_p}:443"
+    environment:
+      - SECRET=\${PROXY_SECRET}
+      - TAG=\${PROXY_TAG}
+COMPOSE
+        return 0
+    fi
+
     # Прямой публичный порт — MTProto работает независимо от nginx.
     #
     # ВАЖНО: на части сетей/устройств Telegram предпочитает IPv6 (AAAA), поэтому если домен
     # резолвится в IPv6, а порт опубликован только на IPv4, "не у всех" будет подключаться.
     # Публикуем порт на IPv4 и IPv6 одновременно.
-    local _p="${PROXY_PORT:-8443}"
     local _mt_port4="0.0.0.0:${_p}:443"
     local _mt_port6="[::]:${_p}:443"
     cat > "${_MT_DIR}/docker-compose.yml" <<COMPOSE
@@ -637,6 +660,89 @@ services:
         max-size: "10m"
         max-file: "3"
 COMPOSE
+}
+
+# Включить/выключить «простой» режим MTProto (для A/B проверки с текущей логикой).
+_mt_legacy_simple_set() {
+    local _on="${1:-0}"
+    mkdir -p "$_MT_DIR"
+    if [ "$_on" = "1" ]; then
+        : > "$_MT_LEGACY_MARKER"
+    else
+        rm -f "$_MT_LEGACY_MARKER" 2>/dev/null || true
+    fi
+    if _mt_installed; then
+        _mt_load_env
+        _mt_block_clear_all 2>/dev/null || true
+        _mt_write_compose
+        (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) || true
+        if _mt_legacy_simple_enabled; then
+            :
+        else
+            _mt_db_ensure >/dev/null 2>&1 || true
+            _mt_block_apply >/dev/null 2>&1 || true
+        fi
+    fi
+    return 0
+}
+
+_mt_legacy_simple_menu_enable() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   🧪 Простой режим MTProto (как v0.0.99)${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${DARKGRAY}Включается минимальный прокси:${NC}"
+    echo -e "  ${DARKGRAY}•${NC} короткий ${WHITE}docker-compose.yml${NC} (один порт, без IPv6/sysctls)"
+    echo -e "  ${DARKGRAY}•${NC} без ${WHITE}sqlite${NC} / статистики / меню доступа по iptables при установке"
+    echo -e "  ${DARKGRAY}•${NC} без страницы ${WHITE}/connect${NC} и проверки порта из скрипта"
+    echo
+    echo -e "${YELLOW}Выключить расширенный режим можно здесь же пунктом «Расширенный режим».${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "  ${BLUE}Enter${DARKGRAY}: Включить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    tput civis 2>/dev/null || true
+    local _k=""
+    IFS= read -rsn1 _k
+    tput cnorm 2>/dev/null || true
+    [[ "$_k" == $'\e' ]] && return
+    [[ "$_k" != "" && "$_k" != $'\r' && "$_k" != $'\n' ]] && return
+
+    (_mt_legacy_simple_set 1) &
+    show_spinner "Включение простого режима" "Простой режим включён"
+    echo
+    if _mt_installed; then
+        print_success "Контейнер перезапущен с минимальным compose. Проверьте подключение в Telegram."
+    else
+        print_success "Простой режим включён. Запустите «Установить MTProto» — установка будет без расширений."
+    fi
+    echo
+    _mt_press_enter
+}
+
+_mt_legacy_simple_menu_disable() {
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}   ↩️  Расширенный режим MTProto${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "${DARKGRAY}Вернётся полная логика: статистика, доступ по iptables, IPv6-публикация порта, /connect.${NC}"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "  ${BLUE}Enter${DARKGRAY}: Включить расширенный   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    tput civis 2>/dev/null || true
+    local _k=""
+    IFS= read -rsn1 _k
+    tput cnorm 2>/dev/null || true
+    [[ "$_k" == $'\e' ]] && return
+    [[ "$_k" != "" && "$_k" != $'\r' && "$_k" != $'\n' ]] && return
+
+    (_mt_legacy_simple_set 0) &
+    show_spinner "Возврат расширенного режима" "Расширенный режим восстановлен"
+    echo
+    print_success "Готово. При необходимости заново откройте «Управление доступом» и проверьте UFW."
+    echo
+    _mt_press_enter
 }
 
 # Установка / переустановка MTProto (встроенная реализация)
@@ -821,14 +927,14 @@ _mt_do_install() {
         return 1
     fi
 
-    # База данных: если sqlite3 отсутствует — автоустановка через apt-get
-    # выполняется внутри _mt_db_ensure/_mt_db_migrate; держим процесс в фоне и
-    # показываем спиннер, чтобы пользователь не думал, что установка зависла.
-    (
-        _mt_db_ensure >/dev/null 2>&1 || true
-        _mt_db_migrate >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Создание базы данных" "Создание базы данных"
+    # База данных (расширенный режим): в простом режиме v0.0.99 — пропускаем sqlite/миграции.
+    if ! _mt_legacy_simple_enabled; then
+        (
+            _mt_db_ensure >/dev/null 2>&1 || true
+            _mt_db_migrate >/dev/null 2>&1 || true
+        ) &
+        show_spinner "Создание базы данных" "Создание базы данных"
+    fi
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
@@ -846,50 +952,63 @@ _mt_do_install() {
     (cd "$_MT_DIR" && docker compose up -d 2>"$_compose_err" >/dev/null) &
     show_spinner "Запуск MTProto" "Запуск MTProto"
 
-    # Применяем правила доступа (iptables + UFW) в фоне со спиннером —
-    # тут же может докачиваться conntrack через apt-get.
-    (
-        _mt_block_apply >/dev/null 2>&1 || true
+    # Правила iptables из скрипта — только в расширенном режиме; в простом только UFW.
+    if ! _mt_legacy_simple_enabled; then
+        (
+            _mt_block_apply >/dev/null 2>&1 || true
+            if command -v ufw >/dev/null 2>&1; then
+                ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+            fi
+        ) &
+        show_spinner "Настройка правил доступа" "Настройка правил доступа"
+    else
+        (_mt_block_clear_all >/dev/null 2>&1 || true) &
+        show_spinner "Очистка правил MTProto (простой режим)" "Очистка правил MTProto (простой режим)"
         if command -v ufw >/dev/null 2>&1; then
             ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
         fi
-    ) &
-    show_spinner "Настройка правил доступа" "Настройка правил доступа"
+    fi
 
-    # Проверка доступности порта (локально + best-effort удалённый TCP чекер)
-    (
-        _mt_port_healthcheck >/tmp/dfc-mtproto-portcheck.log 2>/dev/null || true
-    ) &
-    show_spinner "Проверка доступности порта" "Проверка доступности порта"
+    # Проверка доступности порта — только в расширенном режиме
+    if ! _mt_legacy_simple_enabled; then
+        (
+            _mt_port_healthcheck >/tmp/dfc-mtproto-portcheck.log 2>/dev/null || true
+        ) &
+        show_spinner "Проверка доступности порта" "Проверка доступности порта"
+    else
+        rm -f /tmp/dfc-mtproto-portcheck.log 2>/dev/null || true
+    fi
 
     if _mt_running; then
         rm -f "${_compose_err:-}"
         _mt_save_config
 
-        # Сертификат и страница /connect (только для доменного SERVER_IP)
-        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            if [ -z "$(_mt_nginx_container)" ]; then
-                (_mt_setup_nginx) &
-                show_spinner "Установка Nginx" "Установка Nginx"
-            fi
-            (_mt_issue_cert "$SERVER_IP") &
-            local _cert_exists=false
-            { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
-              openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
-            if $_cert_exists; then
-                wait $! 2>/dev/null || true
-                printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
-            else
-                show_spinner "Получение сертификатов" "Получение сертификатов"
-            fi
-            local _cert_rc=$?
-            if [ "$_cert_rc" -eq 0 ]; then
-                (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-                show_spinner "Создание страницы подключения" "Создание страницы подключения"
-            elif [ "$_cert_rc" -eq 2 ]; then
-                echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
-                echo -e "${DARKGRAY}   Страница /connect будет создана после исправления DNS.${NC}"
-                echo
+        # Сертификат и страница /connect — только в расширенном режиме (в v0.0.99 этого не было).
+        if ! _mt_legacy_simple_enabled; then
+            if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                if [ -z "$(_mt_nginx_container)" ]; then
+                    (_mt_setup_nginx) &
+                    show_spinner "Установка Nginx" "Установка Nginx"
+                fi
+                (_mt_issue_cert "$SERVER_IP") &
+                local _cert_exists=false
+                { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
+                  openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
+                if $_cert_exists; then
+                    wait $! 2>/dev/null || true
+                    printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
+                else
+                    show_spinner "Получение сертификатов" "Получение сертификатов"
+                fi
+                local _cert_rc=$?
+                if [ "$_cert_rc" -eq 0 ]; then
+                    (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+                    show_spinner "Создание страницы подключения" "Создание страницы подключения"
+                elif [ "$_cert_rc" -eq 2 ]; then
+                    echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
+                    echo -e "${DARKGRAY}   Страница /connect будет создана после исправления DNS.${NC}"
+                    echo
+                fi
             fi
         fi
 
@@ -925,11 +1044,13 @@ _mt_do_install() {
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
-           [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
-            echo -e "${WHITE}🌐 Страница подключения:${NC}"
-            echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
-            echo
+        if ! _mt_legacy_simple_enabled; then
+            if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+               [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+                echo -e "${WHITE}🌐 Страница подключения:${NC}"
+                echo -e "   ${GREEN}https://${SERVER_IP}/connect${NC}"
+                echo
+            fi
         fi
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
         echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
@@ -938,7 +1059,7 @@ _mt_do_install() {
         echo
 
         # Если порт-чек показал проблему — предупредим и предложим быстрый выбор порта
-        if [ -f /tmp/dfc-mtproto-portcheck.log ] && grep -q "remote:closed" /tmp/dfc-mtproto-portcheck.log 2>/dev/null; then
+        if ! _mt_legacy_simple_enabled && [ -f /tmp/dfc-mtproto-portcheck.log ] && grep -q "remote:closed" /tmp/dfc-mtproto-portcheck.log 2>/dev/null; then
             echo -e "${YELLOW}⚠️  Похоже, порт ${PROXY_PORT} недоступен снаружи (по удалённой проверке).${NC}"
             echo -e "${DARKGRAY}   Это может быть блокировка провайдера/ДЦ или внешнего firewall.${NC}"
             echo
@@ -1047,6 +1168,11 @@ _mt_do_stats() {
 
     if ! _mt_running; then
         echo -e "${RED}✖ Прокси не запущен${NC}"
+        _mt_press_enter; return
+    fi
+    if _mt_legacy_simple_enabled; then
+        echo -e "${YELLOW}⚠️  В простом режиме проверки (как v0.0.99) статистика отключена.${NC}"
+        echo -e "${DARKGRAY}Выключите «Простой режим» в меню MTProto, чтобы вернуть расширенную статистику.${NC}"
         _mt_press_enter; return
     fi
 
@@ -1432,36 +1558,40 @@ _mt_do_change_config() {
         fi
     fi
 
-    # Пересоздаём страницу /connect если домен изменился или блок ещё не создан
-    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        if [ -z "$(_mt_nginx_container)" ]; then
-            (_mt_setup_nginx) &
-            show_spinner "Установка Nginx..." "Nginx установлен"
-        fi
-        (_mt_issue_cert "$SERVER_IP") &
-        local _cert_exists=false
-        { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
-          openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
-        if $_cert_exists; then
-            wait $! 2>/dev/null || true
-            printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
-        else
-            show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
-        fi
-        local _cert_rc=$?
-        if [ "$_cert_rc" -eq 0 ]; then
-            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-            show_spinner "Создание страницы /connect..." "Страница /connect обновлена"
-        elif [ "$_cert_rc" -eq 2 ]; then
-            echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана.${NC}"
+    # Пересоздаём страницу /connect — только в расширенном режиме
+    if ! _mt_legacy_simple_enabled; then
+        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ -z "$(_mt_nginx_container)" ]; then
+                (_mt_setup_nginx) &
+                show_spinner "Установка Nginx..." "Nginx установлен"
+            fi
+            (_mt_issue_cert "$SERVER_IP") &
+            local _cert_exists=false
+            { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
+              openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
+            if $_cert_exists; then
+                wait $! 2>/dev/null || true
+                printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
+            else
+                show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+            fi
+            local _cert_rc=$?
+            if [ "$_cert_rc" -eq 0 ]; then
+                (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
+                show_spinner "Создание страницы /connect..." "Страница /connect обновлена"
+            elif [ "$_cert_rc" -eq 2 ]; then
+                echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана.${NC}"
+            fi
         fi
     fi
 
     echo
     echo -e " ${DARKGRAY}Ссылка:${NC} ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
-       [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
-        echo -e " ${DARKGRAY}Страница:${NC}  ${GREEN}https://${SERVER_IP}/connect${NC}"
+    if ! _mt_legacy_simple_enabled; then
+        if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+           [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
+            echo -e " ${DARKGRAY}Страница:${NC}  ${GREEN}https://${SERVER_IP}/connect${NC}"
+        fi
     fi
     echo
     _mt_press_enter
@@ -1670,6 +1800,11 @@ _mt_do_update() {
 # ─── Создание / пересоздание SSL-сертификата и страницы /connect ──────────────
 _mt_do_setup_connect() {
     _mt_load_env
+    if _mt_legacy_simple_enabled; then
+        clear
+        echo -e "${YELLOW}⚠️  В простом режиме (v0.0.99) страница /connect не используется.${NC}"
+        _mt_press_enter; return
+    fi
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}     🌐 Страница подключения /connect${NC}"
@@ -2319,6 +2454,10 @@ _mt_block_apply() {
     # Это важно при переустановке или смене режима (stream↔direct) — гарантирует
     # чистый лист без артефактов от предыдущих конфигураций.
     _mt_block_clear_all 2>/dev/null || true
+    # Простой режим (v0.0.99): не вешаем iptables/whitelist из скрипта — только очистка выше.
+    if _mt_legacy_simple_enabled; then
+        return 0
+    fi
     local _mode; _mode=$(_mt_db_mode_get)
     if [ "$_mode" = "allow" ]; then
         _mt_ipt_allow_apply
@@ -2384,6 +2523,11 @@ _mt_do_access() {
         echo -e "${RED}✖ MTProto не установлен${NC}"; _mt_press_enter; return
     fi
     _mt_load_env
+    if _mt_legacy_simple_enabled; then
+        echo -e "${YELLOW}⚠️  В простом режиме проверки (как v0.0.99) управление доступом по iptables отключено.${NC}"
+        echo -e "${DARKGRAY}Выключите «Простой режим» в меню MTProto, чтобы вернуть блокировки/белый список.${NC}"
+        _mt_press_enter; return
+    fi
     mkdir -p "$_MT_DIR"
     _mt_db_ensure
 
@@ -2943,6 +3087,9 @@ manage_mtproto() {
         local _l2_prefix; printf -v _l2_prefix "%${_l2_pad}s" ""
 
         local _title="${_line1}\n${_l2_prefix}${DARKGRAY}Статус: ${_stat_color}● ${_stat_word}${NC}"
+        if _mt_legacy_simple_enabled; then
+            _title="${_title}\n${_l2_prefix}${YELLOW}🧪 Простой режим (как v0.0.99)${NC}"
+        fi
 
         local -a _items=() _actions=()
 
@@ -2952,8 +3099,10 @@ manage_mtproto() {
             _items+=("📦  Переустановить MTProto"); _actions+=("install")
             _items+=("⬆️   Обновить образ");          _actions+=("update")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
-            _items+=("📊  Статистика подключений");            _actions+=("stats")
-            _items+=("🚫  Управление доступом");               _actions+=("access")
+            if ! _mt_legacy_simple_enabled; then
+                _items+=("📊  Статистика подключений");            _actions+=("stats")
+                _items+=("🚫  Управление доступом");               _actions+=("access")
+            fi
             _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
             _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
@@ -2965,6 +3114,12 @@ manage_mtproto() {
             fi
         fi
 
+        _items+=("──────────────────────────────────────"); _actions+=("sep")
+        if _mt_legacy_simple_enabled; then
+            _items+=("↩️   Расширенный режим MTProto");         _actions+=("legacy_off")
+        else
+            _items+=("🧪   Простой режим (как v0.0.99)");      _actions+=("legacy_on")
+        fi
         _items+=("──────────────────────────────────────"); _actions+=("sep")
         _items+=("⬅️   Назад");                             _actions+=("back")
 
@@ -2983,6 +3138,8 @@ manage_mtproto() {
             start)         _mt_do_start ;;
             stop)          _mt_do_stop ;;
             restart)       _mt_do_restart ;;
+            legacy_on)     _mt_legacy_simple_menu_enable ;;
+            legacy_off)    _mt_legacy_simple_menu_disable ;;
             back)          return ;;
             *)             continue ;;
         esac
