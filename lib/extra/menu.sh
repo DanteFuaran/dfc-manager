@@ -2203,7 +2203,7 @@ _mt_do_access() {
                     local _note_str; _note_str=$(_mt_db_blocked_note_get "$_le" "allow")
                     local _suffix=""
                     [ -n "$_note_str" ] && _suffix="  ${DARKGRAY}[${_note_str}]${NC}"
-                    local _line; _line=$(printf '%d: %-15s  %s' "$_allow_idx" "$_le" "$_geo_str")
+                    local _line; _line=$(printf "${DARKGRAY}%d:${NC} %-15s  %s" "$_allow_idx" "$_le" "$_geo_str")
                     # Зелёный только если IP сейчас онлайн
                     local _is_online=false
                     if [[ "$_le" != */* ]]; then
@@ -2246,7 +2246,7 @@ _mt_do_access() {
                     (( _block_idx++ ))
                     local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
                     [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf '%d: %-15s  %s' "$_block_idx" "$_ip" "$_geo_str")
+                    local _line; _line=$(printf "${DARKGRAY}%d:${NC} %-15s  %s" "$_block_idx" "$_ip" "$_geo_str")
                     local _in_l=false; _ip_in_list "$_ip" && _in_l=true
                     if [ "$_in_l" = true ]; then
                         _ip_items+=("${RED}${_line}${NC}")
