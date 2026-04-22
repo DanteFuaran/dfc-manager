@@ -268,7 +268,7 @@ install_warp_native() {
 uninstall_warp_native() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}          🗑️  УДАЛЕНИЕ WARP${NC}"
+    echo -e "${BLUE}          🗑️  Удаление WARP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Проверяем, установлен ли WARP
@@ -281,19 +281,18 @@ uninstall_warp_native() {
         return 0
     fi
 
-    echo
-    echo -e "${YELLOW}⚠️  Вы уверены что хотите удалить WARP ?${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Вы уверены, что хотите удалить WARP?${NC}")"
+    if ! confirm_nav --delete "🗑️  Удаление WARP" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}          🗑️  УДАЛЕНИЕ WARP${NC}"
+    echo -e "${BLUE}          🗑️  Удаление WARP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 

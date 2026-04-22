@@ -197,13 +197,12 @@ manage_ufw() {
 
                     # Запрашиваем подтверждение — не покидаем подменю ни при каком ответе
                     echo
-                    echo -e "${YELLOW}Удалить правило: ${WHITE}${rules[$del_choice]}${NC}"
-                    echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo
-                    if ! confirm_action; then
-                        # Esc — отмена, возвращаемся к списку правил без удаления
+                    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Правило:${NC} ${WHITE}${rules[$del_choice]}${NC}")"
+                    if ! confirm_nav --delete "➖  Удалить правило UFW" "Подтвердить удаление" "Отменить удаление"; then
+                        unset CONFIRM_WARN_LINE
                         continue
                     fi
+                    unset CONFIRM_WARN_LINE
 
                     # Подтверждено — удаляем правило
                     local rule_num=$((del_choice + 1))
@@ -213,26 +212,26 @@ manage_ufw() {
                 ;;
             3)
                 # Удалить все правила
-                clear
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}     🗑️  УДАЛИТЬ ВСЕ ПРАВИЛА${NC}"
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
                 local rule_count
                 rule_count=$(ufw status numbered 2>/dev/null | grep -c '^\[' || true)
                 if [ "$rule_count" -eq 0 ]; then
+                    clear
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo -e "${BLUE}     🗑️  Удалить все правила${NC}"
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    echo
                     print_warning "Нет правил для удаления"
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     show_continue_prompt || return 1
                     continue
                 fi
-                echo -e "${YELLOW}Будет удалено правил: ${WHITE}${rule_count}${NC}"
-                echo
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                if ! confirm_action; then
+                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Будет удалено правил:${NC} ${WHITE}${rule_count}${NC}")"
+                if ! confirm_nav --delete "🗑️  Удалить все правила UFW" "Подтвердить удаление" "Отменить удаление"; then
+                    unset CONFIRM_WARN_LINE
                     continue
                 fi
+                unset CONFIRM_WARN_LINE
                 echo
                 (
                     local cnt
@@ -251,17 +250,12 @@ manage_ufw() {
             4) continue ;;
             5)
                 # Удалить UFW
-                clear
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${GREEN}      ❌  Удалить Firewall (UFW)${NC}"
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
-                echo -e "${YELLOW}Вы уверены, что хотите удалить UFW?${NC}"
-                echo
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                if ! confirm_action; then
+                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}UFW будет отключён и удалён с сервера.${NC}")"
+                if ! confirm_nav --delete "❌  Удалить Firewall (UFW)" "Подтвердить удаление" "Отменить удаление"; then
+                    unset CONFIRM_WARN_LINE
                     continue
                 fi
+                unset CONFIRM_WARN_LINE
                 echo
                 (
                     ufw disable >/dev/null 2>&1 || true

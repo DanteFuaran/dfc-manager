@@ -169,27 +169,14 @@ _db_partial_restore() {
         table_flags="$table_flags --table=$t"
     done
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📥 ЧАСТИЧНОЕ ВОССТАНОВЛЕНИЕ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}"
-    echo -e "${WHITE}Режим:${NC} ${YELLOW}${restore_label}${NC}"
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${WHITE}Данные из бэкапа будут ДОБАВЛЕНЫ к текущим.${NC}"
-    echo -e "${WHITE}Существующие записи не будут изменены.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}\n${WHITE}Режим:${NC} ${YELLOW}${restore_label}${NC}\n\n${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Данные из бэкапа будут ДОБАВЛЕНЫ к текущим.${NC}\n${WHITE}Существующие записи не будут изменены.${NC}")"
+    if ! confirm_nav "📥 Частичное восстановление" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     echo
 
@@ -292,7 +279,7 @@ _db_partial_restore() {
 db_restore() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📥 ЗАГРУЗКА БАЗЫ ДАННЫХ${NC}"
+    echo -e "${BLUE}   📥 Загрузка базы данных${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -587,28 +574,15 @@ db_restore() {
         return
     fi
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   📥 ЗАГРУЗКА БАЗЫ ДАННЫХ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}"
-    echo -e "${WHITE}Режим:${NC} ${YELLOW}Полное восстановление${NC}"
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${WHITE}Все текущие данные панели будут потеряны.${NC}"
-    echo -e "${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}\n${WHITE}Режим:${NC} ${YELLOW}Полное восстановление${NC}\n\n${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Все текущие данные панели будут потеряны.${NC}\n${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}")"
+    if ! confirm_nav --delete "📥 Полное восстановление базы" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         rm -rf "$tmp_extract" 2>/dev/null
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     echo
 

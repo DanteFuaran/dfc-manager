@@ -1551,7 +1551,7 @@ _mt_do_uninstall() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}        🗑️  Удаление MTProto${NC}"
+    echo -e "${BLUE}        🗑️  Удаление MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if ! _mt_installed; then
@@ -1565,20 +1565,12 @@ _mt_do_uninstall() {
         _mt_press_enter; return
     fi
 
-    echo -e "    ${YELLOW}MTProto будет удалён с сервера${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "  ${BLUE}Enter${DARKGRAY}: Подтвердить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
-            "")      break ;;
-        esac
-    done
-    tput cnorm 2>/dev/null || true
+    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}MTProto будет удалён с сервера.${NC}")"
+    if ! confirm_nav --delete "🗑️  Удаление MTProto" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
+        return
+    fi
+    unset CONFIRM_WARN_LINE
     echo
     echo
 

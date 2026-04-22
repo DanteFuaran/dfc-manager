@@ -132,7 +132,7 @@ change_panel_domain() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
+    echo -e "${BLUE}      🌐 Смена домена панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     local panel_dir
@@ -153,22 +153,17 @@ change_panel_domain() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_domain}${NC}"
-    echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_domain}${NC}\n${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}")"
+    if ! confirm_nav "🌐 Смена домена панели" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     # ─── Прогресс ───
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}      🌐 Смена домена панели${NC}"
+    echo -e "${BLUE}      🌐 Смена домена панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -269,7 +264,7 @@ change_panel_domain() {
 _change_panel_url_remote() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена адреса панели${NC}"
+    echo -e "${BLUE}   🌐 Смена адреса панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Находим все docker-compose файлы с REMNAWAVE_PANEL_URL
@@ -305,21 +300,16 @@ _change_panel_url_remote() {
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
     local new_url="https://${new_domain}"
 
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${WHITE}Текущий адрес:${NC} ${YELLOW}${current_url}${NC}"
-    echo -e "${WHITE}Новый адрес:${NC}   ${GREEN}${new_url}${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Текущий адрес:${NC} ${YELLOW}${current_url}${NC}\n${WHITE}Новый адрес:${NC}   ${GREEN}${new_url}${NC}")"
+    if ! confirm_nav "🌐 Смена адреса панели" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена адреса панели${NC}"
+    echo -e "${BLUE}   🌐 Смена адреса панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -385,7 +375,7 @@ change_sub_domain() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     print_error "Страница подписки не найдена на этом сервере"
@@ -400,7 +390,7 @@ _change_sub_domain_standalone() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -428,24 +418,17 @@ _change_sub_domain_standalone() {
     reading_inline "API токен (Enter оставить без изменений):" new_api_token
     echo
 
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain:-не определён}${NC}"
-    echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
-    if [ -n "$new_api_token" ]; then
-        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
-    fi
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain:-не определён}${NC}\n${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}")"
+    [ -n "$new_api_token" ] && CONFIRM_WARN_LINE+=$'\n'"$(echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}")"
+    if ! confirm_nav "🌐 Смена домена подписки" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -493,7 +476,7 @@ _change_sub_domain_standalone() {
 _change_sub_domain_local_existing() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -528,26 +511,19 @@ _change_sub_domain_local_existing() {
     reading_inline "API токен (Enter оставить без изменений):" new_api_token
     echo
 
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain}${NC}"
-    echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
-    if [ -n "$new_api_token" ]; then
-        echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}"
-    fi
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_sub_domain}${NC}\n${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}")"
+    [ -n "$new_api_token" ] && CONFIRM_WARN_LINE+=$'\n'"$(echo -e "${WHITE}API токен:${NC}     ${GREEN}обновить${NC}")"
+    if ! confirm_nav "🌐 Смена домена подписки" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Смена домена подписки${NC}"
+    echo -e "${BLUE}   🌐 Смена домена подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -612,7 +588,7 @@ _change_sub_domain_local_existing() {
 _change_sub_domain_remote() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Подписка на удалённом сервере${NC}"
+    echo -e "${BLUE}   🌐 Подписка на удалённом сервере${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -631,22 +607,18 @@ _change_sub_domain_remote() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
-    echo
-    echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${WHITE}Домен подписки:${NC} ${GREEN}${new_domain}${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Домен подписки:${NC} ${GREEN}${new_domain}${NC}")"
+    if ! confirm_nav "🌐 Подписка на удалённом сервере" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 Подписка на удалённом сервере${NC}"
+    echo -e "${BLUE}   🌐 Подписка на удалённом сервере${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -721,7 +693,7 @@ _change_sub_domain_remote() {
 change_node_domain() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🌐 СМЕНА ДОМЕНА НОДЫ${NC}"
+    echo -e "${BLUE}   🌐 Смена домена ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -762,15 +734,14 @@ change_node_domain() {
 
     new_domain=$(echo "$new_domain" | sed 's|https\?://||;s|/.*||')
 
-    echo
-    echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_node_domain}${NC}"
-    echo -e "${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Текущий домен:${NC} ${YELLOW}${current_node_domain}${NC}\n${WHITE}Новый домен:${NC}   ${GREEN}${new_domain}${NC}")"
+    if ! confirm_nav "🌐 Смена домена ноды" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
+    unset CONFIRM_WARN_LINE
 
     echo
 

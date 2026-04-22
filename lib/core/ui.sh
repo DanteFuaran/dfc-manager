@@ -191,6 +191,7 @@ show_arrow_menu() {
     while true; do
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
+        local _hdr="${MENU_TITLE_COLOR:-$BLUE}"
         if [[ "$title" == *\\* ]]; then
             local _first="${title%%\\n*}"
             local _rest="${title#*\\n}"
@@ -200,7 +201,7 @@ show_arrow_menu() {
             local _pad=$(( (38 - _vlen) / 2 ))
             [ $_pad -lt 0 ] && _pad=0
             printf "%${_pad}s" ""
-            echo -e "${GREEN}${_first}${NC}"
+            echo -e "${_hdr}${_first}${NC}"
             echo -e "${_rest}"
         else
             local _clean
@@ -209,7 +210,7 @@ show_arrow_menu() {
             local _pad=$(( (38 - _vlen) / 2 ))
             [ $_pad -lt 0 ] && _pad=0
             printf "%${_pad}s" ""
-            echo -e "${GREEN}$title${NC}"
+            echo -e "${_hdr}$title${NC}"
         fi
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         [[ -z "${MENU_NO_BLANK:-}" ]] && echo
@@ -224,8 +225,8 @@ show_arrow_menu() {
                 # Серый разделитель (──────)
                 echo -e "${DARKGRAY}${options[$i]:1}${NC}"
             elif [[ "${options[$i]}" == $'\x01'* ]]; then
-                # Заголовок-секция (не выбирается)
-                echo -e "${DARKGRAY}${options[$i]:1}${NC}"
+                # Заголовок-секция (не выбирается), допускает цвета в тексте
+                echo -e "${options[$i]:1}"
             elif [ $i -eq $selected ]; then
                 local _clean_item; _clean_item=$(echo -e "${options[$i]}" | sed 's/\x1b\[[0-9;]*m//g')
                 echo -e "${BLUE}▶${NC} ${YELLOW}${_clean_item}${NC}"
@@ -237,7 +238,12 @@ show_arrow_menu() {
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         local _esc_label="${MENU_ESC_LABEL:-Назад}"
-        echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
+        if [ -n "${MENU_KEY_HINT:-}" ]; then
+            echo -e "${MENU_KEY_HINT}"
+            unset MENU_KEY_HINT
+        else
+            echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
+        fi
         echo
 
         local key
@@ -459,25 +465,45 @@ show_install_error() {
     done
 }
 
-confirm_action() {
-    echo -e "${DARKGRAY} ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    tput civis 2>/dev/null || true
+# Двухпунктное подтверждение (↑↓, Enter, Esc), как show_arrow_menu.
+# confirm_nav [--delete] "Заголовок" "Подтвердить…" "Отменить…"
+#   --delete — красный заголовок (операции удаления).
+# Перед вызовом можно задать CONFIRM_WARN_LINE — предупреждение над пунктами (не выбирается).
+# Возврат: 0 — подтверждено (первый пункт), 1 — отмена (второй пункт или Esc).
+confirm_nav() {
+    local _del=false
+    [[ "${1:-}" == "--delete" ]] && { _del=true; shift; }
+    local _title="${1:?}"
+    local _yes="${2:?}"
+    local _no="${3:?}"
 
-    local key seq
-    while true; do
-        IFS= read -rsn1 key
-        if [[ "$key" == $'\x1b' ]]; then
-            IFS= read -rsn1 -t 0.1 seq 2>/dev/null || true
-            if [[ -z "$seq" ]]; then
-                tput cnorm 2>/dev/null || true
-                return 1
-            else
-                # Поглощаем третий символ escape-последовательности (стрелки)
-                IFS= read -rsn1 -t 0.1 2>/dev/null || true
-            fi
-        elif [[ "$key" == "" ]]; then
-            tput cnorm 2>/dev/null || true
-            return 0
-        fi
-    done
+    local -a _opts=()
+    if [ -n "${CONFIRM_WARN_LINE:-}" ]; then
+        _opts+=($'\x01'"${CONFIRM_WARN_LINE}")
+    fi
+    _opts+=("$_yes" "$_no")
+
+    if [ "$_del" = true ]; then
+        MENU_TITLE_COLOR="${RED}"
+    else
+        MENU_TITLE_COLOR="${BLUE}"
+    fi
+    MENU_ESC_LABEL="Отмена"
+    MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация    ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+    if [ -n "${CONFIRM_WARN_LINE:-}" ]; then
+        MENU_INITIAL_IDX=1
+    else
+        MENU_INITIAL_IDX=0
+    fi
+    show_arrow_menu "$_title" "${_opts[@]}"
+    local _r=$?
+    unset MENU_TITLE_COLOR MENU_KEY_HINT MENU_ESC_LABEL MENU_INITIAL_IDX
+    [[ $_r -eq 255 ]] || [[ $_r -eq 1 ]] && return 1
+    [[ $_r -eq 0 ]] && return 0
+    return 1
+}
+
+# Совместимость: общее подтверждение без предупреждения.
+confirm_action() {
+    confirm_nav "Подтвердите действие" "Подтвердить" "Отменить" || return 1
 }

@@ -5,15 +5,12 @@
 # ─── Удаление отдельных компонентов Remnawave ───────────────────────────────
 
 _delete_component_panel() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   🗑️  Удаление панели Remnawave${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${RED}⚠️  Все данные панели будут удалены!${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then return; fi
+    CONFIRM_WARN_LINE="${RED}⚠️  Все данные панели будут удалены!${NC}"
+    if ! confirm_nav --delete "🗑️  Удаление панели Remnawave" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
+        return
+    fi
+    unset CONFIRM_WARN_LINE
     echo
     (
         cd /opt/remnawave 2>/dev/null
@@ -33,19 +30,16 @@ _delete_component_panel() {
 }
 
 _delete_component_node() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${RED}⚠️  Все данные ноды будут удалены!${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then return; fi
+    CONFIRM_WARN_LINE="${RED}⚠️  Все данные ноды будут удалены!${NC}"
+    if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
+        return
+    fi
+    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "    ${BLUE}🗑️  Удаление ноды Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -113,15 +107,12 @@ _delete_component_node() {
 }
 
 _delete_component_subpage() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}  🗑️  Удаление страницы подписки${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${RED}⚠️  Все данные страницы подписки будут удалены!${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then return; fi
+    CONFIRM_WARN_LINE="${RED}⚠️  Все данные страницы подписки будут удалены!${NC}"
+    if ! confirm_nav --delete "🗑️  Удаление страницы подписки" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
+        return
+    fi
+    unset CONFIRM_WARN_LINE
     echo
     echo
 
@@ -270,15 +261,12 @@ manage_delete_components() {
             beszel_agent) uninstall_beszel_agent ;;
             mtproto)      _mt_do_uninstall || true ;;
             delete_all)
-                clear
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "${RED}     🗑️  Удаление всех компонентов${NC}"
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo
-                echo -e "${RED}⚠️  Удалить все установленные компоненты${NC}"
-                echo
-                echo -e "${BLUE}══════════════════════════════════════${NC}"
-                if ! confirm_action; then continue; fi
+                CONFIRM_WARN_LINE="${RED}⚠️  Удалить все установленные компоненты${NC}"
+                if ! confirm_nav --delete "🗑️  Удаление всех компонентов" "Подтвердить удаление" "Отменить удаление"; then
+                    unset CONFIRM_WARN_LINE
+                    continue
+                fi
+                unset CONFIRM_WARN_LINE
                 echo
                 echo
                 if is_panel_installed; then
@@ -319,7 +307,7 @@ manage_delete_components() {
                 show_spinner "Очистка Nginx" "Nginx очищен"
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "       ${RED}🗑️  Удаление завершено${NC}"
+                echo -e "       ${BLUE}🗑️  Удаление завершено${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 echo -e "  ${GREEN}✅ Все компоненты были удалены${NC}"
@@ -515,18 +503,12 @@ update_script() {
 }
 
 remove_script_all() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   💣 УДАЛЕНИЕ СКРИПТА И ДАННЫХ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
-    echo -e "${RED}⚠️  ВСЕ ДАННЫЕ REMNAWAVE БУДУТ УДАЛЕНЫ!${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="${RED}⚠️  ВСЕ ДАННЫЕ REMNAWAVE БУДУТ УДАЛЕНЫ!${NC}"
+    if ! confirm_nav --delete "💣 Удаление скрипта и данных" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         return 1
     fi
+    unset CONFIRM_WARN_LINE
 
     echo
 
@@ -613,18 +595,12 @@ remove_script_all() {
 }
 
 remove_script() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   🗑️   УДАЛЕНИЕ СКРИПТА${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
-    echo -e "${YELLOW}⚠️  Данные скрипта будут удалены.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="${YELLOW}⚠️  Данные скрипта будут удалены.${NC}"
+    if ! confirm_nav --delete "🗑️  Удаление скрипта" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         return
     fi
+    unset CONFIRM_WARN_LINE
 
     rm -f /usr/local/bin/dfc-manager
     rm -f /usr/local/bin/dfc

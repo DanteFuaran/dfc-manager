@@ -104,7 +104,7 @@ JAIL_EOF
                 echo
                 echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
                 echo
-                echo -e "${GREEN}Настройки обновлены:${NC}"
+                echo -e "${BLUE}Настройки обновлены:${NC}"
                 echo -e "  ${WHITE}Количество:${NC}   ${YELLOW}${new_maxretry}${NC} попыток"
                 echo -e "  ${WHITE}Длит. бана:${NC}   ${YELLOW}${new_bantime_min}${NC} мин"
                 echo -e "  ${WHITE}Окно поиска:${NC}  ${YELLOW}${new_findtime_min}${NC} мин"
@@ -126,11 +126,14 @@ JAIL_EOF
                 ;;
             2)
                 echo
-                if ! confirm_action; then
+                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Fail2ban будет полностью удалён с сервера.${NC}")"
+                if ! confirm_nav --delete "🗑️  Удаление Fail2ban" "Подтвердить удаление" "Отменить удаление"; then
+                    unset CONFIRM_WARN_LINE
                     print_error "Операция отменена"
                     sleep 2
                     return 0
                 fi
+                unset CONFIRM_WARN_LINE
                 echo
                 (
                     systemctl stop fail2ban >/dev/null 2>&1

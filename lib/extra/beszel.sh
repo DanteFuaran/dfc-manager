@@ -1027,15 +1027,12 @@ uninstall_beszel() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${RED}       🗑️  УДАЛЕНИЕ BESZEL${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        if ! confirm_action; then return; fi
+        CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}")"
+        if ! confirm_nav --delete "🗑️  Удаление Beszel" "Подтвердить удаление" "Отменить удаление"; then
+            unset CONFIRM_WARN_LINE
+            return
+        fi
+        unset CONFIRM_WARN_LINE
         echo
         echo
     fi
@@ -1237,15 +1234,12 @@ uninstall_beszel_agent() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${RED}    🗑️  УДАЛЕНИЕ АГЕНТА BESZEL${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        if ! confirm_action; then return; fi
+        CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}")"
+        if ! confirm_nav --delete "🗑️  Удаление агента Beszel" "Подтвердить удаление" "Отменить удаление"; then
+            unset CONFIRM_WARN_LINE
+            return
+        fi
+        unset CONFIRM_WARN_LINE
         echo
     fi
 

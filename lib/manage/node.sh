@@ -7,7 +7,7 @@ remove_node_from_panel() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   🗑️  УДАЛЕНИЕ НОДЫ С СЕРВЕРА ПАНЕЛИ${NC}"
+    echo -e "${BLUE}   🗑️  Удаление ноды с сервера панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -19,19 +19,12 @@ remove_node_from_panel() {
         return 1
     fi
 
-    echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${WHITE}Эта операция удалит ноду с сервера и настроит панель${NC}"
-    echo -e "${WHITE}для работы на стандартном порту 443.${NC}"
-    echo
-    echo -e "${RED}После удаления ноды:${NC}"
-    echo -e "  ${GREEN}✓${NC} Панель будет доступна по https (порт 443)"
-    echo -e "  ${GREEN}✓${NC} Порт 8443 будет закрыт"
-    echo -e "  ${RED}✗${NC} VPN через эту ноду перестанет работать"
-    echo
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Эта операция удалит ноду с сервера и настроит панель для работы на стандартном порту 443.${NC}\n\n${RED}После удаления ноды:${NC}\n  ${GREEN}✓${NC} Панель будет доступна по https (порт 443)\n  ${GREEN}✓${NC} Порт 8443 будет закрыт\n  ${RED}✗${NC} VPN через эту ноду перестанет работать")"
+    if ! confirm_nav --delete "🗑️  Удаление ноды с сервера панели" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         return
     fi
+    unset CONFIRM_WARN_LINE
 
     local panel_domain="" panel_cert="" COOKIE_NAME="" COOKIE_VALUE=""
 

@@ -1,12 +1,7 @@
 # ─── Восстановление конфига Nginx до заводского состояния (соло-панель) ───
 restore_nginx_config() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   ⚠️  Экстренное восстановление Nginx${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
     if [ ! -f "/opt/remnawave/.env" ]; then
+        clear
         print_error "Файл /opt/remnawave/.env не найден"
         echo
         show_continue_prompt || return 1
@@ -21,6 +16,7 @@ restore_nginx_config() {
         panel_domain=$(grep -oP 'server_name\s+\K[^;]+' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -v '^_$' | head -1)
     fi
     if [ -z "$panel_domain" ]; then
+        clear
         print_error "Не удалось определить домен панели"
         echo
         show_continue_prompt || return 1
@@ -57,17 +53,12 @@ restore_nginx_config() {
         fi
     fi
 
-    echo -e "${YELLOW}⚠️  Nginx будет восстановлен к заводским настройкам.${NC}"
-    echo -e "${YELLOW}   Конфигурация: только панель (порт 443).${NC}"
-    echo -e "${YELLOW}   Нода и подписка будут отключены от Nginx.${NC}"
-    echo
-    echo -e "${DARKGRAY}  Домен панели:   ${WHITE}${panel_domain}${NC}"
-    echo -e "${DARKGRAY}  Сертификат:     ${WHITE}${panel_cert}${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Nginx будет восстановлен к заводским настройкам.${NC}\n${YELLOW}   Конфигурация: только панель (порт 443).${NC}\n${YELLOW}   Нода и подписка будут отключены от Nginx.${NC}\n\n${DARKGRAY}  Домен панели:   ${WHITE}${panel_domain}${NC}\n${DARKGRAY}  Сертификат:     ${WHITE}${panel_cert}${NC}")"
+    if ! confirm_nav --delete "⚠️  Экстренное восстановление Nginx" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         return
     fi
+    unset CONFIRM_WARN_LINE
 
     # ─── Генерируем заводской конфиг: только панель ───
     # (_nginx_http_header сохраняет внешние блоки (Beszel и др.) и восстанавливает их)
@@ -815,23 +806,14 @@ EOF
 }
 
 change_credentials() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "         ${GREEN}🔐 Сброс суперадмина${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "          ${YELLOW}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${WHITE}Эта операция удалит текущего суперадмина из базы данных.${NC}"
-    echo -e "${WHITE}При следующем входе в панель вам будет предложено${NC}"
-    echo -e "${WHITE}создать нового суперадмина.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Эта операция удалит текущего суперадмина из базы данных.${NC}\n${WHITE}При следующем входе в панель вам будет предложено создать нового суперадмина.${NC}")"
+    if ! confirm_nav --delete "🔐 Сброс суперадмина" "Подтвердить удаление" "Отменить удаление"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         return
     fi
+    unset CONFIRM_WARN_LINE
 
     echo
     echo
@@ -897,12 +879,7 @@ EOSQL
 }
 
 regenerate_cookies() {
-    clear
     tput civis 2>/dev/null
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   🍪 СМЕНА COOKIE ДОСТУПА${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     if [ ! -f ${DIR_NGINX}nginx.conf ]; then
         print_error "Файл nginx.conf не найден"
@@ -921,15 +898,15 @@ regenerate_cookies() {
     local OLD_NAME="$COOKIE_NAME"
     local OLD_VALUE="$COOKIE_VALUE"
 
-    echo -e "${YELLOW}⚠️  Текущие cookie будут заменены на новые.${NC}"
-    echo
-
-    if ! confirm_action; then
+    CONFIRM_WARN_LINE="${YELLOW}⚠️  Текущие cookie будут заменены на новые.${NC}"
+    if ! confirm_nav "🍪 Смена cookie доступа" "Подтвердить" "Отменить"; then
+        unset CONFIRM_WARN_LINE
         print_error "Операция отменена"
         sleep 2
         tput cnorm 2>/dev/null
         return
     fi
+    unset CONFIRM_WARN_LINE
 
     local NEW_NAME NEW_VALUE
     NEW_NAME=$(generate_cookie_key)

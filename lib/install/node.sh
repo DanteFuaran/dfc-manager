@@ -38,17 +38,12 @@ installation_node() {
         [[ $_choice -eq 0 ]] && return 1
 
         # Enter — подтверждение переустановки
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${RED}   ⚠️  Подтверждение переустановки${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo -e "${RED}⚠️  Все данные текущей ноды будут удалены!${NC}"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        if ! confirm_action; then
+        CONFIRM_WARN_LINE="${RED}⚠️  Все данные текущей ноды будут удалены!${NC}"
+        if ! confirm_nav --delete "⚠️  Переустановка ноды" "Подтвердить удаление" "Отменить удаление"; then
+            unset CONFIRM_WARN_LINE
             return 0
         fi
+        unset CONFIRM_WARN_LINE
 
         # Останавливаем и удаляем контейнер ноды с томами
         (
