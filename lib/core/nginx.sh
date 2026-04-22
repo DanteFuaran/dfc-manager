@@ -218,21 +218,28 @@ _nginx_restore_stream_block() {
 _nginx_restore_mt_connect_blocks() {
     [ -f "${DIR_NGINX}nginx.conf" ] || return 0
 
-    # Определяем текущий режим nginx.conf:
-    # - unix socket (нода standalone или нода+панель): xray владеет портом 443,
-    #   значит MT /connect блок ДОЛЖЕН слушать unix-сокет с proxy_protocol
-    # - listen 443 в других server-блоках (только панель, или панель+подписка):
-    #   порт 443 свободен — MT /connect может слушать 443 напрямую
-    # - MTPROTO_STREAM блок: nginx терминирует 443 через stream и прокидывает на сокет
+    # Определяем текущий режим nginx.conf.
+    # ВАЖНО: проверяем unix-сокет ТОЛЬКО вне MT_CONNECT блоков, иначе сам MT_CONNECT
+    # блок (который может временно содержать unix-директиву) создаёт ложное срабатывание.
     local _uses_socket=false _has_listen_443=false _has_stream_block=false
-    if grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _has_stream_block=true
         _uses_socket=true
+    else
+        # Ищем unix-сокет в частях конфига без MT_CONNECT блоков
+        local _conf_no_mt
+        _conf_no_mt=$(python3 -c "
+import sys, re
+with open('${DIR_NGINX}nginx.conf') as f: c = f.read()
+c = re.sub(r'# BEGIN_MT_CONNECT_.*?# END_MT_CONNECT_[^\n]*\n?', '', c, flags=re.DOTALL)
+print(c)
+" 2>/dev/null) || _conf_no_mt=$(grep -v "BEGIN_MT_CONNECT\|END_MT_CONNECT" "${DIR_NGINX}nginx.conf" 2>/dev/null || true)
+        if echo "$_conf_no_mt" | grep -q 'listen unix:/dev/shm/nginx.sock' 2>/dev/null; then
+            _uses_socket=true
+        fi
     fi
     if grep -Eq '^\s*listen\s+443\s+ssl' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _has_listen_443=true
-    fi
-    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-        _has_stream_block=true
     fi
 
     # Fallback: если блоки не сохранены (MTProto установлен без nginx), генерируем из .env

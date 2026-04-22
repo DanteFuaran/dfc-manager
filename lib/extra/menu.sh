@@ -228,7 +228,7 @@ _mt_port_healthcheck() {
     if command -v curl >/dev/null 2>&1 && [ -n "$_host" ]; then
         local _check_url="https://check-host.net/check-tcp?host=${_host}:${_port}&max_nodes=3"
         local _id="" _res=""
-        _id=$(curl -fsSL --max-time 8 "$_check_url" 2>/dev/null | sed -n 's/.*check-result\\///p' | head -1 | tr -d '[:space:]') || true
+        _id=$(curl -fsSL --max-time 8 "$_check_url" 2>/dev/null | sed -n 's|.*check-result/||p' | head -1 | tr -d '[:space:]') || true
         if [ -n "$_id" ]; then
             # ждём чуть-чуть пока появится результат
             sleep 1
@@ -357,14 +357,24 @@ _mt_nginx_add_domain() {
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
 
     # Определяем режим nginx.conf:
-    # - stream-блок MTPROTO_STREAM → unix socket с proxy_protocol
-    # - уже есть unix socket listen в других блоках (панель/нода) → unix socket
-    #   (xray/другой сервис занимает 443; нельзя добавить listen 443 напрямую)
+    # - stream-блок MTPROTO_STREAM или unix-сокет в НЕ-MT блоках → unix socket с proxy_protocol
     # - иначе → прямой listen 443
+    # ВАЖНО: проверяем unix-сокет только вне MT_CONNECT блоков (они сами могут содержать unix
+    #         от предыдущего режима — это не признак "unix socket режима" сервера).
     local _use_unix=false
-    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null \
-       || grep -q "listen unix:/dev/shm/nginx.sock" "$_nginx_conf" 2>/dev/null; then
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
         _use_unix=true
+    else
+        local _conf_no_mt
+        _conf_no_mt=$(python3 -c "
+import sys, re
+with open('${_nginx_conf}') as f: c = f.read()
+c = re.sub(r'# BEGIN_MT_CONNECT_.*?# END_MT_CONNECT_[^\n]*\n?', '', c, flags=re.DOTALL)
+print(c)
+" 2>/dev/null) || _conf_no_mt=$(grep -v "BEGIN_MT_CONNECT\|END_MT_CONNECT" "$_nginx_conf" 2>/dev/null || true)
+        if echo "$_conf_no_mt" | grep -q 'listen unix:/dev/shm/nginx.sock' 2>/dev/null; then
+            _use_unix=true
+        fi
     fi
 
     # Строки listen для выбранного режима
@@ -783,11 +793,14 @@ _mt_do_install() {
         show_spinner "Остановка старого контейнера" "Остановка старого контейнера"
     fi
 
-    # Тянем образ и запускаем
+    # Тянем образ (если pull упадёт — up всё равно запустится из кэша)
+    (cd "$_MT_DIR" && docker compose pull -q 2>/dev/null || true) &
+    show_spinner "Загрузка образа MTProto" "Загрузка образа MTProto"
+
+    # Запускаем контейнер
     local _compose_err; _compose_err=$(mktemp)
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1 && \
-     docker compose up -d 2>"$_compose_err" >/dev/null) &
-    show_spinner "Подключение MT Proto" "Подключение MT Proto"
+    (cd "$_MT_DIR" && docker compose up -d 2>"$_compose_err" >/dev/null) &
+    show_spinner "Запуск MTProto" "Запуск MTProto"
 
     # Применяем правила доступа (iptables + UFW) в фоне со спиннером —
     # тут же может докачиваться conntrack через apt-get.
@@ -2145,7 +2158,6 @@ PYEOF
 
 # Применяет whitelist-режим (разрешаются только те, кто в списке; остальные блокируются)
 _mt_ipt_allow_apply() {
-    _mt_block_clear_all 2>/dev/null
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
     if _mt_has_stream; then
@@ -2169,6 +2181,10 @@ _mt_ipt_allow_apply() {
 
 _mt_block_apply() {
     _mt_db_ensure
+    # При каждом применении правил сначала сбрасываем все старые MTProto-правила.
+    # Это важно при переустановке или смене режима (stream↔direct) — гарантирует
+    # чистый лист без артефактов от предыдущих конфигураций.
+    _mt_block_clear_all 2>/dev/null || true
     local _mode; _mode=$(_mt_db_mode_get)
     if [ "$_mode" = "allow" ]; then
         _mt_ipt_allow_apply
@@ -2183,18 +2199,19 @@ _mt_block_apply() {
 _mt_block_clear_all() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    if _mt_has_stream; then
-        _mt_ipt -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
-            eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
-        done
-    else
-        _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
-            eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
-        done
-        _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
-            eval _mt_ipt -t mangle "${_rule/-A/-D}" 2>/dev/null || true
-        done
-    fi
+    # Очищаем правила ОБОИХ режимов (stream и direct), чтобы при переходе
+    # stream→direct или direct→stream не оставалось артефактов от прошлой конфигурации.
+    # Stream-mode правила: INPUT port 443
+    _mt_ipt -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
+        eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
+    done
+    # Direct-mode правила: DOCKER-USER и mangle PREROUTING:PROXY_PORT
+    _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
+        eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
+    done
+    _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
+        eval _mt_ipt -t mangle "${_rule/-A/-D}" 2>/dev/null || true
+    done
 }
 
 # Проверяет, заблокирован ли IP (точно или через CIDR в таблице blocked)
