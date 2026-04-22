@@ -447,7 +447,12 @@ _mt_write_proxy_page() {
             [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
         fi
     fi
-    local _tg_url="tg://proxy?server=${_proxy_host}&port=${_port}&secret=${_secret}"
+    # В stream-режиме MTProto доступен на 443 (а PROXY_PORT может быть любым).
+    local _link_port="$_port"
+    if _mt_has_stream; then
+        _link_port="443"
+    fi
+    local _tg_url="tg://proxy?server=${_proxy_host}&port=${_link_port}&secret=${_secret}"
     local _html_path="/var/www/html/mtproto-connect.html"
     mkdir -p /var/www/html
     cat > "$_html_path" << HTMLEOF
@@ -837,9 +842,11 @@ _mt_do_install() {
                 [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
             fi
         fi
-        echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        local _tg_port="${PROXY_PORT}"
+        _mt_has_stream && _tg_port="443"
+        echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
         echo
-        echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -911,8 +918,10 @@ _mt_do_config() {
             [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
         fi
     fi
-    echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    local _tg_port="${PROXY_PORT}"
+    _mt_has_stream && _tg_port="443"
+    echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${_tg_port}&secret=${PROXY_SECRET}${NC}"
     if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
        [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
         echo
@@ -1831,7 +1840,8 @@ _mt_strip_ip() {
 
 # Проверяет, активен ли nginx stream-блок (MT Proto за nginx)
 _mt_has_stream() {
-    grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null
+    local _conf="${DIR_NGINX:-/opt/nginx/}nginx.conf"
+    grep -q "# BEGIN_MTPROTO_STREAM" "$_conf" 2>/dev/null
 }
 
 _mt_get_active_ips() {
@@ -1949,12 +1959,29 @@ _mt_nginx_reload() {
 # Standalone нода (без панели): xray владеет 443, MT Proto на PROXY_PORT напрямую.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
-    # MTProto теперь ВСЕГДА работает на прямом Docker-NAT (0.0.0.0:PROXY_PORT)
-    # Stream-блок в nginx больше не нужен и не создаётся.
-    # Если nginx установлен (для remnawave/remnanode/subpage) — он работает независимо для HTTP(S).
-    # Если старый stream-блок присутствует в nginx.conf — удаляем его.
-    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-        _mt_nginx_stream_remove 2>/dev/null || true
+    # Если nginx присутствует и занимает 443 (панель/подписка) — включаем stream режим,
+    # чтобы MTProto работал на 443 (как "раньше"), а HTTPS домены шли в http gate.
+    # Если нода standalone (без панели) — 443 нужен xray, stream включать нельзя.
+    local _standalone_node=false
+    if [ -f "/opt/remnanode/docker-compose.yml" ] && [ ! -f "/opt/remnawave/docker-compose.yml" ]; then
+        _standalone_node=true
+    fi
+
+    local _nginx_conf="${DIR_NGINX:-/opt/nginx/}nginx.conf"
+    if $_standalone_node; then
+        # Убираем stream-блок если он остался от старых установок
+        if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
+            _mt_nginx_stream_remove >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+
+    # Если nginx поднят — включаем/обновляем stream-блок.
+    # Он делает:
+    # - listen 443 → SNI map: домены HTTPS → 8444 (http gate), default → 8445 → MTProto
+    # - передаёт proxy_protocol в http gate (unix sock), чтобы /connect видел real IP
+    if _mt_nginx_available && [ -f "$_nginx_conf" ]; then
+        _mt_nginx_stream_write >/dev/null 2>&1 || true
     fi
     return 0
 }
