@@ -1651,6 +1651,11 @@ SQL
 
 # Создаёт БД если ещё не существует, и мигрирует схему если нужно
 _mt_db_ensure() {
+    # sqlite3 нужен для геолокации/блоклистов/статистики (кеш в mtproto.db)
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        (DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 || true)
+        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q sqlite3 >/dev/null 2>&1 || true)
+    fi
     [ -f "$_MT_DB" ] || _mt_db_init
     # Миграция: добавляем колонку mode в blocked если ещё нет
     if ! sqlite3 "$_MT_DB" "SELECT mode FROM blocked LIMIT 1;" >/dev/null 2>&1; then
