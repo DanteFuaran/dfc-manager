@@ -8,11 +8,10 @@ DIR_NODE="/opt/remnanode/"
 DIR_SUB="/opt/subscribe-page/"
 
 # Версия, ветка и репозиторий — источник: /usr/local/dfc-manager/version (всегда присутствует)
-SCRIPT_VERSION="0.1.49"
+SCRIPT_VERSION="0.1.50"
 SCRIPT_BRANCH="main"
 SCRIPT_REPO="https://github.com/DanteFuaran/dfc-manager.git"
-_DFC_KEY=""
-# Синхронизируем git remote на публичный URL (на случай если осталась старая запись с токеном)
+# Синхронизируем git remote на публичный URL (на случай если осталась старая запись с учётными данными в URL)
 if command -v git >/dev/null 2>&1 && [ -d "${DIR_SCRIPT}.git" ]; then
     _cur_remote=$(git -C "${DIR_SCRIPT%/}" remote get-url origin 2>/dev/null || true)
     _pub_remote="https://github.com/DanteFuaran/dfc-manager.git"

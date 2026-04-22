@@ -46,13 +46,11 @@ apply_template() {
     # Очищаем директорию (кроме метаданных и MT Proto connect-страницы)
     find /var/www/html/ -mindepth 1 -not -name '.current_template' -not -name '.template_changed' -not -name 'mtproto-connect.html' -delete 2>/dev/null
     
-    # Скачиваем шаблон с GitHub (через API, т.к. репо приватный)
+    # Скачиваем шаблон с GitHub (Contents API → raw HTML)
     local _api_url="https://api.github.com/repos/DanteFuaran/dfc-manager/contents/templates/${template_id}/index.html?ref=${SCRIPT_BRANCH}"
 
-    local _curl_auth_args=()
-    [ -n "${_DFC_KEY:-}" ] && _curl_auth_args=(-H "Authorization: Bearer ${_DFC_KEY}")
-
-    if curl -fsSL "${_curl_auth_args[@]}" -H "Accept: application/vnd.github.v3.raw" \
+    if curl -fsSL --connect-timeout 15 --max-time 120 \
+        -H "Accept: application/vnd.github.v3.raw" \
         "${_api_url}" -o /var/www/html/index.html; then
         echo "$name" > /var/www/.current_template
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed

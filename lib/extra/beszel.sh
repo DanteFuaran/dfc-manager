@@ -617,11 +617,7 @@ NGINX
             done
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
-            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-            sh /tmp/get-docker.sh >/dev/null 2>&1
-            rm -f /tmp/get-docker.sh
-            systemctl start docker >/dev/null 2>&1 || true
-            systemctl enable docker >/dev/null 2>&1 || true
+            dfc_install_docker_engine_official >/dev/null 2>&1 || true
         ) &
         if ! show_spinner "Обновление пакетов системы"; then
             print_error "Docker не удалось установить"
@@ -1178,11 +1174,7 @@ install_beszel_agent() {
         apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
         apt-get install -y -qq $DPKG_OPTS ca-certificates curl ufw wget >/dev/null 2>&1
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-            sh /tmp/get-docker.sh >/dev/null 2>&1
-            rm -f /tmp/get-docker.sh
-            systemctl start docker >/dev/null 2>&1 || true
-            systemctl enable docker >/dev/null 2>&1 || true
+            dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
     ) &
     show_spinner "Обновление пакетов системы"

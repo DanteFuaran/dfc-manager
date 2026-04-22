@@ -57,9 +57,7 @@ install_packages() {
 
         # Docker
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-            sh /tmp/get-docker.sh >/dev/null 2>&1
-            rm -f /tmp/get-docker.sh
+            dfc_install_docker_engine_official || true
         fi
         systemctl start docker 2>/dev/null || true
         systemctl enable docker 2>/dev/null || true

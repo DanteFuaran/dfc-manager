@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.49
+#   DFC Manager v0.1.50
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -80,6 +80,7 @@ source "${SCRIPT_DIR}/lib/core/colors.sh"
 source "${SCRIPT_DIR}/lib/core/terminal.sh"
 source "${SCRIPT_DIR}/lib/core/ui.sh"
 source "${SCRIPT_DIR}/lib/core/system.sh"
+source "${SCRIPT_DIR}/lib/core/docker_install.sh"
 source "${SCRIPT_DIR}/lib/core/nginx.sh"
 
 # Install: генераторы и утилиты установки

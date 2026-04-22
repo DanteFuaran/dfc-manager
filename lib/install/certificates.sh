@@ -128,11 +128,7 @@ _ensure_system_deps() {
         fi
         if [ "$_need_docker" = true ]; then
             apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
-            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-            sh /tmp/get-docker.sh >/dev/null 2>&1
-            rm -f /tmp/get-docker.sh
-            systemctl start docker >/dev/null 2>&1 || true
-            systemctl enable docker >/dev/null 2>&1 || true
+            dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
     ) &
     show_spinner "Обновление пакетов системы"
@@ -308,7 +304,7 @@ setup_cloudflare_credentials() {
 
     local check
     if [ "$_is_api_token" = true ]; then
-        check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+        check=$(curl -sS --connect-timeout 10 --max-time 45 -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
             -H "$_auth_header" | jq -r '.success' 2>/dev/null)
         if [ "$check" != "true" ]; then
             print_error "Cloudflare API Token невалиден или отозван"
@@ -321,10 +317,10 @@ setup_cloudflare_credentials() {
     # Шаг 2: проверяем доступ к зонам (Zone:Read)
     local zones_resp zones_ok zone_id
     if [ "$_is_api_token" = true ]; then
-        zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
+        zones_resp=$(curl -sS --connect-timeout 10 --max-time 45 -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
             -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
     else
-        zones_resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
+        zones_resp=$(curl -sS --connect-timeout 10 --max-time 45 -X GET "https://api.cloudflare.com/client/v4/zones?per_page=1" \
             -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" 2>/dev/null)
     fi
     zones_ok=$(echo "$zones_resp" | jq -r '.success' 2>/dev/null)
@@ -345,11 +341,11 @@ setup_cloudflare_credentials() {
     if [ -n "$zone_id" ]; then
         local create_resp create_ok record_id _dns_write_err
         if [ "$_is_api_token" = true ]; then
-            create_resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+            create_resp=$(curl -sS --connect-timeout 10 --max-time 45 -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
                 -H "$_auth_header" -H "Content-Type: application/json" \
                 --data '{"type":"TXT","name":"_dfc-acme-test","content":"dfc-write-test","ttl":60}' 2>/dev/null)
         else
-            create_resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+            create_resp=$(curl -sS --connect-timeout 10 --max-time 45 -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
                 -H "X-Auth-Email: $_cf_email" -H "$_auth_header" -H "Content-Type: application/json" \
                 --data '{"type":"TXT","name":"_dfc-acme-test","content":"dfc-write-test","ttl":60}' 2>/dev/null)
         fi
@@ -360,10 +356,10 @@ setup_cloudflare_credentials() {
             record_id=$(echo "$create_resp" | jq -r '.result.id // empty' 2>/dev/null)
             if [ -n "$record_id" ]; then
                 if [ "$_is_api_token" = true ]; then
-                    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+                    curl -sS --connect-timeout 10 --max-time 45 -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
                         -H "$_auth_header" >/dev/null 2>&1
                 else
-                    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+                    curl -sS --connect-timeout 10 --max-time 45 -X DELETE "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
                         -H "X-Auth-Email: $_cf_email" -H "$_auth_header" >/dev/null 2>&1
                 fi
             fi
