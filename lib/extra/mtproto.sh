@@ -1582,26 +1582,33 @@ _mt_do_uninstall() {
     echo
     echo
 
-    # Сразу показываем спиннер; compose down может занимать до timeout — только в фоне.
-    if [ -d "$_MT_DIR" ]; then
-        (cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true) &
-    else
-        ( : ) &
-    fi
-    show_spinner "Остановка контейнера..." "Контейнер остановлен"
-    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
+    # 1) compose down + снятие контейнера
+    (
+        if [ -d "$_MT_DIR" ]; then
+            cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true
+        fi
+        docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
+    ) &
+    show_spinner "Остановка контейнера"
 
-    (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
-    (rm -rf "$_MT_DIR" 2>/dev/null || true
-    if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
-        ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
-    fi
-    rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
-    rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
-    show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
+    # 2) образ, каталог, UFW, бинарники
+    (
+        docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
+        rm -rf "$_MT_DIR" 2>/dev/null || true
+        if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
+            ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+        fi
+        rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
+        rm -rf /usr/local/lib/mtproto 2>/dev/null || true
+    ) &
+    show_spinner "Удаление остаточных файлов"
 
-    (_mt_cleanup_nginx_artifacts 2>/dev/null || true) &
-    show_spinner "Удаление из Nginx..." "Удалено из Nginx"
+    # 3) nginx /connect, stream, ssl-артефакты + iptables (записи блокировок)
+    (
+        _mt_cleanup_nginx_artifacts 2>/dev/null || true
+        _mt_block_clear_all 2>/dev/null || true
+    ) &
+    show_spinner "Удаление остаточных записей"
 
     echo
     echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
