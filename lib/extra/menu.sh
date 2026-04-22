@@ -2203,7 +2203,8 @@ _mt_do_access() {
                     local _note_str; _note_str=$(_mt_db_blocked_note_get "$_le" "allow")
                     local _suffix=""
                     [ -n "$_note_str" ] && _suffix="  ${DARKGRAY}[${_note_str}]${NC}"
-                    local _line; _line=$(printf "${DARKGRAY}%d:${NC} %-15s  %s" "$_allow_idx" "$_le" "$_geo_str")
+                    local _num_str="${DARKGRAY}${_allow_idx}:${NC}"
+                    local _ip_str; _ip_str=$(printf '%-15s  %s' "$_le" "$_geo_str")
                     # Зелёный только если IP сейчас онлайн
                     local _is_online=false
                     if [[ "$_le" != */* ]]; then
@@ -2221,9 +2222,9 @@ _mt_do_access() {
                         done
                     fi
                     if [ "$_is_online" = true ]; then
-                        _ip_items+=("${GREEN}${_line}${_suffix}${NC}")
+                        _ip_items+=("${_num_str} ${GREEN}${_ip_str}${_suffix}${NC}")
                     else
-                        _ip_items+=("${WHITE}${_line}${_suffix}${NC}")
+                        _ip_items+=("${_num_str} ${WHITE}${_ip_str}${_suffix}${NC}")
                     fi
                     _ip_vals+=("$_le")
                 done
@@ -2246,14 +2247,15 @@ _mt_do_access() {
                     (( _block_idx++ ))
                     local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
                     [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf "${DARKGRAY}%d:${NC} %-15s  %s" "$_block_idx" "$_ip" "$_geo_str")
+                    local _num_b="${DARKGRAY}${_block_idx}:${NC}"
+                    local _ip_b; _ip_b=$(printf '%-15s  %s' "$_ip" "$_geo_str")
                     local _in_l=false; _ip_in_list "$_ip" && _in_l=true
                     if [ "$_in_l" = true ]; then
-                        _ip_items+=("${RED}${_line}${NC}")
+                        _ip_items+=("${_num_b} ${RED}${_ip_b}${NC}")
                     elif printf '%s\n' "${_cur_ips[@]}" | grep -qxF "$_ip"; then
-                        _ip_items+=("${GREEN}${_line}${NC}")
+                        _ip_items+=("${_num_b} ${GREEN}${_ip_b}${NC}")
                     else
-                        _ip_items+=("$_line")
+                        _ip_items+=("${_num_b} ${_ip_b}")
                     fi
                     _ip_vals+=("$_ip"); _has_solo=1
                 done
