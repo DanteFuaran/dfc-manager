@@ -1901,9 +1901,30 @@ _mt_has_stream() {
 _mt_get_active_ips() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    # Прямой Docker DNAT (HOST:PROXY_PORT → container:443).
-    # conntrack видит NAT-сессии: src=CLIENT_IP dport=PROXY_PORT ESTABLISHED
-    # Таймаут ESTABLISHED-соединений = 432000с (5 дней), TIME_WAIT << 120с
+    # ВАЖНО: conntrack держит ESTABLISHED очень долго (до 5 дней),
+    # поэтому после отключения IP может "залипать" в статистике.
+    # Для "активных" подключений используем реальные established-сокеты на хостовом порту.
+    # docker-proxy слушает HOST:PROXY_PORT, поэтому ss показывает актуальные соединения.
+    if command -v ss >/dev/null 2>&1; then
+        ss -Htn state established "( sport = :${_port} )" 2>/dev/null \
+            | awk '
+                {
+                    # Обычно: ... local_addr:port peer_addr:port ...
+                    peer=$NF
+                    sub(/:[0-9]+$/,"",peer)
+                    # Убираем [] у IPv6 и ::ffff:
+                    gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
+                    sub(/^::ffff:/,"",peer); sub(/^::FFFF:/,"",peer)
+                    if (peer != "" \
+                        && peer !~ /^172\./ && peer !~ /^10\./ \
+                        && peer !~ /^192\.168\./ && peer !~ /^127\./ \
+                        && peer !~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print peer
+                }' \
+            | sort -u
+        return 0
+    fi
+
+    # Fallback (если ss отсутствует): conntrack, но он может залипать.
     if command -v conntrack >/dev/null 2>&1; then
         conntrack -L -p tcp 2>/dev/null \
             | grep " ESTABLISHED " \
@@ -1920,16 +1941,6 @@ _mt_get_active_ips() {
                        && src!~/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print src
                 }' \
             | sort -u
-    else
-        # Fallback: nsenter если conntrack недоступен
-        local _pid
-        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-            nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
-                | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
-                | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
-                | sort -u
-        fi
     fi
 }
 

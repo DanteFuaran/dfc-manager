@@ -279,3 +279,36 @@ manage_ufw() {
         esac
     done
 }
+
+# Удаляет все правила UFW, которые содержат указанный порт (и опционально протокол).
+# Безопасно для сценариев удаления компонентов: правила удаляются по номеру в обратном порядке,
+# чтобы нумерация не "съезжала".
+# Пример:
+#   ufw_delete_rules_by_port 2222
+#   ufw_delete_rules_by_port 443 tcp
+ufw_delete_rules_by_port() {
+    local _port="${1:-}" _proto="${2:-}"
+    command -v ufw >/dev/null 2>&1 || return 0
+    [ -z "$_port" ] && return 0
+
+    local _re_port="\\b${_port}\\b"
+    local _re_proto=""
+    [ -n "$_proto" ] && _re_proto="\\/${_proto}\\b"
+
+    local _nums=()
+    local _line _n
+    while IFS= read -r _line; do
+        # lines like: [ 1] 2222                       ALLOW IN    1.2.3.4
+        # or:         [ 3] 443/tcp                    ALLOW IN    Anywhere
+        echo "$_line" | grep -Eq "${_re_port}${_re_proto}" || continue
+        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null)
+        [ -n "$_n" ] && _nums+=("$_n")
+    done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
+
+    local i
+    for ((i=${#_nums[@]}-1; i>=0; i--)); do
+        echo "y" | ufw delete "${_nums[$i]}" >/dev/null 2>&1 || true
+    done
+    ufw reload >/dev/null 2>&1 || true
+    return 0
+}

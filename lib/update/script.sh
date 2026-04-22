@@ -79,6 +79,10 @@ _delete_component_node() {
         docker compose down -v --rmi all >/dev/null 2>&1 || true
         rm -rf /opt/remnanode
 
+        # Firewall: нода открывает 2222 (управление нодой). При удалении ноды закрываем эти правила.
+        # 443 здесь НЕ закрываем, т.к. он может быть нужен панели/странице подписки/MT connect.
+        ufw_delete_rules_by_port 2222 >/dev/null 2>&1 || true
+
         # Обновляем nginx: перегенерируем для оставшихся компонентов
         if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
             if [ -n "$_sub_dir" ] && [ -n "$_sub_domain" ] && [ -n "$_sub_cert" ]; then
@@ -308,6 +312,10 @@ manage_delete_components() {
                     ( _mt_do_uninstall --force >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление MTProto" "MTProto удалён"
                 fi
+                # Firewall cleanup: после полного удаления компонентов закрываем порты,
+                # которые открывались для них (нода: 2222, nginx/panel/node: 443).
+                ( ufw_delete_rules_by_port 2222 >/dev/null 2>&1 || true; ufw_delete_rules_by_port 443 tcp >/dev/null 2>&1 || true ) &
+                show_spinner "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
                 ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
                 show_spinner "Очистка Nginx" "Nginx очищен"
                 clear
