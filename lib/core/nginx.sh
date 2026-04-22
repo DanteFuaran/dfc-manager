@@ -260,12 +260,17 @@ print(c)
                 cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
             fi
             local _html_path="/var/www/html/mtproto-connect.html"
-            # Режим listen: unix socket (нода/стрим-блок) или прямой TCP 443
+            # Режим listen: stream → только unix+PP; coexistent Remnawave (unix+443) → unix+443 без real_ip;
+            # иначе прямой 443.
             local _fb_listen _fb_real_ip=""
-            if [ "$_uses_socket" = true ] || [ "$_has_stream_block" = true ]; then
+            if [ "$_has_stream_block" = true ]; then
                 _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
                 _fb_real_ip="    real_ip_header proxy_protocol;
     set_real_ip_from unix:;"
+            elif [ "$_uses_socket" = true ]; then
+                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen 443 ssl;
+    listen [::]:443 ssl;"
             else
                 _fb_listen="    listen 443 ssl;
     listen [::]:443 ssl;"
@@ -304,9 +309,8 @@ ${_fb_real_ip}
         content="${_NGINX_MT_CONNECT_BLOCKS[$domain]}"
         # Адаптируем listen-директивы под текущее состояние сервера.
         # Это необходимо когда архитектура изменилась (например, установили ноду после MT).
-        if [ "$_uses_socket" = true ] || [ "$_has_stream_block" = true ]; then
-            # Режим unix-сокета: порт 443 занят xray или nginx stream-модулем.
-            # Удаляем любые listen 443 (IPv4 и IPv6), добавляем unix socket + proxy_protocol.
+        if [ "$_has_stream_block" = true ]; then
+            # Stream владеет 443: только unix + proxy_protocol к шлюзу 8444.
             content=$(printf '%s\n' "$content" \
                 | sed -E '/^\s*listen\s+(\[::\]:)?443\s+ssl/d')
             if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
@@ -318,9 +322,21 @@ ${_fb_real_ip}
     real_ip_header proxy_protocol;\
     set_real_ip_from unix:;')
             fi
+        elif [ "$_uses_socket" = true ]; then
+            # Как у server{} панели: unix + 443; без real_ip (браузер на 443 без PROXY).
+            content=$(printf '%s\n' "$content" \
+                | sed -e '/real_ip_header proxy_protocol/d' \
+                      -e '/set_real_ip_from unix:/d')
+            if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;')
+            fi
+            if ! printf '%s' "$content" | grep -qE '^\s*listen\s+443\s+ssl'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/listen unix:\/dev\/shm\/nginx.sock ssl proxy_protocol;/a\    listen 443 ssl;\n    listen [::]:443 ssl;')
+            fi
         else
-            # Прямой режим: порт 443 свободен — MT может слушать его напрямую.
-            # Убираем unix socket / proxy_protocol, оставляем/добавляем listen 443.
+            # Прямой режим: только listen 443.
             content=$(printf '%s\n' "$content" \
                 | sed -e '/listen unix:\/dev\/shm\/nginx.sock/d' \
                       -e '/real_ip_header proxy_protocol/d' \

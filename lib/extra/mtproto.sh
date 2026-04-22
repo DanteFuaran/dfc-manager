@@ -325,7 +325,7 @@ _mt_nginx_container() {
 
 # Добавляет домен в nginx со страницей /connect
 # MTProto работает напрямую на PROXY_PORT (Docker-NAT), nginx слушает 443 для /connect.
-# При наличии nginx stream-блока (старый режим) — использует unix-сокет + proxy_protocol.
+# Режимы: stream (MTPROTO_STREAM) — только unix+PP; coexistent Remnawave — unix+443 как у панели; иначе только 443.
 _mt_nginx_add_domain() {
     local _domain="${1:-}" _secret="${2:-}" _port="${3:-}" _name="${4:-}"
     [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
@@ -344,14 +344,15 @@ _mt_nginx_add_domain() {
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
 
-    # Определяем режим nginx.conf:
-    # - stream-блок MTPROTO_STREAM или unix-сокет в НЕ-MT блоках → unix socket с proxy_protocol
-    # - иначе → прямой listen 443
-    # ВАЖНО: проверяем unix-сокет только вне MT_CONNECT блоков (они сами могут содержать unix
-    #         от предыдущего режима — это не признак "unix socket режима" сервера).
-    local _use_unix=false
+    # Режим nginx для /connect:
+    # - MTPROTO_STREAM: 443 у stream → MT только unix + proxy_protocol (как после adapt_mt_block).
+    # - Панель/нода без stream, но с unix+443 (Remnawave): тот же приём, что у server{} панели —
+    #   unix И listen 443, без real_ip (иначе браузер на 443 без PROXY → SSL/SNI сбой).
+    # - Иначе только прямой listen 443.
+    # ВАЖНО: unix ищем только вне MT_CONNECT блоков.
+    local _mt_stream_mode=false _mt_coexist_unix=false
     if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
-        _use_unix=true
+        _mt_stream_mode=true
     else
         local _conf_no_mt
         _conf_no_mt=$(python3 -c "
@@ -361,23 +362,23 @@ c = re.sub(r'# BEGIN_MT_CONNECT_.*?# END_MT_CONNECT_[^\n]*\n?', '', c, flags=re.
 print(c)
 " 2>/dev/null) || _conf_no_mt=$(grep -v "BEGIN_MT_CONNECT\|END_MT_CONNECT" "$_nginx_conf" 2>/dev/null || true)
         if echo "$_conf_no_mt" | grep -q 'listen unix:/dev/shm/nginx.sock' 2>/dev/null; then
-            _use_unix=true
+            _mt_coexist_unix=true
         fi
     fi
 
-    # Строки listen для выбранного режима
-    local _listen_lines
-    if [ "$_use_unix" = true ]; then
+    local _listen_lines _real_ip_lines=""
+    if [ "$_mt_stream_mode" = true ]; then
         _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        _real_ip_lines="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
+    elif [ "$_mt_coexist_unix" = true ]; then
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen 443 ssl;
+    listen [::]:443 ssl;"
     else
         _listen_lines="    listen 443 ssl;
     listen [::]:443 ssl;"
     fi
-
-    # Строки real_ip (только для unix socket режима)
-    local _real_ip_lines=""
-    [ "$_use_unix" = true ] && _real_ip_lines="    real_ip_header proxy_protocol;
-    set_real_ip_from unix:;"
 
     # Если блок уже существует — проверяем актуальность.
     # Стал устаревшим если: неверный cert path ИЛИ режим listen не совпадает с текущим.
@@ -389,14 +390,25 @@ print(c)
             _block_stale=true
         fi
         # Режим listen не совпадает?
-        if [ "$_use_unix" = true ]; then
-            # Unix-сокет режим требует unix-сокета, а блок его не содержит?
-            if ! grep -A5 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "unix:/dev/shm/nginx.sock"; then
+        if [ "$_mt_stream_mode" = true ]; then
+            if ! grep -A12 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "unix:/dev/shm/nginx.sock"; then
+                _block_stale=true
+            fi
+            if grep -A30 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qE '^\s*listen\s+443\s+ssl'; then
+                _block_stale=true
+            fi
+        elif [ "$_mt_coexist_unix" = true ]; then
+            if ! grep -A12 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "unix:/dev/shm/nginx.sock"; then
+                _block_stale=true
+            fi
+            if ! grep -A30 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qE '^\s*listen\s+443\s+ssl'; then
+                _block_stale=true
+            fi
+            if grep -A35 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q 'real_ip_header proxy_protocol'; then
                 _block_stale=true
             fi
         else
-            # Прямой режим требует listen 443, а блок его не содержит (только unix)?
-            if ! grep -A5 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "listen 443 ssl"; then
+            if ! grep -A12 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qE '^\s*listen\s+443\s+ssl'; then
                 _block_stale=true
             fi
         fi
