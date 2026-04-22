@@ -422,9 +422,9 @@ nginx_has_users() {
     fi
     [ -f "/opt/subscribe-page/docker-compose.yml" ] && return 0
     [ -f "/opt/remnasubpage/docker-compose.yml" ] && return 0
-    # Внешние server-блоки в nginx.conf (Beszel и др.) — любой BEGIN_*_BLOCK кроме SUB
+    # Только блоки Beszel (управляемые dfc-manager) считаются пользователями nginx
     if [ -f "${DIR_NGINX}nginx.conf" ] && \
-       grep "^# BEGIN_.*_BLOCK$" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -qvF "# BEGIN_SUB_BLOCK"; then
+       grep -q "^# BEGIN_BESZEL_BLOCK$" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         return 0
     fi
     return 1
@@ -513,14 +513,14 @@ _strip_nginx_from_compose() {
 
 # ─── Проверяет, нужен ли nginx.conf пересоздать как минимальный ───
 # Вызывается после удаления компонента Remnawave.
-# Если остались только блоки (Beszel и др.) — заменяет nginx.conf на минимальный.
+# Если остался Beszel — заменяет nginx.conf на минимальный.
 nginx_ensure_conf_for_remaining() {
     if ! is_panel_installed && ! is_node_installed && \
        ! [ -f "/opt/subscribe-page/docker-compose.yml" ] && \
        ! [ -f "/opt/remnasubpage/docker-compose.yml" ]; then
-        # Если в nginx.conf есть внешние блоки (Beszel и др.) — оставляем минимальный conf
+        # Только BESZEL_BLOCK (управляемый dfc-manager) является причиной держать nginx
         if [ -f "${DIR_NGINX}nginx.conf" ] && \
-           grep "^# BEGIN_.*_BLOCK$" "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -qvF "# BEGIN_SUB_BLOCK"; then
+           grep -q "^# BEGIN_BESZEL_BLOCK$" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
             nginx_generate_minimal_conf  # сохраняет блоки из памяти и восстанавливает их
             nginx_reload
         else
