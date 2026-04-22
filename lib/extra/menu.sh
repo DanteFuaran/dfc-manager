@@ -1729,7 +1729,7 @@ _mt_get_active_ips() {
                     {
                         dport=""; src=""
                         for(i=1;i<=NF;i++) {
-                            if($i ~ /^dport=/) dport=substr($i,7)
+                            if($i ~ /^dport=/ && dport=="") dport=substr($i,7)
                             if($i ~ /^src=/ && src=="") src=substr($i,5)
                         }
                         if(dport==port && src!="" && src!~/^172\./ && src!~/^10\./ && src!~/^192\.168\./ && src!~/^127\./) print src
@@ -2343,6 +2343,15 @@ _mt_do_access() {
                 _mt_db_mode_set "allow"
                 _mt_block_clear_all 2>/dev/null
                 _mt_ipt_allow_apply
+                # Разрываем все существующие ESTABLISHED-соединения, кроме разрешённых
+                _mt_load_env
+                local _wl_ips; _wl_ips=$(_mt_db_blocked_list allow | tr '\n' '|' | sed 's/|$//')
+                while IFS= read -r _conn_ip; do
+                    [ -z "$_conn_ip" ] && continue
+                    if [ -z "$_wl_ips" ] || ! echo "$_conn_ip" | grep -qxFf <(echo "$_wl_ips" | tr '|' '\n'); then
+                        _mt_kill_src "$_conn_ip" 2>/dev/null || true
+                    fi
+                done < <(_mt_get_active_ips)
             fi
             ;;
         clear_list)
