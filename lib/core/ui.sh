@@ -202,6 +202,12 @@ show_arrow_menu() {
             [ $_pad -lt 0 ] && _pad=0
             printf "%${_pad}s" ""
             echo -e "${_hdr}${_first}${NC}"
+            # Вторая строка заголовка (статус и т.п.) — тоже по центру в ширину 38
+            _clean=$(echo -e "$_rest" | sed 's/\x1b\[[0-9;]*m//g')
+            _vlen=${#_clean}
+            _pad=$(( (38 - _vlen) / 2 ))
+            [ $_pad -lt 0 ] && _pad=0
+            printf "%${_pad}s" ""
             echo -e "${_rest}"
         else
             local _clean

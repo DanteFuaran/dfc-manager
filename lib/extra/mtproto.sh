@@ -623,7 +623,7 @@ _mt_do_install() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       📦 Установка MTProto${NC}"
+    echo -e "${BLUE}       📦 Установка MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -675,7 +675,7 @@ _mt_do_install() {
                             # Перерисовываем экран с заголовком и повторяем ввод
                             clear
                             echo -e "${BLUE}══════════════════════════════════════${NC}"
-                            echo -e "${GREEN}       📦 Установка MTProto${NC}"
+                            echo -e "${BLUE}       📦 Установка MTProto${NC}"
                             echo -e "${BLUE}══════════════════════════════════════${NC}"
                             echo
                             break  # Повторить ввод домена
@@ -952,7 +952,7 @@ _mt_do_config() {
     _mt_load_env
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}      📄 Конфигурация и ссылка${NC}"
+    echo -e "${BLUE}      📄 Конфигурация и ссылка${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -1155,7 +1155,7 @@ _mt_do_stats() {
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}       📊 Статистика MTProto${NC}"
+        echo -e "${BLUE}       📊 Статистика MTProto${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         local _cw=22
@@ -1317,7 +1317,7 @@ _mt_do_change_config() {
                 while true; do
                     clear
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo -e "${GREEN}     🔑 Смена конфигурации MTProto${NC}"
+                    echo -e "${BLUE}     🔑 Смена конфигурации MTProto${NC}"
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     echo
                     _mt_read_input NEW_SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
@@ -1453,7 +1453,7 @@ _mt_do_stop() {
 _mt_do_start() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}         ▶️  Запуск MTProto${NC}"
+    echo -e "${BLUE}         ▶️  Запуск MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if _mt_running; then
@@ -1515,7 +1515,7 @@ PYEOF
 _mt_do_restart() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       🔄 Перезапуск MTProto${NC}"
+    echo -e "${BLUE}       🔄 Перезапуск MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     (cd "$_MT_DIR" && docker compose restart >/dev/null 2>&1) &
@@ -1626,7 +1626,7 @@ _mt_do_update() {
     fi
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     ⬆️  Обновление образа MTProto${NC}"
+    echo -e "${BLUE}     ⬆️  Обновление образа MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
@@ -1641,7 +1641,7 @@ _mt_do_setup_connect() {
     _mt_load_env
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     🌐 Страница подключения /connect${NC}"
+    echo -e "${BLUE}     🌐 Страница подключения /connect${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -2918,11 +2918,8 @@ manage_mtproto() {
         else
             _stat_word="Не установлен"; _stat_color="${DARKGRAY}"
         fi
-        local _stat_plain="Статус: ● ${_stat_word}"
-        local _l2_pad=$(( (38 - ${#_stat_plain}) / 2 ))
-        local _l2_prefix; printf -v _l2_prefix "%${_l2_pad}s" ""
 
-        local _title="${_line1}\n${_l2_prefix}${DARKGRAY}Статус: ${_stat_color}● ${_stat_word}${NC}"
+        local _title="${_line1}\n${_stat_color}${_stat_word}${NC}"
 
         local -a _items=() _actions=()
 
