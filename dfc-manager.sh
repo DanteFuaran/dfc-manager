@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.51
+#   DFC Manager v0.1.55
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -79,6 +79,7 @@ source "${SCRIPT_DIR}/lib/core/constants.sh"
 source "${SCRIPT_DIR}/lib/core/colors.sh"
 source "${SCRIPT_DIR}/lib/core/terminal.sh"
 source "${SCRIPT_DIR}/lib/core/ui.sh"
+source "${SCRIPT_DIR}/lib/extra/ufw.sh"
 source "${SCRIPT_DIR}/lib/core/system.sh"
 source "${SCRIPT_DIR}/lib/core/docker_install.sh"
 source "${SCRIPT_DIR}/lib/core/nginx.sh"
@@ -109,7 +110,6 @@ source "${SCRIPT_DIR}/lib/manage/template.sh"
 source "${SCRIPT_DIR}/lib/extra/swap.sh"
 source "${SCRIPT_DIR}/lib/extra/bbr.sh"
 source "${SCRIPT_DIR}/lib/extra/fail2ban.sh"
-source "${SCRIPT_DIR}/lib/extra/ufw.sh"
 source "${SCRIPT_DIR}/lib/extra/logrotate.sh"
 source "${SCRIPT_DIR}/lib/extra/warp.sh"
 source "${SCRIPT_DIR}/lib/extra/beszel.sh"

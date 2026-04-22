@@ -312,11 +312,8 @@ manage_delete_components() {
                     ( _mt_do_uninstall --force >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление MTProto" "MTProto удалён"
                 fi
-                # Firewall cleanup: после полного удаления закрываем порты установки
-                # (нода: 2222 управление, 8443 Xray self-steal; веб: 443).
-                ( ufw_delete_rules_by_port 2222 >/dev/null 2>&1 || true
-                  ufw_delete_rules_by_port 8443 tcp >/dev/null 2>&1 || true
-                  ufw_delete_rules_by_port 443 tcp >/dev/null 2>&1 || true ) &
+                # Firewall: оставляем только allow SSH, остальные пронумерованные правила удаляем.
+                ( ufw_delete_all_rules_except_ssh >/dev/null 2>&1 || true ) &
                 show_spinner "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
                 ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
                 show_spinner "Очистка Nginx" "Nginx очищен"

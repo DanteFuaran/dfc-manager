@@ -181,11 +181,8 @@ DNSCONF
 setup_firewall() {
     ufw default deny incoming >/dev/null 2>&1 || true
     ufw default allow outgoing >/dev/null 2>&1 || true
-    # Открываем порт SSH (определяем из sshd_config, по умолчанию 22)
-    local sshd_port
-    sshd_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    sshd_port="${sshd_port:-22}"
-    ufw allow "${sshd_port}/tcp" >/dev/null 2>&1 || true
+    # Открываем порт SSH (определяем из sshd_config, по умолчанию 22) — ufw_ensure_ssh_allow_with_comment
+    ufw_ensure_ssh_allow_with_comment >/dev/null 2>&1 || true
     ufw allow 443/tcp >/dev/null 2>&1 || true
     echo "y" | ufw enable >/dev/null 2>&1 || true
 }

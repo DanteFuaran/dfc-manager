@@ -281,6 +281,70 @@ manage_ufw() {
     done
 }
 
+
+# Дедуплицирует правила UFW allow TCP для порта SSH и добавляет одно правило с comment 'SSH'.
+# Порт читается из /etc/ssh/sshd_config (как setup_firewall), по умолчанию 22.
+ufw_ensure_ssh_allow_with_comment() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    local sshd_port
+    sshd_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    sshd_port="${sshd_port:-22}"
+
+    local _nums=() _line _n
+    while IFS= read -r _line; do
+        # Только «] 22/tcp …», не подстрока вроде 222/tcp при порте 22
+        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 || continue
+        echo "$_line" | grep -qi 'ALLOW' || continue
+        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null) || _n=''
+        [ -n "$_n" ] && _nums+=("$_n")
+    done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
+
+    local i
+    for ((i=${#_nums[@]}-1; i>=0; i--)); do
+        echo "y" | ufw delete "${_nums[$i]}" >/dev/null 2>&1 || true
+    done
+
+    ufw allow "${sshd_port}/tcp" comment 'SSH' >/dev/null 2>&1 || true
+    ufw reload >/dev/null 2>&1 || true
+    return 0
+}
+
+# Удаляет все пронумерованные правила UFW, кроме allow TCP на порт SSH; при отсутствии allow — добавляет.
+ufw_delete_all_rules_except_ssh() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    local sshd_port
+    sshd_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    sshd_port="${sshd_port:-22}"
+
+    local _nums=() _line _n
+    while IFS= read -r _line; do
+        if echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 && echo "$_line" | grep -qi 'ALLOW'; then
+            continue
+        fi
+        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null) || _n=''
+        [ -n "$_n" ] && _nums+=("$_n")
+    done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
+
+    local i
+    for ((i=${#_nums[@]}-1; i>=0; i--)); do
+        echo "y" | ufw delete "${_nums[$i]}" >/dev/null 2>&1 || true
+    done
+
+    local _has_ssh=0
+    while IFS= read -r _line; do
+        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 || continue
+        echo "$_line" | grep -qi 'ALLOW' || continue
+        _has_ssh=1
+        break
+    done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
+
+    if [ "$_has_ssh" -eq 0 ]; then
+        ufw allow "${sshd_port}/tcp" comment 'SSH' >/dev/null 2>&1 || true
+    fi
+    ufw reload >/dev/null 2>&1 || true
+    return 0
+}
+
 # Удаляет все правила UFW, которые содержат указанный порт (и опционально протокол).
 # Безопасно для сценариев удаления компонентов: правила удаляются по номеру в обратном порядке,
 # чтобы нумерация не "съезжала".
