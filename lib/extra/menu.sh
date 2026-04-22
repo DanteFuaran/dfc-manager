@@ -2170,18 +2170,18 @@ _mt_do_access() {
         if [ "$_access_mode" = "allow" ]; then
             _hdr_ac="Разрешённые IP:"
         else
-            _hdr_ac="История активных IP адресов"
+            _hdr_ac="История IP адресов:"
         fi
         if [ "$_access_mode" = "allow" ]; then
             _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             _ip_items+=($'\x01'"  ${_hdr_ac}"); _ip_vals+=("sep")
         else
-            local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
-            [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
-            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
+            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"  ${_hdr_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         fi
-        _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
         if [ "$_access_mode" = "allow" ]; then
             # Режим разрешения: только вручную добавленные IP
@@ -2326,8 +2326,6 @@ _mt_do_access() {
             _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
             _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         else
-            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
             _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         fi
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
