@@ -399,7 +399,13 @@ PYEOF
         local _nginx_test
         _nginx_test=$(docker exec "$_nc" nginx -t 2>&1)
         if echo "$_nginx_test" | grep -q "test is successful"; then
-            docker exec "$_nc" nginx -s reload 2>/dev/null || true
+            # После добавления HTTP-блока перестраиваем stream map, чтобы новый домен
+            # попал в SNI routing (он был добавлен ПОСЛЕ предыдущего _mt_nginx_stream_write).
+            if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
+                _mt_nginx_stream_write 2>/dev/null || true
+            else
+                docker exec "$_nc" nginx -s reload 2>/dev/null || true
+            fi
         else
             # nginx -t упал — откатываем добавленный блок чтобы не сломать конфиг
             if [ "$_block_added" = true ]; then
@@ -1846,6 +1852,13 @@ _mt_ensure_stream_mode() {
     # Панель+нода на одном сервере или только MT Proto:
     # nginx stream владеет 443 и маршрутизирует по SNI.
     # Всегда перезаписываем блок — нужно подхватить новые домены (node, subpage и т.д.)
+
+    # Если nginx.conf отсутствует на диске — сохраняем из контейнера
+    local _nc_tmp="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
+    if [ ! -f "${DIR_NGINX}nginx.conf" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${_nc_tmp}$"; then
+        docker exec "$_nc_tmp" cat /etc/nginx/nginx.conf > "${DIR_NGINX}nginx.conf" 2>/dev/null || true
+    fi
+
     _mt_nginx_stream_write 2>/dev/null || true
     # Перезапускаем nginx чтобы актуальный stream-блок вступил в силу
     (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
