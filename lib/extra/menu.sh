@@ -190,6 +190,63 @@ _mt_find_free_port() {
     echo "10443"
 }
 
+# Проверка доступности MTProto порта.
+# Делает 3 уровня диагностики:
+# 1) локально: порт слушается (docker-proxy) + контейнер запущен
+# 2) firewall: ufw правило (если ufw есть)
+# 3) удалённая проверка TCP через публичный сервис (best-effort, может быть недоступен)
+# Возвращает:
+#   0 — скорее всего доступен
+#   2 — есть подозрение что порт снаружи недоступен
+_mt_port_healthcheck() {
+    _mt_load_env
+    local _port="${PROXY_PORT:-8443}"
+    local _host="${SERVER_IP:-}"
+
+    # 1) контейнер
+    if ! _mt_running; then
+        echo "container:down"
+        return 2
+    fi
+
+    # 2) локальный LISTEN
+    if ! ss -tuln 2>/dev/null | grep -qE ":${_port}\\b"; then
+        echo "listen:missing"
+        return 2
+    fi
+
+    # 3) ufw (не фейлим жёстко)
+    if command -v ufw >/dev/null 2>&1; then
+        if ! ufw status 2>/dev/null | grep -qE "\\b${_port}\\b"; then
+            echo "ufw:rule_missing"
+        fi
+    fi
+
+    # 4) удалённый TCP-чек (best-effort)
+    # Используем домен, т.к. пользователь может хотеть именно доменное подключение.
+    # Если сервис недоступен — не считаем это ошибкой.
+    if command -v curl >/dev/null 2>&1 && [ -n "$_host" ]; then
+        local _check_url="https://check-host.net/check-tcp?host=${_host}:${_port}&max_nodes=3"
+        local _id="" _res=""
+        _id=$(curl -fsSL --max-time 8 "$_check_url" 2>/dev/null | sed -n 's/.*check-result\\///p' | head -1 | tr -d '[:space:]') || true
+        if [ -n "$_id" ]; then
+            # ждём чуть-чуть пока появится результат
+            sleep 1
+            _res=$(curl -fsSL --max-time 8 "https://check-host.net/check-result/${_id}" 2>/dev/null || true)
+            # В ответе обычно присутствует 'OK'/'failed' — проверяем грубо.
+            if echo "$_res" | grep -qiE 'failed|timeout|refused'; then
+                echo "remote:closed"
+                return 2
+            fi
+            if echo "$_res" | grep -qiE 'OK|connected|open'; then
+                echo "remote:ok"
+            fi
+        fi
+    fi
+
+    return 0
+}
+
 # Возвращает raw-часть секрета (без ee-префикса) если секрет длиннее 34 символов
 _mt_extract_raw_secret() {
     local s="${1:-}"
@@ -742,6 +799,12 @@ _mt_do_install() {
     ) &
     show_spinner "Настройка правил доступа" "Настройка правил доступа"
 
+    # Проверка доступности порта (локально + best-effort удалённый TCP чекер)
+    (
+        _mt_port_healthcheck >/tmp/dfc-mtproto-portcheck.log 2>/dev/null || true
+    ) &
+    show_spinner "Проверка доступности порта" "Проверка доступности порта"
+
     if _mt_running; then
         rm -f "${_compose_err:-}"
         _mt_save_config
@@ -816,6 +879,18 @@ _mt_do_install() {
         echo
         echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
+
+        # Если порт-чек показал проблему — предупредим и предложим быстрый выбор порта
+        if [ -f /tmp/dfc-mtproto-portcheck.log ] && grep -q "remote:closed" /tmp/dfc-mtproto-portcheck.log 2>/dev/null; then
+            echo -e "${YELLOW}⚠️  Похоже, порт ${PROXY_PORT} недоступен снаружи (по удалённой проверке).${NC}"
+            echo -e "${DARKGRAY}   Это может быть блокировка провайдера/ДЦ или внешнего firewall.${NC}"
+            echo
+            echo -e "${WHITE}Рекомендации:${NC}"
+            echo -e "  ${DARKGRAY}- попробуйте порт 443 / 8443 / 2053 / 2083 / 2087 / 2096${NC}"
+            echo -e "  ${DARKGRAY}- проверьте firewall провайдера (если есть)${NC}"
+            echo
+        fi
+
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
         tput civis 2>/dev/null || true
