@@ -2332,16 +2332,8 @@ _mt_do_access() {
 
         local _first_ip_idx=-1
         for _fi in "${!_ip_vals[@]}"; do
-            local _v="${_ip_vals[$_fi]}"
-            if [[ "$_v" != "sep" && "$_v" != "toggle_mode" && "$_v" != "manual" && "$_v" != "clear_list" && "$_v" != "back" ]]; then
-                _first_ip_idx=$_fi; break
-            fi
+            [ "${_ip_vals[$_fi]}" = "toggle_mode" ] && { _first_ip_idx=$_fi; break; }
         done
-        if [ "$_first_ip_idx" -eq -1 ]; then
-            for _fi in "${!_ip_vals[@]}"; do
-                [ "${_ip_vals[$_fi]}" = "toggle_mode" ] && { _first_ip_idx=$_fi; break; }
-            done
-        fi
         [ "$_first_ip_idx" -eq -1 ] && _first_ip_idx=0
         export MENU_INITIAL_IDX=$_first_ip_idx
 
@@ -2360,6 +2352,7 @@ _mt_do_access() {
                 _mt_db_mode_set "block"
                 _mt_block_clear_all 2>/dev/null
                 _mt_block_apply
+                sleep 1
             else
                 _mt_db_mode_set "allow"
                 _mt_block_clear_all 2>/dev/null
@@ -2373,6 +2366,7 @@ _mt_do_access() {
                         _mt_kill_src "$_conn_ip" 2>/dev/null || true
                     fi
                 done < <(_mt_get_active_ips)
+                sleep 1
             fi
             ;;
         clear_list)
