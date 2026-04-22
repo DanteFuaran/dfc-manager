@@ -1903,18 +1903,37 @@ _mt_get_active_ips() {
     local _port="${PROXY_PORT:-8443}"
     # ВАЖНО: conntrack держит ESTABLISHED очень долго (до 5 дней),
     # поэтому после отключения IP может "залипать" в статистике.
-    # Для "активных" подключений используем реальные established-сокеты на хостовом порту.
-    # docker-proxy слушает HOST:PROXY_PORT, поэтому ss показывает актуальные соединения.
-    if command -v ss >/dev/null 2>&1; then
-        # ВАЖНО: ss может добавлять в конец строки "users:(...)" — поэтому peer берём
-        # из стандартной колонки "Peer Address:Port" (обычно 5-я), а не $NF.
-        ss -Htn state established "sport = :${_port}" 2>/dev/null \
+    #
+    # В режиме Docker-NAT активные соединения надёжнее всего смотреть внутри netns контейнера:
+    # там локальный порт всегда :443, а source IP остаётся реальным клиентским.
+    local _pid
+    _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
+    if [ -n "$_pid" ] && [ "$_pid" != "0" ] && command -v nsenter >/dev/null 2>&1 && command -v ss >/dev/null 2>&1; then
+        nsenter -t "$_pid" -n ss -Htn state established "sport = :443" 2>/dev/null \
             | awk '
                 {
                     # Обычно: ... local_addr:port peer_addr:port ...
                     peer=$5
                     sub(/:[0-9]+$/,"",peer)
                     # Убираем [] у IPv6 и ::ffff:
+                    gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
+                    sub(/^::ffff:/,"",peer); sub(/^::FFFF:/,"",peer)
+                    if (peer != "" \
+                        && peer !~ /^172\./ && peer !~ /^10\./ \
+                        && peer !~ /^192\.168\./ && peer !~ /^127\./ \
+                        && peer !~ /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print peer
+                }' \
+            | sort -u
+        return 0
+    fi
+
+    # Fallback: host ss (работает если соединения видны на host:PROXY_PORT)
+    if command -v ss >/dev/null 2>&1; then
+        ss -Htn state established "sport = :${_port}" 2>/dev/null \
+            | awk '
+                {
+                    peer=$5
+                    sub(/:[0-9]+$/,"",peer)
                     gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
                     sub(/^::ffff:/,"",peer); sub(/^::FFFF:/,"",peer)
                     if (peer != "" \
