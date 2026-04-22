@@ -961,7 +961,7 @@ _mt_do_stats() {
                 | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
             local _resp
             _resp=$(curl -s --max-time 4 -X POST \
-                "http://ip-api.com/batch?fields=query,country,city" \
+                "http://ip-api.com/batch?fields=query,country,city&lang=ru" \
                 -H "Content-Type: application/json" \
                 -d "[${_jarr}]" 2>/dev/null)
             # Парсим: {"query":"1.2.3.4","country":"Russia","city":"Moscow"}
@@ -1584,6 +1584,7 @@ CREATE TABLE IF NOT EXISTS blocked (
     entry      TEXT,
     mode       TEXT    DEFAULT 'block',
     blocked_at INTEGER DEFAULT (strftime('%s','now')),
+    note       TEXT    DEFAULT '',
     PRIMARY KEY (entry, mode)
 );
 CREATE TABLE IF NOT EXISTS stats (
@@ -1610,6 +1611,14 @@ DROP TABLE blocked;
 ALTER TABLE blocked_v2 RENAME TO blocked;
 SQL
     fi
+    # Миграция: добавляем колонку note в blocked если ещё нет
+    if ! sqlite3 "$_MT_DB" "SELECT note FROM blocked LIMIT 1;" >/dev/null 2>&1; then
+        sqlite3 "$_MT_DB" "ALTER TABLE blocked ADD COLUMN note TEXT DEFAULT '';" 2>/dev/null || true
+    fi
+    # Миграция: сбрасываем кэш геолокации для перевода на русский
+    if [ "$( sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='geo_lang';" 2>/dev/null )" != "ru" ]; then
+        sqlite3 "$_MT_DB" "UPDATE seen_ips SET geo='', geo_ts=0; INSERT OR REPLACE INTO stats(key,value) VALUES('geo_lang','ru');" 2>/dev/null || true
+    fi
 }
 
 # ── seen_ips ──────────────────────────────────────────────────────────────
@@ -1633,10 +1642,12 @@ _mt_db_geo_set() {
 
 # ── blocked ───────────────────────────────────────────────────────────────
 _mt_db_blocked_add()  { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry,mode) VALUES('$_e','$_m');" 2>/dev/null || true; }
+_mt_db_blocked_add()  { local _e="$1" _m="${2:-$(_mt_db_mode_get)}" _n="${3:-}"; local _ne="${_n//\'/\'\'}"; sqlite3 "$_MT_DB" "INSERT OR IGNORE INTO blocked(entry,mode,note) VALUES('$_e','$_m','$_ne');" 2>/dev/null || true; }
 _mt_db_blocked_rm()   { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE entry='$_e' AND mode='$_m';" 2>/dev/null || true; }
 _mt_db_blocked_has()  { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; [ "$(sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE entry='$_e' AND mode='$_m';" 2>/dev/null)" = "1" ]; }
 _mt_db_blocked_list() { local _m="${1:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "SELECT entry FROM blocked WHERE mode='$_m';" 2>/dev/null; }
 _mt_db_blocked_count(){ local _m="${1:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "SELECT COUNT(*) FROM blocked WHERE mode='$_m';" 2>/dev/null; }
+_mt_db_blocked_note_get() { local _e="$1" _m="${2:-$(_mt_db_mode_get)}"; sqlite3 "$_MT_DB" "SELECT note FROM blocked WHERE entry='$_e' AND mode='$_m';" 2>/dev/null; }
 _mt_db_mode_get()  { local _m; _m=$(sqlite3 "$_MT_DB" "SELECT value FROM stats WHERE key='access_mode';" 2>/dev/null); echo "${_m:-block}"; }
 _mt_db_mode_set()  { sqlite3 "$_MT_DB" "INSERT OR REPLACE INTO stats(key,value) VALUES('access_mode','$1');" 2>/dev/null || true; }
 
@@ -2177,11 +2188,16 @@ _mt_do_access() {
                 _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
             else
                 _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
+                local _allow_idx=0
                 for _le in "${_list[@]}"; do
+                    (( _allow_idx++ ))
                     local _geo_str=""
                     [[ "$_le" != */* ]] && _geo_str=$(_mt_db_geo_get "$_le")
                     [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf '%-15s     %s' "$_le" "$_geo_str")
+                    local _note_str; _note_str=$(_mt_db_blocked_note_get "$_le" "allow")
+                    local _suffix=""
+                    [ -n "$_note_str" ] && _suffix="  ${DARKGRAY}[${_note_str}]${NC}"
+                    local _line; _line=$(printf '%d: %-15s  %s' "$_allow_idx" "$_le" "$_geo_str")
                     # Зелёный только если IP сейчас онлайн
                     local _is_online=false
                     if [[ "$_le" != */* ]]; then
@@ -2199,9 +2215,9 @@ _mt_do_access() {
                         done
                     fi
                     if [ "$_is_online" = true ]; then
-                        _ip_items+=("${GREEN}${_line}${NC}")
+                        _ip_items+=("${GREEN}${_line}${_suffix}${NC}")
                     else
-                        _ip_items+=("${WHITE}${_line}${NC}")
+                        _ip_items+=("${WHITE}${_line}${_suffix}${NC}")
                     fi
                     _ip_vals+=("$_le")
                 done
@@ -2218,11 +2234,13 @@ _mt_do_access() {
             else
                 local _has_solo=0
                 _ip_items+=($'\x01'"  "); _ip_vals+=("sep")
+                local _block_idx=0
                 for _ip in "${_all_ips[@]}"; do
                     [ "${_in_subnet[$_ip]:-0}" -eq 1 ] && continue
+                    (( _block_idx++ ))
                     local _geo_str; _geo_str=$(_mt_db_geo_get "$_ip")
                     [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str=""
-                    local _line; _line=$(printf '%-15s     %s' "$_ip" "$_geo_str")
+                    local _line; _line=$(printf '%d: %-15s  %s' "$_block_idx" "$_ip" "$_geo_str")
                     local _in_l=false; _ip_in_list "$_ip" && _in_l=true
                     if [ "$_in_l" = true ]; then
                         _ip_items+=("${RED}${_line}${NC}")
@@ -2405,10 +2423,16 @@ _mt_do_access() {
                     if _mt_db_blocked_has "$_new_entry"; then
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
                     else
-                        _mt_db_blocked_add "$_new_entry"
+                        local _new_note=""
+                        if [ "$_access_mode" = "allow" ]; then
+                            _mt_read_input _new_note "Комментарий ${DARKGRAY}[Enter — пропустить]${NC}:" "" || true
+                        fi
+                        _mt_db_blocked_add "$_new_entry" "" "$_new_note"
                         if [ "$_access_mode" = "allow" ]; then
                             _mt_ipt_allow_apply
-                            echo -e "${GREEN}✅ Добавлено в разрешённые: ${_new_entry}${NC}"
+                            local _note_display=""
+                            [ -n "$_new_note" ] && _note_display=" ${DARKGRAY}[${_new_note}]${NC}"
+                            echo -e "${GREEN}✅ Добавлено в разрешённые: ${_new_entry}${_note_display}${NC}"
                         else
                             _mt_ipt_block_add "$_new_entry"
                             _mt_kill_src "$_new_entry"
@@ -2538,7 +2562,7 @@ _mt_do_access() {
                     _conf_btn="${GREEN}✅ Разблокировать: ${_sel}${NC}"
                 else
                     _conf_title="Заблокировать IP?"
-                    _conf_btn="${RED}🚫 Заблокировать: ${_sel}${NC}"
+                    _conf_btn="${RED}🚫  Заблокировать: ${_sel}${NC}"
                 fi
                 local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️   Назад")
                 show_arrow_menu "$_conf_title" "${_conf_items[@]}"
