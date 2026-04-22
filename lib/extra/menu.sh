@@ -434,7 +434,20 @@ _mt_write_proxy_page() {
     local _name="${4:-${PROXY_NAME:-}}"
     [ -z "$_secret" ] || [ -z "$_port" ] || [ -z "$_domain" ] && return 0
     local _display_name="${_name:-MTProto Proxy}"
-    local _tg_url="tg://proxy?server=${_domain}&port=${_port}&secret=${_secret}"
+    # Для MTProto ссылки в Telegram надёжнее использовать IP, а не домен.
+    # Некоторые клиенты/сети режут/ломают доменные MTProto ссылки.
+    local _proxy_host="$_domain"
+    if [[ ! "$_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        local _r=""
+        _r=$(_mt_resolve_domain_ips "$_domain" 2>/dev/null | head -1 | tr -d '[:space:]') || true
+        if [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            _proxy_host="$_r"
+        else
+            _r=$(_mt_get_server_ip 2>/dev/null | head -1 | tr -d '[:space:]') || true
+            [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
+        fi
+    fi
+    local _tg_url="tg://proxy?server=${_proxy_host}&port=${_port}&secret=${_secret}"
     local _html_path="/var/www/html/mtproto-connect.html"
     mkdir -p /var/www/html
     cat > "$_html_path" << HTMLEOF
@@ -812,9 +825,21 @@ _mt_do_install() {
             echo
         fi
         echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-        echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        # Для MTProto ссылки используем IP (надёжнее чем домен для клиентов Telegram)
+        local _proxy_host="${SERVER_IP}"
+        if [[ ! "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            local _r=""
+            _r=$(_mt_resolve_domain_ips "${SERVER_IP}" 2>/dev/null | head -1 | tr -d '[:space:]') || true
+            if [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                _proxy_host="$_r"
+            else
+                _r=$(_mt_get_server_ip 2>/dev/null | head -1 | tr -d '[:space:]') || true
+                [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
+            fi
+        fi
+        echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
-        echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+        echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -875,8 +900,19 @@ _mt_do_config() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${WHITE}🔗 Ссылки для Telegram:${NC}"
-    echo -e "   ${GREEN}tg://proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
-    echo -e "   ${GREEN}https://t.me/proxy?server=${SERVER_IP}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    local _proxy_host="${SERVER_IP}"
+    if [[ ! "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        local _r=""
+        _r=$(_mt_resolve_domain_ips "${SERVER_IP}" 2>/dev/null | head -1 | tr -d '[:space:]') || true
+        if [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            _proxy_host="$_r"
+        else
+            _r=$(_mt_get_server_ip 2>/dev/null | head -1 | tr -d '[:space:]') || true
+            [[ "$_r" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && _proxy_host="$_r"
+        fi
+    fi
+    echo -e "   ${GREEN}tg://proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
+    echo -e "   ${GREEN}https://t.me/proxy?server=${_proxy_host}&port=${PROXY_PORT}&secret=${PROXY_SECRET}${NC}"
     if ! [[ "${SERVER_IP:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
        [ -f "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" ]; then
         echo
