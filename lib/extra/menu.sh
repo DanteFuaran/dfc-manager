@@ -913,7 +913,7 @@ _mt_do_stats() {
 
     local _st_orig_stty
     _st_orig_stty=$(stty -g 2>/dev/null || echo "")
-    stty -icanon -echo isig min 0 time 0 2>/dev/null || true
+    stty -echo 2>/dev/null || true
 
     _mt_stats_restore() {
         if [ -n "${_st_orig_stty}" ]; then stty "$_st_orig_stty" 2>/dev/null || stty sane 2>/dev/null || true
@@ -2157,7 +2157,7 @@ _mt_do_access() {
         local -a _ip_items=() _ip_vals=()
         local _sep_ac="──────────────────────────────────────"
 
-        # Строка режима (кликабельный тоггл) — будет добавлена внизу
+        # Строка режима (кликабельный тоггл) — добавляется сразу перед списком в allow-режиме
         local _mode_label
         if [ "$_access_mode" = "allow" ]; then
             _mode_label="🔄  Режим работы: ${GREEN}Белый список${NC}"
@@ -2168,13 +2168,19 @@ _mt_do_access() {
         # Заголовок списка
         local _hdr_ac
         if [ "$_access_mode" = "allow" ]; then
-            _hdr_ac="Список разрешённых IP адресов"
+            _hdr_ac="Разрешённые IP:"
         else
             _hdr_ac="История активных IP адресов"
         fi
-        local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
-        [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
-        _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
+        if [ "$_access_mode" = "allow" ]; then
+            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
+            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"  ${_hdr_ac}"); _ip_vals+=("sep")
+        else
+            local _hdr_ac_pad=$(( (${#_sep_ac} - $(printf '%s' "$_hdr_ac" | wc -m)) / 2 ))
+            [ "$_hdr_ac_pad" -lt 0 ] && _hdr_ac_pad=0
+            _ip_items+=($'\x01'"$(printf '%*s%s' $_hdr_ac_pad '' "$_hdr_ac")"); _ip_vals+=("sep")
+        fi
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
 
         if [ "$_access_mode" = "allow" ]; then
@@ -2317,8 +2323,6 @@ _mt_do_access() {
         if [ "$_access_mode" = "allow" ]; then
             _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
             _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
         else
             _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
@@ -2445,6 +2449,13 @@ _mt_do_access() {
                     sleep 1.5; break
                 else
                     echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR${NC}"
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    printf "  ${BLUE}Enter${DARKGRAY} повторить  ${BLUE}Esc${DARKGRAY} отмена${NC}\n"
+                    local _retry_key=""
+                    IFS= read -rsn1 _retry_key 2>/dev/null || _retry_key=""
+                    if [[ "$_retry_key" == $'\e' ]]; then break; fi
+                    # Стираем 3 строки (подсказку, разделитель, ошибку) и промпт выводится заново
+                    printf "\033[A\033[K\033[A\033[K\033[A\033[K"
                 fi
             done
             ;;
