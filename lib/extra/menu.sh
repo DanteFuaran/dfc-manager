@@ -1723,10 +1723,11 @@ _mt_get_active_ips() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
     if _mt_has_stream; then
-        # nginx stream владеет 443: реальные IP клиентов видны на хостовом порту 443.
+        # nginx stream владеет 443 и PROXY_PORT: реальные IP клиентов видны на обоих портах.
         # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
-        ss -tn state established 'sport = :443' 2>/dev/null \
-            | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1") print peer }' \
+        { ss -tn state established 'sport = :443' 2>/dev/null; \
+          ss -tn state established "sport = :$_port" 2>/dev/null; } \
+            | awk '{ peer=$4; sub(/:[0-9]+$/,"",peer); if (peer ~ /^[0-9]+\.[0-9]+\./ && peer != "127.0.0.1" && peer !~ /^172\./ && peer !~ /^10\./ && peer !~ /^192\.168\./) print peer }' \
             | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
             | sort -u
     else
