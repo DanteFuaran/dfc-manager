@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.46
+#   DFC Manager v0.1.47
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -39,7 +39,8 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
     if ! command -v git >/dev/null 2>&1; then
         echo -e "${_BLUE}⏳ Устанавливаю git...${_NC}"
         if command -v apt-get >/dev/null 2>&1; then
-            apt-get install -y -q git >/dev/null 2>&1 || { echo -e "${_RED}✖ Не удалось установить git.${_NC}"; exit 1; }
+            DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -q git >/dev/null 2>&1 \
+                || { echo -e "${_RED}✖ Не удалось установить git.${_NC}"; exit 1; }
         elif command -v yum >/dev/null 2>&1; then
             yum install -y -q git >/dev/null 2>&1 || { echo -e "${_RED}✖ Не удалось установить git.${_NC}"; exit 1; }
         else

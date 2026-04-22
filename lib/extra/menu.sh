@@ -146,24 +146,55 @@ _mt_setup_nginx() {
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) || true
 }
 
-# Проверяет/устанавливает Docker
-_mt_check_docker() {
-    if ! command -v docker &>/dev/null; then
-        print_warning "Docker не установлен"
-        echo
-        echo -e "  ${YELLOW}Установить Docker автоматически? [y/N]${NC}"
-        local _ans=""
-        read -r _ans
-        if [[ "$_ans" =~ ^[Yy]$ ]]; then
-            (curl -fsSL https://get.docker.com | sh >/dev/null 2>&1) &
-            show_spinner "Установка Docker..." "Docker установлен"
-        else
-            return 1
-        fi
+# Устанавливает Docker без запросов (apt — только noninteractive / -y).
+# Вызывать после ввода пользователем, под спиннером «Подготовка компонентов».
+_mt_ensure_docker_auto() {
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        return 0
     fi
+    if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+        print_error "Docker установлен, но демон не отвечает. Запустите: systemctl start docker"
+        return 1
+    fi
+
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_MODE=a
+    export APT_LISTCHANGES_FRONTEND=none
+    local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+
+    if command -v apt-get >/dev/null 2>&1; then
+        systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+        local _lw=0
+        while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
+              /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
+              >/dev/null 2>&1; do
+            sleep 2
+            _lw=$(( _lw + 2 ))
+            [ "$_lw" -ge 120 ] && break
+        done
+        apt-get update -qq >/dev/null 2>&1 || true
+        apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1 || true
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        print_error "Не удалось установить curl — нужен для установки Docker"
+        return 1
+    fi
+
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh || return 1
+    DEBIAN_FRONTEND=noninteractive sh /tmp/get-docker.sh >/dev/null 2>&1 || {
+        rm -f /tmp/get-docker.sh
+        return 1
+    }
+    rm -f /tmp/get-docker.sh
+    systemctl start docker >/dev/null 2>&1 || true
+    systemctl enable docker >/dev/null 2>&1 || true
+
     if ! docker info >/dev/null 2>&1; then
-        print_error "Docker не запущен"; return 1
+        print_error "Docker установлен, но не запустился. Проверьте: systemctl status docker"
+        return 1
     fi
+    return 0
 }
 
 # Генерирует Fake TLS secret на основе домена
@@ -294,8 +325,10 @@ _mt_issue_cert() {
     fi
 
     if ! command -v certbot >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot >/dev/null 2>&1 || return 1
+        export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none
+        local _dpkg='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+        apt-get update -qq >/dev/null 2>&1
+        apt-get install -y -qq $_dpkg certbot >/dev/null 2>&1 || return 1
     fi
     command -v ufw >/dev/null 2>&1 && ufw allow 80/tcp >/dev/null 2>&1 || true
 
@@ -626,8 +659,6 @@ _mt_do_install() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
-    _mt_check_docker || { _mt_press_enter; return; }
-
     # _mt_erase_lines N — стираем N строк вверх (текущая уже пустая после \r\033[K)
     _mt_erase_lines() {
         local n=$1
@@ -777,12 +808,18 @@ _mt_do_install() {
     echo
     echo
 
-    # Подготавливаем файлы (быстро, без внешних процессов)
+    # Docker (если нет) + файлы конфигурации — после ввода, под одним спиннером
     (
+        _mt_ensure_docker_auto || exit 1
         _mt_write_compose
         _mt_save_config
     ) &
-    show_spinner "Подготовка компонентов" "Подготовка компонентов"
+    if ! show_spinner "Подготовка компонентов" "Подготовка компонентов"; then
+        echo
+        print_error "Не удалось подготовить компоненты (Docker или запись конфигурации MTProto)."
+        _mt_press_enter
+        return 1
+    fi
 
     # База данных: если sqlite3 отсутствует — автоустановка через apt-get
     # выполняется внутри _mt_db_ensure/_mt_db_migrate; держим процесс в фоне и
@@ -1778,8 +1815,12 @@ SQL
 _mt_db_ensure() {
     # sqlite3 нужен для геолокации/блоклистов/статистики (кеш в mtproto.db)
     if ! command -v sqlite3 >/dev/null 2>&1; then
-        (DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 || true)
-        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q sqlite3 >/dev/null 2>&1 || true)
+        (
+            export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none
+            local _dpkg='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+            apt-get update -qq >/dev/null 2>&1 || true
+            apt-get install -y -qq $_dpkg sqlite3 >/dev/null 2>&1 || true
+        )
     fi
     [ -f "$_MT_DB" ] || _mt_db_init
     # Миграция: добавляем колонку mode в blocked если ещё нет
@@ -2270,6 +2311,8 @@ _mt_ipt_allow_apply() {
     fi
 }
 
+# Режим по умолчанию — «чёрный список» (block): все могут подключаться, пока IP явно не в blocked.
+# «Белый список» (allow) включается только вручную в меню доступа.
 _mt_block_apply() {
     _mt_db_ensure
     # При каждом применении правил сначала сбрасываем все старые MTProto-правила.
@@ -2345,7 +2388,12 @@ _mt_do_access() {
     _mt_db_ensure
 
     if ! command -v conntrack >/dev/null 2>&1; then
-        (DEBIAN_FRONTEND=noninteractive apt-get install -y -q conntrack >/dev/null 2>&1) &
+        (
+            export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none
+            local _dpkg='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+            apt-get update -qq >/dev/null 2>&1 || true
+            apt-get install -y -qq $_dpkg conntrack >/dev/null 2>&1 || true
+        ) &
     fi
 
     while true; do
@@ -3275,7 +3323,9 @@ run_geolocation() {
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
     # Запускаем скрипт геолокации в фоне с таймаутом 20 сек
     (
-        command -v lscpu >/dev/null 2>&1 || apt-get install -y util-linux >/dev/null 2>&1
+        command -v lscpu >/dev/null 2>&1 || \
+            DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq \
+            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold util-linux >/dev/null 2>&1
         echo "Y" | bash <(curl -fsSL --connect-timeout 8 --max-time 15 "https://storage.umager.ru/ipregion.sh")
     ) > "$tmpfile" 2>&1 &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
