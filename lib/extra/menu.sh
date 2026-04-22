@@ -2415,10 +2415,11 @@ _mt_do_access() {
             echo -e "   ${WHITE}1.2.3.0/24${NC}       ${DARKGRAY}— вся /24 подсеть${NC}"
             echo -e "   ${WHITE}1.2.0.0/16${NC}       ${DARKGRAY}— /16 подсеть${NC}"
             echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
-            local _new_entry=""
-            _mt_read_input _new_entry "IP или Подсеть:" ""
-            _new_entry=$(echo "$_new_entry" | tr -d ' ')
-            if [[ -n "$_new_entry" ]]; then
+            while true; do
+                local _new_entry=""
+                _mt_read_input _new_entry "IP или Подсеть:" "" || break
+                _new_entry=$(echo "$_new_entry" | tr -d ' ')
+                [ -z "$_new_entry" ] && break
                 if [[ "$_new_entry" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
                     if _mt_db_blocked_has "$_new_entry"; then
                         echo -e "${YELLOW}⚠ Уже в списке${NC}"
@@ -2432,18 +2433,20 @@ _mt_do_access() {
                             _mt_ipt_allow_apply
                             local _note_display=""
                             [ -n "$_new_note" ] && _note_display=" ${DARKGRAY}[${_new_note}]${NC}"
+                            echo
                             echo -e "${GREEN}✅ Добавлено в разрешённые: ${_new_entry}${_note_display}${NC}"
                         else
                             _mt_ipt_block_add "$_new_entry"
                             _mt_kill_src "$_new_entry"
+                            echo
                             echo -e "${GREEN}✅ Заблокировано: ${_new_entry}${NC}"
                         fi
                     fi
+                    sleep 1.5; break
                 else
                     echo -e "${RED}✖ Неверный формат. Используйте IP или CIDR${NC}"
                 fi
-                sleep 1.5
-            fi
+            done
             ;;
         sn:*)
             local _sn_cidr="${_sel#sn:}"
@@ -2556,7 +2559,7 @@ _mt_do_access() {
                 local _conf_title _conf_btn
                 if [ "$_access_mode" = "allow" ]; then
                     _conf_title="Удалить из разрешённых?"
-                    _conf_btn="${RED}🚫 Удалить: ${_sel}${NC}"
+                    _conf_btn="${RED}🚫  Удалить: ${_sel}${NC}"
                 elif [ "$_in_l" = true ]; then
                     _conf_title="Разблокировать IP?"
                     _conf_btn="${GREEN}✅ Разблокировать: ${_sel}${NC}"
