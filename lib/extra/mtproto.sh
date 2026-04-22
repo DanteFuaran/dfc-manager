@@ -1582,12 +1582,14 @@ _mt_do_uninstall() {
     echo
     echo
 
-    # Синхронное остановление контейнера с адекватным timeout (15 сек для graceful shutdown)
+    # Сразу показываем спиннер; compose down может занимать до timeout — только в фоне.
     if [ -d "$_MT_DIR" ]; then
-        (cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 2>&1 || true) | grep -v "^$" >/dev/null
+        (cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true) &
+    else
+        ( : ) &
     fi
-    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
     show_spinner "Остановка контейнера..." "Контейнер остановлен"
+    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
     (rm -rf "$_MT_DIR" 2>/dev/null || true

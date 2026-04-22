@@ -292,10 +292,10 @@ ufw_ensure_ssh_allow_with_comment() {
 
     local _nums=() _line _n
     while IFS= read -r _line; do
-        # Только «] 22/tcp …», не подстрока вроде 222/tcp при порте 22
-        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 || continue
+        # «] 22/tcp …» или «] 22 TCP …» (локализации UFW), не 2222
+        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}(/tcp|[[:space:]]+TCP)([[:space:]]|$)" >/dev/null 2>&1 || continue
         echo "$_line" | grep -qi 'ALLOW' || continue
-        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null) || _n=''
+        _n=$(echo "$_line" | grep -oP '^\[\s*\K\d+(?=\])' 2>/dev/null) || _n=''
         [ -n "$_n" ] && _nums+=("$_n")
     done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
 
@@ -318,10 +318,10 @@ ufw_delete_all_rules_except_ssh() {
 
     local _nums=() _line _n
     while IFS= read -r _line; do
-        if echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 && echo "$_line" | grep -qi 'ALLOW'; then
+        if echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}(/tcp|[[:space:]]+TCP)([[:space:]]|$)" >/dev/null 2>&1 && echo "$_line" | grep -qi 'ALLOW'; then
             continue
         fi
-        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null) || _n=''
+        _n=$(echo "$_line" | grep -oP '^\[\s*\K\d+(?=\])' 2>/dev/null) || _n=''
         [ -n "$_n" ] && _nums+=("$_n")
     done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
 
@@ -332,7 +332,7 @@ ufw_delete_all_rules_except_ssh() {
 
     local _has_ssh=0
     while IFS= read -r _line; do
-        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}/tcp([[:space:]]|$)" >/dev/null 2>&1 || continue
+        echo "$_line" | grep -Eq "\][[:space:]]+${sshd_port}(/tcp|[[:space:]]+TCP)([[:space:]]|$)" >/dev/null 2>&1 || continue
         echo "$_line" | grep -qi 'ALLOW' || continue
         _has_ssh=1
         break
@@ -366,7 +366,7 @@ ufw_delete_rules_by_port() {
         # lines like: [ 1] 2222                       ALLOW IN    1.2.3.4
         # or:         [ 3] 443/tcp                    ALLOW IN    Anywhere
         echo "$_line" | grep -Eq "${_re_port}${_re_proto}" || continue
-        _n=$(echo "$_line" | grep -oP '^\\[\\s*\\K\\d+(?=\\])' 2>/dev/null)
+        _n=$(echo "$_line" | grep -oP '^\[\s*\K\d+(?=\])' 2>/dev/null)
         [ -n "$_n" ] && _nums+=("$_n")
     done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
 
