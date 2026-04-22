@@ -1906,11 +1906,13 @@ _mt_get_active_ips() {
     # Для "активных" подключений используем реальные established-сокеты на хостовом порту.
     # docker-proxy слушает HOST:PROXY_PORT, поэтому ss показывает актуальные соединения.
     if command -v ss >/dev/null 2>&1; then
-        ss -Htn state established "( sport = :${_port} )" 2>/dev/null \
+        # ВАЖНО: ss может добавлять в конец строки "users:(...)" — поэтому peer берём
+        # из стандартной колонки "Peer Address:Port" (обычно 5-я), а не $NF.
+        ss -Htn state established "sport = :${_port}" 2>/dev/null \
             | awk '
                 {
                     # Обычно: ... local_addr:port peer_addr:port ...
-                    peer=$NF
+                    peer=$5
                     sub(/:[0-9]+$/,"",peer)
                     # Убираем [] у IPv6 и ::ffff:
                     gsub(/^\[/,"",peer); gsub(/\]$/,"",peer)
