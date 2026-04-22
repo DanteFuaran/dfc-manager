@@ -2,6 +2,22 @@
 # УСТАНОВКА: ПАНЕЛЬ + НОДА
 # ═══════════════════════════════════════════════
 
+# Удаляет каталог, только если он существует и пустой (без rm -rf чужих данных).
+_install_rmdir_if_empty() {
+    local d="${1:-}"
+    [ -z "$d" ] && return 0
+    d="${d%/}"
+    [ -d "$d" ] && [ -z "$(ls -A "$d" 2>/dev/null)" ] && rmdir "$d" 2>/dev/null || true
+}
+
+# Откат первичной установки «панель + …»: панель целиком; нода/подписка — только если пустые
+# (раньше mkdir -p оставлял пустые /opt/remnanode и /opt/subscribe-page при Ctrl+C).
+_install_abort_fresh_panel_extras() {
+    rm -rf "${DIR_PANEL}" 2>/dev/null
+    _install_rmdir_if_empty "${DIR_NODE}"
+    _install_rmdir_if_empty "${DIR_SUB}"
+}
+
 installation_full() {
     # Гарантируем валидную рабочую директорию перед началом
     cd /opt 2>/dev/null || cd / 2>/dev/null
@@ -32,17 +48,17 @@ installation_full() {
     echo -e "${GREEN}📦 Установка панели, подписки и ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
-    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" "${DIR_NODE}" "${DIR_SUB}" && cd "${DIR_PANEL}"
+    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
-        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; handle_interrupt' INT TERM
+        trap '_install_abort_fresh_panel_extras; handle_interrupt' INT TERM
     fi
 
     # Домены
-    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
-    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
+    prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
@@ -53,7 +69,7 @@ installation_full() {
     # Название ноды
     local entity_name=""
     while true; do
-        reading "Название ноды (Пример: Germany)${DARKGRAY}:${YELLOW}" entity_name || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+        reading "Название ноды (Пример: Germany):" entity_name || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
                 break
@@ -91,7 +107,7 @@ installation_full() {
             3) return ;;
         esac
 
-        reading "Email для Let's Encrypt${DARKGRAY}:${YELLOW}" LETSENCRYPT_EMAIL || return
+        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
@@ -115,7 +131,7 @@ installation_full() {
     if [ "$needs_certs" = true ]; then
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
-            [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null
+            [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras
             read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
             echo
             return
@@ -217,11 +233,11 @@ installation_full() {
         echo
         local _login_username="" _login_password=""
         while [ -z "$token" ]; do
-            reading_inline "Введите логин панели${DARKGRAY}:${YELLOW}" _login_username
+            reading_inline "Введите логин панели:" _login_username
             local _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
             if [ -z "$_login_username" ]; then continue; fi
 
-            reading_inline "Введите пароль панели${DARKGRAY}:${YELLOW}" _login_password
+            reading_inline "Введите пароль панели:" _login_password
             _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
             if [ -z "$_login_password" ]; then continue; fi
 
@@ -421,13 +437,13 @@ installation_panel_with_node() {
     echo -e "${GREEN}📦 Установка панели, подписки и ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
-    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" "${DIR_NODE}" && cd "${DIR_PANEL}"
+    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
 
     if [ "$is_fresh_install" = true ]; then
-        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; handle_interrupt' INT TERM
+        trap '_install_abort_fresh_panel_extras; handle_interrupt' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
 
     # Домен подписки для SUB_PUBLIC_DOMAIN — пользователь установит subpage отдельно
     echo
@@ -435,7 +451,7 @@ installation_panel_with_node() {
     echo -e "${DARKGRAY}установлена на удалённом сервере (для генерации ссылок подписки).${NC}"
     local SUB_DOMAIN=""
     while true; do
-        reading "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+        reading "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
         if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
             break
         else
@@ -443,7 +459,7 @@ installation_panel_with_node() {
         fi
     done
 
-    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
 
     local SUPERADMIN_USERNAME SUPERADMIN_PASSWORD
     SUPERADMIN_USERNAME=$(generate_admin_username)
@@ -451,7 +467,7 @@ installation_panel_with_node() {
 
     local entity_name=""
     while true; do
-        reading "Название ноды (Пример: Germany)${DARKGRAY}:${YELLOW}" entity_name || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+        reading "Название ноды (Пример: Germany):" entity_name || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
                 break
@@ -485,7 +501,7 @@ installation_panel_with_node() {
             2) : ;;
             3) return ;;
         esac
-        reading "Email для Let's Encrypt${DARKGRAY}:${YELLOW}" LETSENCRYPT_EMAIL || return
+        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
@@ -507,7 +523,7 @@ installation_panel_with_node() {
     if [ "$needs_certs" = true ]; then
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
-            [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null
+            [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras
             read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
             echo
             return
@@ -591,11 +607,11 @@ installation_panel_with_node() {
         echo
         local _login_username="" _login_password=""
         while [ -z "$token" ]; do
-            reading_inline "Введите логин панели${DARKGRAY}:${YELLOW}" _login_username
+            reading_inline "Введите логин панели:" _login_username
             local _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
             if [ -z "$_login_username" ]; then continue; fi
 
-            reading_inline "Введите пароль панели${DARKGRAY}:${YELLOW}" _login_password
+            reading_inline "Введите пароль панели:" _login_password
             _rc=$?; if [[ $_rc -eq 2 ]]; then break; fi
             if [ -z "$_login_password" ]; then continue; fi
 
