@@ -570,8 +570,14 @@ EOF
 # Nginx stream больше не используется — MTProto работает независимо.
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    # Прямой публичный порт — этот режим единственный, поддерживаемый корректно
-    local _mt_port="0.0.0.0:${PROXY_PORT:-8443}:443"
+    # Прямой публичный порт — MTProto работает независимо от nginx.
+    #
+    # ВАЖНО: на части сетей/устройств Telegram предпочитает IPv6 (AAAA), поэтому если домен
+    # резолвится в IPv6, а порт опубликован только на IPv4, "не у всех" будет подключаться.
+    # Публикуем порт на IPv4 и IPv6 одновременно.
+    local _p="${PROXY_PORT:-8443}"
+    local _mt_port4="0.0.0.0:${_p}:443"
+    local _mt_port6="[::]:${_p}:443"
     cat > "${_MT_DIR}/docker-compose.yml" <<COMPOSE
 services:
   mtproto-proxy:
@@ -579,7 +585,8 @@ services:
     container_name: mtproto-proxy
     restart: unless-stopped
     ports:
-      - "${_mt_port}"
+      - "${_mt_port4}"
+      - "${_mt_port6}"
     environment:
       - SECRET=\${PROXY_SECRET}
       - TAG=\${PROXY_TAG}
@@ -1978,6 +1985,20 @@ _mt_ipt() {
     fi
 }
 
+# IPv6 iptables (Docker обычно в nf_tables; legacy почти не используется для IPv6)
+_mt_ip6t() {
+    command -v ip6tables >/dev/null 2>&1 || return 0
+    if command -v ip6tables-legacy >/dev/null 2>&1; then
+        # Если legacy доступен, используем его только если в нём есть DOCKER (редко, но бывает)
+        ip6tables-legacy -n -L DOCKER >/dev/null 2>&1 && { ip6tables-legacy "$@"; return 0; }
+    fi
+    ip6tables "$@"
+}
+
+_mt_is_ipv6_entry() {
+    [[ "$1" == *:* ]]
+}
+
 # Добавить правило блокировки для IP/CIDR с учётом режима работы MTProto:
 #   port 443 + nginx stream (host mode) → INPUT -p tcp --dport 443
 #   port ≠ 443 (Docker direct)          → DOCKER-USER (FORWARD) + PREROUTING mangle
@@ -1987,16 +2008,28 @@ _mt_ipt_block_add() {
     local _port="${PROXY_PORT:-3128}"
     if _mt_has_stream; then
         # nginx слушает 443 в host-mode — блокируем в INPUT
-        _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
-            || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        if _mt_is_ipv6_entry "$_entry"; then
+            _mt_ip6t -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+                || _mt_ip6t -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        else
+            _mt_ipt -C INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null \
+                || _mt_ipt -I INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        fi
     else
         # Docker DNAT: HOST:PORT → container:3128 — пакеты идут через FORWARD, не INPUT
         # DOCKER-USER вызывается первым в FORWARD для всех форвардированных пакетов
-        _mt_ipt -C DOCKER-USER -s "$_entry" -j DROP 2>/dev/null \
-            || _mt_ipt -I DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
-        # Дополнительно: блокируем до DNAT в mangle PREROUTING на реальном порту
-        _mt_ipt -t mangle -C PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null \
-            || _mt_ipt -t mangle -I PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        if _mt_is_ipv6_entry "$_entry"; then
+            _mt_ip6t -C DOCKER-USER -s "$_entry" -j DROP 2>/dev/null \
+                || _mt_ip6t -I DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+            _mt_ip6t -t mangle -C PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null \
+                || _mt_ip6t -t mangle -I PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        else
+            _mt_ipt -C DOCKER-USER -s "$_entry" -j DROP 2>/dev/null \
+                || _mt_ipt -I DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+            # Дополнительно: блокируем до DNAT в mangle PREROUTING на реальном порту
+            _mt_ipt -t mangle -C PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null \
+                || _mt_ipt -t mangle -I PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        fi
     fi
 }
 
@@ -2006,10 +2039,19 @@ _mt_ipt_block_del() {
     _mt_load_env
     local _port="${PROXY_PORT:-3128}"
     if _mt_has_stream; then
-        _mt_ipt -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        if _mt_is_ipv6_entry "$_entry"; then
+            _mt_ip6t -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        else
+            _mt_ipt -D INPUT -s "$_entry" -p tcp --dport 443 -j DROP 2>/dev/null || true
+        fi
     else
-        _mt_ipt -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
-        _mt_ipt -t mangle -D PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        if _mt_is_ipv6_entry "$_entry"; then
+            _mt_ip6t -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+            _mt_ip6t -t mangle -D PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        else
+            _mt_ipt -D DOCKER-USER -s "$_entry" -j DROP 2>/dev/null || true
+            _mt_ipt -t mangle -D PREROUTING -s "$_entry" -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        fi
     fi
 }
 
@@ -2198,19 +2240,33 @@ _mt_ipt_allow_apply() {
     if _mt_has_stream; then
         while IFS= read -r _e; do
             [ -z "$_e" ] && continue
-            _mt_ipt -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
-                || _mt_ipt -I INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+            if _mt_is_ipv6_entry "$_e"; then
+                _mt_ip6t -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
+                    || _mt_ip6t -I INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+            else
+                _mt_ipt -C INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null \
+                    || _mt_ipt -I INPUT -s "$_e" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+            fi
         done < <(_mt_db_blocked_list allow)
         _mt_ipt -C INPUT -p tcp --dport 443 -j DROP 2>/dev/null \
             || _mt_ipt -A INPUT -p tcp --dport 443 -j DROP 2>/dev/null || true
+        _mt_ip6t -C INPUT -p tcp --dport 443 -j DROP 2>/dev/null \
+            || _mt_ip6t -A INPUT -p tcp --dport 443 -j DROP 2>/dev/null || true
     else
         while IFS= read -r _e; do
             [ -z "$_e" ] && continue
-            _mt_ipt -t mangle -C PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null \
-                || _mt_ipt -t mangle -I PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null || true
+            if _mt_is_ipv6_entry "$_e"; then
+                _mt_ip6t -t mangle -C PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null \
+                    || _mt_ip6t -t mangle -I PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null || true
+            else
+                _mt_ipt -t mangle -C PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null \
+                    || _mt_ipt -t mangle -I PREROUTING -s "$_e" -p tcp --dport "${_port}" -j RETURN 2>/dev/null || true
+            fi
         done < <(_mt_db_blocked_list allow)
         _mt_ipt -t mangle -C PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null \
             || _mt_ipt -t mangle -A PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
+        _mt_ip6t -t mangle -C PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null \
+            || _mt_ip6t -t mangle -A PREROUTING -p tcp --dport "${_port}" -j DROP 2>/dev/null || true
     fi
 }
 
@@ -2240,12 +2296,21 @@ _mt_block_clear_all() {
     _mt_ipt -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
         eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
     done
+    _mt_ip6t -S INPUT 2>/dev/null | grep -- "--dport 443 -j DROP\|--dport 443 -j ACCEPT" | while read -r _rule; do
+        eval _mt_ip6t "${_rule/-A/-D}" 2>/dev/null || true
+    done
     # Direct-mode правила: DOCKER-USER и mangle PREROUTING:PROXY_PORT
     _mt_ipt -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
         eval _mt_ipt "${_rule/-A/-D}" 2>/dev/null || true
     done
+    _mt_ip6t -S DOCKER-USER 2>/dev/null | grep -- "-j DROP" | while read -r _rule; do
+        eval _mt_ip6t "${_rule/-A/-D}" 2>/dev/null || true
+    done
     _mt_ipt -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
         eval _mt_ipt -t mangle "${_rule/-A/-D}" 2>/dev/null || true
+    done
+    _mt_ip6t -t mangle -S PREROUTING 2>/dev/null | grep -- "--dport ${_port} -j DROP\|--dport ${_port} -j RETURN" | while read -r _rule; do
+        eval _mt_ip6t -t mangle "${_rule/-A/-D}" 2>/dev/null || true
     done
 }
 
