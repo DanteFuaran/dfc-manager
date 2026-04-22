@@ -619,15 +619,16 @@ installation_node_local() {
         fi
 
         _ni=$(get_remnawave_network_info 2>/dev/null) || true
-        _ng=$(echo "$_ni" | awk '{print $1}')
-        _ns=$(echo "$_ni" | awk '{print $2}')
+        _nw_subnet=$(echo "$_ni" | awk '{print $2}')
         _node_server_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
                           curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
                           hostname -I | awk '{print $1}')
-        [ -n "$_ns" ] && ufw allow from "$_ns" to any port 2222 >/dev/null 2>&1 || true
-        [ -n "$_ng" ] && ufw allow from "$_ng" to any port 2222 >/dev/null 2>&1 || true
+        # Подсеть remnawave-network покрывает панель в Docker; отдельно gateway не нужен.
+        # Публичный IP — hairpin/SNAT, если панель ходит к ноде по внешнему адресу.
+        [ -n "$_nw_subnet" ] && ufw allow from "$_nw_subnet" to any port 2222 >/dev/null 2>&1 || true
         [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port 2222 >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
+        ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
     show_spinner "Подготовка файлов" || true
 
@@ -935,6 +936,7 @@ EOL
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
+        ufw allow 8443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
     show_spinner "Настройка файрвола" || true
@@ -1169,6 +1171,7 @@ installation_node_with_existing_subpage() {
     (
         ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
+        ufw allow 8443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
     show_spinner "Настройка файрвола" || true

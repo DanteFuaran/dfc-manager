@@ -147,14 +147,14 @@ installation_full() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
-    # Определяем gateway и subnet сети
-    local network_info network_gateway network_subnet
+    # Подсеть docker-сети панели (источник трафика к ноде на хосте, порт 2222)
+    local network_info network_subnet
     network_info=$(get_remnawave_network_info)
-    network_gateway=$(echo "$network_info" | awk '{print $1}')
     network_subnet=$(echo "$network_info" | awk '{print $2}')
 
-    # Публичный IP сервера — нужен для UFW: Docker MASQUERADE'ит трафик контейнеров
-    # на внешний IP, поэтому allow from docker-subnet не срабатывает для порта 2222
+    # Публичный IP сервера: при обращении панели к ноде по публичному адресу Docker
+    # может подменить источник на этот IP (hairpin/SNAT) — отдельное правило для 2222.
+    # Подсеть remnawave-network уже покрывает gateway и все контейнеры панели.
     local server_public_ip
     server_public_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || \
                        curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
@@ -171,12 +171,10 @@ installation_full() {
 
     (
         setup_firewall
-        # Docker MASQUERADE: трафик контейнера к внешнему IP сервера приходит от
-        # публичного IP (не от docker-subnet), поэтому добавляем все три источника
         ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
-        ufw allow from "${network_gateway}" to any port 2222 >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port 2222 >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
+        ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true
 
@@ -534,9 +532,8 @@ installation_panel_with_node() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
-    local network_info network_gateway network_subnet
+    local network_info network_subnet
     network_info=$(get_remnawave_network_info)
-    network_gateway=$(echo "$network_info" | awk '{print $1}')
     network_subnet=$(echo "$network_info" | awk '{print $2}')
 
     local server_public_ip
@@ -556,9 +553,9 @@ installation_panel_with_node() {
     (
         setup_firewall
         ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
-        ufw allow from "${network_gateway}" to any port 2222 >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port 2222 >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
+        ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true
 
