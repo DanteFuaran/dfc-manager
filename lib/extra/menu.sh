@@ -497,16 +497,12 @@ EOF
 }
 
 # Записывает docker-compose.yml.
-# MT Proto ВСЕГДА биндится на 127.0.0.1:3128 — nginx stream владеет портом 443.
+# MT Proto биндится напрямую на 0.0.0.0:PROXY_PORT (прямой Docker-NAT).
+# Nginx stream больше не используется — MTProto работает независимо.
 _mt_write_compose() {
     mkdir -p "$_MT_DIR"
-    # Standalone нода (без панели): xray занимает порт 443 напрямую (REALITY).
-    # MT Proto биндит PROXY_PORT публично — nginx stream в этом сценарии невозможен.
-    # Иначе (панель+нода или только MT Proto): nginx stream владеет 443, MT Proto на localhost:3128.
-    local _mt_port="127.0.0.1:3128:443"
-    if is_node_installed && ! is_panel_installed; then
-        _mt_port="${PROXY_PORT:-8443}:443"
-    fi
+    # Прямой публичный порт — этот режим единственный, поддерживаемый корректно
+    local _mt_port="0.0.0.0:${PROXY_PORT:-8443}:443"
     cat > "${_MT_DIR}/docker-compose.yml" <<COMPOSE
 services:
   mtproto-proxy:
@@ -1722,41 +1718,31 @@ _mt_has_stream() {
 _mt_get_active_ips() {
     _mt_load_env
     local _port="${PROXY_PORT:-8443}"
-    if _mt_has_stream; then
-        # nginx stream владеет 443 и PROXY_PORT: реальные IP клиентов видны на обоих портах.
-        # HTTP-соединения короткие (<1с), MTProto долгие (часы) — в статистике остаются только MTProto.
-        { ss -tn state established 'sport = :443' 2>/dev/null; \
-          ss -tn state established "sport = :$_port" 2>/dev/null; } \
-            | awk '{ peer=$4; sub(/:[0-9]+$/,"",peer); if (peer ~ /^[0-9]+\.[0-9]+\./ && peer != "127.0.0.1" && peer !~ /^172\./ && peer !~ /^10\./ && peer !~ /^192\.168\./) print peer }' \
-            | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
+    # Прямой Docker DNAT (HOST:PROXY_PORT → container:443).
+    # conntrack видит NAT-сессии: src=CLIENT_IP dport=PROXY_PORT ESTABLISHED
+    # Таймаут ESTABLISHED-соединений = 432000с (5 дней), TIME_WAIT << 120с
+    if command -v conntrack >/dev/null 2>&1; then
+        conntrack -L -p tcp 2>/dev/null \
+            | grep " ESTABLISHED " \
+            | awk -v port="$_port" '
+                {
+                    dport=""; src=""
+                    for(i=1;i<=NF;i++) {
+                        if($i ~ /^dport=/ && dport=="") dport=substr($i,7)
+                        if($i ~ /^src=/ && src=="") src=substr($i,5)
+                    }
+                    if(dport==port && src!="" && src!~/^172\./ && src!~/^10\./ && src!~/^192\.168\./ && src!~/^127\./) print src
+                }' \
             | sort -u
     else
-        # Прямой Docker DNAT (HOST:PROXY_PORT → container:443).
-        # conntrack видит NAT-сессии: src=CLIENT_IP dport=PROXY_PORT ESTABLISHED
-        # Таймаут ESTABLISHED-соединений = 432000с (5 дней), TIME_WAIT << 120с
-        if command -v conntrack >/dev/null 2>&1; then
-            conntrack -L -p tcp 2>/dev/null \
-                | grep " ESTABLISHED " \
-                | awk -v port="$_port" '
-                    {
-                        dport=""; src=""
-                        for(i=1;i<=NF;i++) {
-                            if($i ~ /^dport=/ && dport=="") dport=substr($i,7)
-                            if($i ~ /^src=/ && src=="") src=substr($i,5)
-                        }
-                        if(dport==port && src!="" && src!~/^172\./ && src!~/^10\./ && src!~/^192\.168\./ && src!~/^127\./) print src
-                    }' \
+        # Fallback: nsenter если conntrack недоступен
+        local _pid
+        _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
+        if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
+            nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
+                | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
+                | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
                 | sort -u
-        else
-            # Fallback: nsenter (показывает сторону канала, не клиентские IP)
-            local _pid
-            _pid=$(docker inspect -f '{{.State.Pid}}' "$_MT_CONTAINER" 2>/dev/null)
-            if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-                nsenter -t "$_pid" -n ss -tn state established 'sport = :443' 2>/dev/null \
-                    | awk 'NR>1 { peer=$4; sub(/:[0-9]+$/,"",peer); if (peer != "127.0.0.1" && peer != "::1") print peer }' \
-                    | while IFS= read -r _raw; do _mt_strip_ip "$_raw"; done \
-                    | sort -u
-            fi
         fi
     fi
 }
@@ -1841,47 +1827,14 @@ _mt_nginx_reload() {
 # Standalone нода (без панели): xray владеет 443, MT Proto на PROXY_PORT напрямую.
 _mt_ensure_stream_mode() {
     [ -f "/opt/mtproto/.env" ] || return 0
-
-    # Standalone нода (без панели): xray занимает порт 443 напрямую (REALITY).
-    # Nginx stream на 443 невозможен — убираем блок, MT Proto работает на PROXY_PORT напрямую.
-    if is_node_installed && ! is_panel_installed; then
-        # Убираем stream-блок если он был добавлен ранее
-        if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-            _mt_nginx_stream_remove 2>/dev/null || true
-        fi
-        # Патчим compose: MT Proto должен биндить PROXY_PORT напрямую (не localhost:3128)
-        _mt_load_env
-        local _port="${PROXY_PORT:-8443}"
-        if ! grep -q "\"${_port}:443\"" /opt/mtproto/docker-compose.yml 2>/dev/null; then
-            sed -i "s|127.0.0.1:3128:443|${_port}:443|" /opt/mtproto/docker-compose.yml 2>/dev/null || true
-            (cd /opt/mtproto && docker compose up -d --force-recreate >/dev/null 2>&1) || true
-        fi
-        # Перезапускаем nginx без stream-блока
-        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
-        return 0
+    # MTProto теперь ВСЕГДА работает на прямом Docker-NAT (0.0.0.0:PROXY_PORT)
+    # Stream-блок в nginx больше не нужен и не создаётся.
+    # Если nginx установлен (для remnawave/remnanode/subpage) — он работает независимо для HTTP(S).
+    # Если старый stream-блок присутствует в nginx.conf — удаляем его.
+    if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+        _mt_nginx_stream_remove 2>/dev/null || true
     fi
-
-    # Панель+нода на одном сервере или только MT Proto:
-    # nginx stream владеет 443 и маршрутизирует по SNI.
-    # Всегда перезаписываем блок — нужно подхватить новые домены (node, subpage и т.д.)
-
-    # Если nginx.conf отсутствует на диске — сохраняем из контейнера
-    local _nc_tmp="${_MT_NGINX_CONTAINER:-remnawave-nginx}"
-    if [ ! -f "${DIR_NGINX}nginx.conf" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${_nc_tmp}$"; then
-        docker exec "$_nc_tmp" cat /etc/nginx/nginx.conf > "${DIR_NGINX}nginx.conf" 2>/dev/null || true
-    fi
-
-    _mt_nginx_stream_write 2>/dev/null || true
-    # Перезапускаем nginx чтобы актуальный stream-блок вступил в силу
-    (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) || true
-
-    # Восстанавливаем HTML файл /connect если randomhtml его удалил
-    if [ ! -f "/var/www/html/mtproto-connect.html" ] && [ -f "$_MT_ENV" ]; then
-        _mt_load_env
-        if [ -n "${SERVER_IP:-}" ] && [ -n "${PROXY_SECRET:-}" ]; then
-            _mt_write_proxy_page "${SERVER_IP}" "${PROXY_SECRET}" "${PROXY_PORT:-8443}" "${PROXY_NAME:-}" 2>/dev/null || true
-        fi
-    fi
+    return 0
 }
 
 # Проверяет доступность nginx контейнера
