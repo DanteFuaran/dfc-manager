@@ -301,8 +301,11 @@ manage_delete_components() {
                     ( uninstall_beszel_agent --force >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление Beszel Agent" "Beszel Agent удалён"
                 fi
-                if _mt_installed; then
-                    ( _mt_do_uninstall >/dev/null 2>&1 || true ) &
+                # Удаляем MTProto даже если контейнер уже снят, но есть остаточные
+                # файлы (/opt/mtproto) или nginx-блоки MT_CONNECT_*.
+                if _mt_installed || [ -d "/opt/mtproto" ] || \
+                   grep -q "# BEGIN_MT_CONNECT_\|# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+                    ( _mt_do_uninstall --force >/dev/null 2>&1 || true ) &
                     show_spinner "Удаление MTProto" "MTProto удалён"
                 fi
                 ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &

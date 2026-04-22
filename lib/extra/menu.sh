@@ -102,11 +102,20 @@ _mt_read_input() {
     return $_rc
 }
 
-# Получает внешний IP сервера
+# Получает внешний IPv4-адрес сервера.
+# Флаг -4 форсирует IPv4, чтобы не получить AAAA-ответ на dual-stack хостах —
+# для подключения в Telegram нужен именно IPv4.
 _mt_get_server_ip() {
-    curl -s --max-time 5 ifconfig.me 2>/dev/null ||
-    curl -s --max-time 5 icanhazip.com 2>/dev/null ||
-    curl -s --max-time 5 api.ipify.org 2>/dev/null ||
+    local _ip
+    for _url in ifconfig.me icanhazip.com api.ipify.org; do
+        _ip=$(curl -s4 --max-time 5 "$_url" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$_ip"; return 0
+        fi
+    done
+    # Последний fallback — hostname -I (первый IPv4 из списка интерфейсов)
+    _ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+    [ -n "$_ip" ] && { echo "$_ip"; return 0; }
     echo "YOUR_IP"
 }
 
@@ -748,7 +757,8 @@ _mt_do_install() {
 
         echo
         printf "${GREEN}✅ Установка завершена!${NC}\n"
-        # MT Proto всегда работает через nginx stream — активируем stream-блок
+        # MT Proto работает напрямую (Docker-NAT на PROXY_PORT). Если от прежних
+        # установок остался nginx stream-блок — удаляем его, чтобы 443 не был занят.
         (_mt_ensure_stream_mode 2>/dev/null) &
         wait $! 2>/dev/null || true
         _install_bin_wrappers 2>/dev/null || true
@@ -1299,6 +1309,52 @@ _mt_do_start() {
     _mt_press_enter
 }
 
+# Удаляет все MTProto-следы из nginx: stream-блок (если есть), все MT_CONNECT-блоки,
+# сертификаты использованных доменов и HTML connect-страницу. Перезагружает nginx.
+_mt_cleanup_nginx_artifacts() {
+    local _nginx_conf="/opt/nginx/nginx.conf"
+    [ -f "$_nginx_conf" ] || { rm -f /var/www/html/mtproto-connect.html 2>/dev/null; return 0; }
+
+    # Убираем stream-блок (nginx http может снова слушать 443 напрямую)
+    if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
+        python3 - "$_nginx_conf" <<'PYEOF' 2>/dev/null || true
+import sys, re
+path = sys.argv[1]
+with open(path) as f: content = f.read()
+content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
+content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
+content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
+with open(path, 'w') as f: f.write(content)
+PYEOF
+    fi
+
+    local _mt_domains=""
+    _mt_domains=$(python3 - "$_nginx_conf" <<'PYEOF' 2>/dev/null || true
+import re, sys
+path = sys.argv[1]
+with open(path) as f: content = f.read()
+pattern = re.compile(r'\n?# BEGIN_MT_CONNECT_([^\n]+)\n.*?# END_MT_CONNECT_\1\n?', re.S)
+domains = pattern.findall(content)
+content = pattern.sub('\n', content)
+with open(path, 'w') as f: f.write(content)
+print('\n'.join(domains))
+PYEOF
+)
+    while IFS= read -r _mt_domain; do
+        [ -n "$_mt_domain" ] || continue
+        rm -rf "/opt/nginx/ssl/${_mt_domain}" 2>/dev/null || true
+    done <<< "$_mt_domains"
+
+    rm -f /var/www/html/mtproto-connect.html 2>/dev/null || true
+
+    local _nc
+    _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
+    if [ -n "$_nc" ]; then
+        docker exec "$_nc" nginx -t >/dev/null 2>&1 && \
+            docker exec "$_nc" nginx -s reload >/dev/null 2>&1 || true
+    fi
+}
+
 _mt_do_restart() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1313,14 +1369,42 @@ _mt_do_restart() {
 }
 
 _mt_do_uninstall() {
+    local _force=false
+    [[ "${1:-}" == "--force" ]] && _force=true
+
     _mt_load_env
+
+    # ─── Режим --force: тихое удаление без UI (для "Удалить всё") ───
+    if [ "$_force" = true ]; then
+        # Удаляем даже если контейнера нет — вдруг остался /opt/mtproto/
+        if [ -d "$_MT_DIR" ]; then
+            (cd "$_MT_DIR" 2>/dev/null && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true)
+        fi
+        docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
+        docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
+        if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
+            ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
+        fi
+        rm -rf "$_MT_DIR" 2>/dev/null || true
+        rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
+        rm -rf /usr/local/lib/mtproto 2>/dev/null || true
+        _mt_cleanup_nginx_artifacts 2>/dev/null || true
+        return 0
+    fi
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${RED}        🗑️  Удаление MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if ! _mt_installed; then
-        echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
+        # Контейнера нет, но /opt/mtproto/ мог остаться от неудачной установки — чистим тихо.
+        if [ -d "$_MT_DIR" ] || grep -q "BEGIN_MT_CONNECT_" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+            _mt_do_uninstall --force
+            echo -e "${GREEN}✅ Остаточные файлы MTProto удалены${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Прокси не установлен${NC}"
+        fi
         _mt_press_enter; return
     fi
 
@@ -1349,7 +1433,6 @@ _mt_do_uninstall() {
     show_spinner "Остановка контейнера..." "Контейнер остановлен"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
-    # Дальнейшее удаление выполняем без ожидания
     (rm -rf "$_MT_DIR" 2>/dev/null || true
     if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
         ufw delete allow "${PROXY_PORT}" >/dev/null 2>&1 || true
@@ -1358,50 +1441,7 @@ _mt_do_uninstall() {
     rm -rf /usr/local/lib/mtproto 2>/dev/null || true) &
     show_spinner "Удаление остаточных файлов..." "Удаление остаточных файлов"
 
-    # Удаляем все MTProto-блоки из nginx и связанные сертификаты
-    (local _nginx_conf="/opt/nginx/nginx.conf"
-    # Убираем stream-блок (nginx http может снова слушать 443 напрямую)
-    if [ -f "$_nginx_conf" ] && grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
-        python3 - "$_nginx_conf" <<'PYEOF' 2>/dev/null || true
-import sys, re
-path = sys.argv[1]
-with open(path) as f: content = f.read()
-content = re.sub(r'\n# BEGIN_MTPROTO_STREAM.*?# END_MTPROTO_STREAM\n', '\n', content, flags=re.DOTALL)
-content = content.replace('    #mt# listen 443 ssl;', '    listen 443 ssl;')
-content = content.replace('    #mt# listen 443 ssl default_server;', '    listen 443 ssl default_server;')
-with open(path, 'w') as f: f.write(content)
-PYEOF
-    fi
-    local _mt_domains=""
-    if [ -f "$_nginx_conf" ]; then
-        _mt_domains=$(python3 - "$_nginx_conf" <<'PYEOF' 2>/dev/null || true
-import re
-import sys
-
-path = sys.argv[1]
-with open(path) as f:
-    content = f.read()
-
-pattern = re.compile(r'\n?# BEGIN_MT_CONNECT_([^\n]+)\n.*?# END_MT_CONNECT_\1\n?', re.S)
-domains = pattern.findall(content)
-content = pattern.sub('\n', content)
-
-with open(path, 'w') as f:
-    f.write(content)
-
-print('\n'.join(domains))
-PYEOF
-)
-        while IFS= read -r _mt_domain; do
-            [ -n "$_mt_domain" ] || continue
-            rm -rf "/opt/nginx/ssl/${_mt_domain}" 2>/dev/null || true
-        done <<< "$_mt_domains"
-    fi
-    rm -f /var/www/html/mtproto-connect.html 2>/dev/null || true
-    local _nc; _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
-    if [ -n "$_nc" ]; then
-        docker exec "$_nc" nginx -t 2>/dev/null && docker exec "$_nc" nginx -s reload 2>/dev/null || true
-    fi) &
+    (_mt_cleanup_nginx_artifacts 2>/dev/null || true) &
     show_spinner "Удаление из Nginx..." "Удалено из Nginx"
 
     echo
