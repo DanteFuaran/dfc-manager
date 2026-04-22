@@ -2179,8 +2179,7 @@ _mt_do_access() {
         else
             _ip_items+=("$_mode_label"); _ip_vals+=("toggle_mode")
             _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x01'"  ${_hdr_ac}"); _ip_vals+=("sep")
-            _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
+            _ip_items+=($'\x01'"${_hdr_ac}"); _ip_vals+=("sep")
         fi
 
         if [ "$_access_mode" = "allow" ]; then
