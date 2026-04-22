@@ -240,11 +240,25 @@ _nginx_restore_mt_connect_blocks() {
                 cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
             fi
             local _html_path="/var/www/html/mtproto-connect.html"
+            # Режим listen: stream (unix-сокет) или прямой TCP 443
+            local _fb_use_stream=false
+            grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null && _fb_use_stream=true
+            local _fb_listen _fb_real_ip=""
+            if [ "$_fb_use_stream" = true ]; then
+                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+                _fb_real_ip="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
+            else
+                _fb_listen="    listen 443 ssl;
+    listen [::]:443 ssl;"
+            fi
             _NGINX_MT_CONNECT_BLOCKS["$_si"]="server {
     server_name ${_si};
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;${_listen443_line}
+${_fb_listen}
     http2 on;
-
+${_fb_real_ip:+
+${_fb_real_ip}
+}
     ssl_certificate \"/etc/nginx/ssl/${_si}/fullchain.pem\";
     ssl_certificate_key \"/etc/nginx/ssl/${_si}/privkey.pem\";
 

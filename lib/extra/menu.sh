@@ -270,6 +270,8 @@ _mt_nginx_container() {
 }
 
 # Добавляет домен в nginx со страницей /connect
+# MTProto работает напрямую на PROXY_PORT (Docker-NAT), nginx слушает 443 для /connect.
+# При наличии nginx stream-блока (старый режим) — использует unix-сокет + proxy_protocol.
 _mt_nginx_add_domain() {
     local _domain="${1:-}" _secret="${2:-}" _port="${3:-}" _name="${4:-}"
     [ -z "$_domain" ] || [ -z "$_secret" ] || [ -z "$_port" ] && return 1
@@ -277,46 +279,37 @@ _mt_nginx_add_domain() {
     local _nginx_conf="/opt/nginx/nginx.conf"
     local _cert_src="/etc/letsencrypt/live/${_domain}"
     [ -f "${_cert_src}/fullchain.pem" ] || return 1
-    # Проверка: cert не повреждён и читается openssl (nginx 1.28 не валидирует cert при -t/reload)
     openssl x509 -noout -in "${_cert_src}/fullchain.pem" 2>/dev/null || return 1
 
-    # Копируем сертификаты в /opt/nginx/ssl/ — nginx container монтирует эту папку как /etc/nginx/ssl/
-    # Используем физические файлы (не симлинки), чтобы избежать проблем с путями внутри контейнера
     local _ssl_dest="/opt/nginx/ssl/${_domain}"
     mkdir -p "$_ssl_dest"
     cp -f "${_cert_src}/fullchain.pem" "${_ssl_dest}/fullchain.pem"
     cp -f "${_cert_src}/privkey.pem"   "${_ssl_dest}/privkey.pem"
 
-    local _nc; _nc=$(_mt_nginx_container)
-
-    # Перед изменением конфига — починить битые MT-блоки (отсутствует файл cert в /opt/nginx/ssl/).
-    # nginx 1.28 не падает при nginx -t с несуществующим cert — загружает его лениво при TLS-хендшейке.
-    if [ -n "$_nc" ]; then
-        local _nginx_test_pre
-        _nginx_test_pre=$(docker exec "$_nc" nginx -t 2>&1)
-        while IFS= read -r _broken_domain; do
-            local _broken_cert="/etc/letsencrypt/live/${_broken_domain}"
-            local _broken_ssl="/opt/nginx/ssl/${_broken_domain}"
-            if [ -f "${_broken_cert}/fullchain.pem" ]; then
-                mkdir -p "$_broken_ssl"
-                cp -f "${_broken_cert}/fullchain.pem" "${_broken_ssl}/fullchain.pem"
-                cp -f "${_broken_cert}/privkey.pem"   "${_broken_ssl}/privkey.pem"
-            fi
-        done < <(echo "$_nginx_test_pre" | \
-            grep -oP 'cannot load certificate "/etc/nginx/ssl/\K[^/]+' | sort -u)
-    fi
-
     _mt_write_proxy_page "$_domain" "$_secret" "$_port" "$_name"
     local _html_path="/var/www/html/mtproto-connect.html"
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
-    local _block_added=false
 
-    # MT Proto ВСЕГДА работает через nginx stream — listen 443 ssl в HTTP-блоке не нужен.
-    # nginx stream владеет 443 и маршрутизирует по SNI к unix socket (HTTP) или MT Proto (3128).
-    local _has_listen_443=false
+    # Определяем режим: stream (unix-сокет) или прямой TCP 443
+    local _use_stream=false
+    grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null && _use_stream=true
+
+    # Строки listen для выбранного режима
+    local _listen_lines
+    if [ "$_use_stream" = true ]; then
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+    else
+        _listen_lines="    listen 443 ssl;
+    listen [::]:443 ssl;"
+    fi
+
+    # Строки real_ip (только для stream-режима)
+    local _real_ip_lines=""
+    [ "$_use_stream" = true ] && _real_ip_lines="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
 
     # Если блок уже существует — проверяем актуальность.
-    # Условия замены: неверный cert path ИЛИ блок содержит "listen 443 ssl;" когда не должен.
+    # Стал устаревшим если: неверный cert path ИЛИ режим listen не совпадает с текущим.
     if grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
         local _expected_cert="/etc/nginx/ssl/${_domain}/fullchain.pem"
         local _block_stale=false
@@ -324,22 +317,19 @@ _mt_nginx_add_domain() {
         if ! grep -A20 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qF "\"${_expected_cert}\""; then
             _block_stale=true
         fi
-        # Блок содержит "listen 443 ssl;" но сервер unix-socket-only?
-        if [ "$_has_listen_443" = false ]; then
-            if python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null; then
-import sys, re
-path, domain = sys.argv[1], sys.argv[2]
-with open(path) as f: content = f.read()
-m = re.search(r'# BEGIN_MT_CONNECT_' + re.escape(domain) + r'\n(.*?)# END_MT_CONNECT_' + re.escape(domain), content, re.S)
-if m and re.search(r'\blisten\s+443\b', m.group(1)):
-    sys.exit(0)
-sys.exit(1)
-PYEOF
+        # Режим listen не совпадает?
+        if [ "$_use_stream" = true ]; then
+            # Stream-режим требует unix-сокета, а блок его не содержит?
+            if ! grep -A5 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "unix:/dev/shm/nginx.sock"; then
+                _block_stale=true
+            fi
+        else
+            # Прямой режим требует listen 443, а блок его не содержит (только unix)?
+            if ! grep -A5 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q "listen 443 ssl"; then
                 _block_stale=true
             fi
         fi
         if [ "$_block_stale" = true ]; then
-            # Блок устарел — удалить и переписать
             python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null || true
 import sys, re
 path, domain = sys.argv[1], sys.argv[2]
@@ -351,19 +341,19 @@ PYEOF
         fi
     fi
 
+    local _block_added=false
     if ! grep -q "$_connect_marker" "$_nginx_conf" 2>/dev/null; then
-        local _listen_443_line=""
-        [ "$_has_listen_443" = true ] && _listen_443_line="    listen 443 ssl;"
         local _tmpf; _tmpf=$(mktemp)
         cat > "$_tmpf" << NGINX_BLOCK
 
 ${_connect_marker}
 server {
     server_name ${_domain};
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-${_listen_443_line}
+${_listen_lines}
     http2 on;
-
+${_real_ip_lines:+
+${_real_ip_lines}
+}
     ssl_certificate "/etc/nginx/ssl/${_domain}/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/${_domain}/privkey.pem";
 
@@ -378,15 +368,13 @@ ${_listen_443_line}
 }
 # END_MT_CONNECT_${_domain}
 NGINX_BLOCK
-        python3 - "$_nginx_conf" "$_tmpf" "$_has_listen_443" <<'PYEOF' 2>/dev/null || true
+        python3 - "$_nginx_conf" "$_tmpf" <<'PYEOF' 2>/dev/null || true
 import sys
-path, blockfile, has443 = sys.argv[1], sys.argv[2], sys.argv[3]
+path, blockfile = sys.argv[1], sys.argv[2]
 with open(path) as f: content = f.read()
 with open(blockfile) as f: block = f.read()
-# Если unix-socket-only — убираем пустую строку от listen 443
-if has443 != 'true':
-    import re
-    block = re.sub(r'\n\s*\n', '\n', block)
+import re
+block = re.sub(r'\n{3,}', '\n\n', block)
 idx = content.rfind('\n}')
 if idx >= 0:
     content = content[:idx] + block + content[idx:]
@@ -395,19 +383,17 @@ PYEOF
         rm -f "$_tmpf"
         _block_added=true
     fi
+    local _nc; _nc=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i nginx | head -1)
     if [ -n "$_nc" ]; then
         local _nginx_test
         _nginx_test=$(docker exec "$_nc" nginx -t 2>&1)
         if echo "$_nginx_test" | grep -q "test is successful"; then
-            # После добавления HTTP-блока перестраиваем stream map, чтобы новый домен
-            # попал в SNI routing (он был добавлен ПОСЛЕ предыдущего _mt_nginx_stream_write).
             if grep -q "# BEGIN_MTPROTO_STREAM" "$_nginx_conf" 2>/dev/null; then
                 _mt_nginx_stream_write 2>/dev/null || true
             else
                 docker exec "$_nc" nginx -s reload 2>/dev/null || true
             fi
         else
-            # nginx -t упал — откатываем добавленный блок чтобы не сломать конфиг
             if [ "$_block_added" = true ]; then
                 python3 - "$_nginx_conf" "$_domain" <<'PYEOF' 2>/dev/null || true
 import sys, re
@@ -948,7 +934,9 @@ _mt_do_stats() {
         while IFS= read -r _gip; do
             [ -z "$_gip" ] && continue
             local _ts; _ts=$(_mt_db_geo_ts "$_gip")
-            [ -z "$_ts" ] || [ "$_ts" = "0" ] && _new_ips="${_new_ips} ${_gip}"
+            if [ -z "$_ts" ] || [ "$_ts" = "0" ]; then
+                _new_ips="${_new_ips} ${_gip}"
+            fi
         done <<< "$_client_ips"
         if [ -n "$_new_ips" ]; then
             # Формируем JSON-массив и делаем синхронный запрос (только для новых IP — быстро)
@@ -957,17 +945,20 @@ _mt_do_stats() {
                 | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
             local _resp
             _resp=$(curl -s --max-time 4 -X POST \
-                "http://ip-api.com/batch?fields=query,country,city&lang=ru" \
+                "http://ip-api.com/batch?fields=query,status,country,city&lang=ru" \
                 -H "Content-Type: application/json" \
                 -d "[${_jarr}]" 2>/dev/null)
-            # Парсим: {"query":"1.2.3.4","country":"Russia","city":"Moscow"}
+            # Парсим: {"query":"1.2.3.4","status":"success","country":"Russia","city":"Moscow"}
             if [ -n "$_resp" ]; then
                 while IFS= read -r _obj; do
-                    local _q _co _ci
+                    local _q _st _co _ci
                     _q=$(echo "$_obj"  | grep -oP '"query"\s*:\s*"\K[^"]+')
+                    _st=$(echo "$_obj" | grep -oP '"status"\s*:\s*"\K[^"]+')
                     _co=$(echo "$_obj" | grep -oP '"country"\s*:\s*"\K[^"]+')
                     _ci=$(echo "$_obj" | grep -oP '"city"\s*:\s*"\K[^"]+')
                     [ -z "$_q" ] && continue
+                    # Пропускаем IP с ошибкой (приватные, зарезервированные и т.д.)
+                    [ "$_st" = "fail" ] && continue
                     local _geo_str="—"
                     [ -n "$_co" ] && _geo_str="${_co}"
                     [ -n "$_ci" ] && _geo_str="${_geo_str}, ${_ci}"
@@ -1075,7 +1066,7 @@ _mt_do_stats() {
                 [ -z "$_ip" ] && continue
                 local _geo_str
                 _geo_str=$(_mt_db_geo_get "$_ip")
-                [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ] && _geo_str="..."
+                if [ -z "$_geo_str" ] || [ "$_geo_str" = "—" ]; then _geo_str="—"; fi
                 printf "   ${WHITE}%-20s${DARKGRAY}%s${NC}\n" "$_ip" "$_geo_str"
             done <<< "$_visible_ips"
 
@@ -1350,10 +1341,11 @@ _mt_do_uninstall() {
     echo
     echo
 
-    (if [ -d "$_MT_DIR" ]; then
-        cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+    # Синхронное остановление контейнера с адекватным timeout (15 сек для graceful shutdown)
+    if [ -d "$_MT_DIR" ]; then
+        (cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 2>&1 || true) | grep -v "^$" >/dev/null
     fi
-    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true) &
+    docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
     show_spinner "Остановка контейнера..." "Контейнер остановлен"
 
     (docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true) &
@@ -1731,7 +1723,10 @@ _mt_get_active_ips() {
                         if($i ~ /^dport=/ && dport=="") dport=substr($i,7)
                         if($i ~ /^src=/ && src=="") src=substr($i,5)
                     }
-                    if(dport==port && src!="" && src!~/^172\./ && src!~/^10\./ && src!~/^192\.168\./ && src!~/^127\./) print src
+                    if(dport==port && src!="" \
+                       && src!~/^172\./ && src!~/^10\./ \
+                       && src!~/^192\.168\./ && src!~/^127\./ \
+                       && src!~/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./) print src
                 }' \
             | sort -u
     else
