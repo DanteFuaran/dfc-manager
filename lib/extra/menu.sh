@@ -939,12 +939,15 @@ _mt_do_stats() {
         fi
 
         # Геолокация: кеш в seen_ips.geo (geo_ts = timestamp последнего обновления)
-        # Новые IP запрашиваем батчем через ip-api.com (бесплатно, без ключа)
+        # Новые IP + IP с кешем "—" старше 1 ч запрашиваем заново.
+        local _geo_retry_ttl=3600
         local _new_ips=""
         while IFS= read -r _gip; do
             [ -z "$_gip" ] && continue
             local _ts; _ts=$(_mt_db_geo_ts "$_gip")
-            if [ -z "$_ts" ] || [ "$_ts" = "0" ]; then
+            local _geo_cached; _geo_cached=$(_mt_db_geo_get "$_gip")
+            if [ -z "$_ts" ] || [ "$_ts" = "0" ] || \
+               { [ "$_geo_cached" = "—" ] && [ "$(( _now - ${_ts:-0} ))" -gt "$_geo_retry_ttl" ]; }; then
                 _new_ips="${_new_ips} ${_gip}"
             fi
         done <<< "$_client_ips"
@@ -954,11 +957,12 @@ _mt_do_stats() {
             _jarr=$(echo "$_new_ips" | tr ' ' '\n' | grep -v '^$' \
                 | awk '{printf "\"%s\",",$1}' | sed 's/,$//')
             local _resp
-            _resp=$(curl -s --max-time 4 -X POST \
+            _resp=$(curl -s --max-time 5 -X POST \
                 "http://ip-api.com/batch?fields=query,status,country,city&lang=ru" \
                 -H "Content-Type: application/json" \
                 -d "[${_jarr}]" 2>/dev/null)
             # Парсим: {"query":"1.2.3.4","status":"success","country":"Russia","city":"Moscow"}
+            local _resolved_ips=" "
             if [ -n "$_resp" ]; then
                 while IFS= read -r _obj; do
                     local _q _st _co _ci
@@ -967,14 +971,37 @@ _mt_do_stats() {
                     _co=$(echo "$_obj" | grep -oP '"country"\s*:\s*"\K[^"]+')
                     _ci=$(echo "$_obj" | grep -oP '"city"\s*:\s*"\K[^"]+')
                     [ -z "$_q" ] && continue
-                    # Пропускаем IP с ошибкой (приватные, зарезервированные и т.д.)
-                    [ "$_st" = "fail" ] && continue
+                    _resolved_ips="${_resolved_ips}${_q} "
+                    if [ "$_st" = "fail" ]; then
+                        # Приватный/зарезервированный IP — сохраняем "—" с меткой, чтоб не повторять каждую секунду
+                        _mt_db_geo_set "$_q" "—"
+                        continue
+                    fi
                     local _geo_str="—"
                     [ -n "$_co" ] && _geo_str="${_co}"
                     [ -n "$_ci" ] && _geo_str="${_geo_str}, ${_ci}"
                     _mt_db_geo_set "$_q" "$_geo_str"
                 done < <(echo "$_resp" | grep -oP '\{[^}]+\}')
             fi
+            # Фоллбек: для IP, которые не вернул основной API (ошибка сети, HTTP заблокирован),
+            # пробуем HTTPS-запрос через ipapi.co
+            for _gip in $(echo "$_new_ips" | tr ' ' '\n' | grep -v '^$'); do
+                [[ "$_resolved_ips" == *" ${_gip} "* ]] && continue
+                local _fb_resp
+                _fb_resp=$(curl -s --max-time 5 "https://ipapi.co/${_gip}/json/" 2>/dev/null)
+                if [ -n "$_fb_resp" ] && echo "$_fb_resp" | grep -q '"country_name"'; then
+                    local _fb_co _fb_ci
+                    _fb_co=$(echo "$_fb_resp" | grep -oP '"country_name"\s*:\s*"\K[^"]+')
+                    _fb_ci=$(echo "$_fb_resp" | grep -oP '"city"\s*:\s*"\K[^"]+')
+                    local _geo_str="—"
+                    [ -n "$_fb_co" ] && _geo_str="${_fb_co}"
+                    [ -n "$_fb_ci" ] && _geo_str="${_geo_str}, ${_fb_ci}"
+                    _mt_db_geo_set "$_gip" "$_geo_str"
+                else
+                    # Оба API недоступны — сохраняем "—" с меткой, повтор через 1 ч
+                    _mt_db_geo_set "$_gip" "—"
+                fi
+            done
         fi
 
         if [ "$_active" -gt "$_max_sim" ] 2>/dev/null; then
