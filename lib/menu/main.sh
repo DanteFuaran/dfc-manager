@@ -63,7 +63,12 @@ main_menu() {
                     [ "$has_panel" = true ]   && _c_panel="${GREEN}" || _c_panel="${DARKGRAY}"
                     [ "$has_subpage" = true ] && _c_sub="${GREEN}"   || _c_sub="${DARKGRAY}"
                     [ "$has_node" = true ]    && _c_node="${GREEN}"  || _c_node="${DARKGRAY}"
-                    local install_status="\n${DARKGRAY}Компоненты: ${_c_panel}Панель${DARKGRAY} | ${_c_sub}Подписка${DARKGRAY} | ${_c_node}Нода${NC}"
+                    # Вторая строка заголовка — по центру в ширине рамки (38), как у show_arrow_menu
+                    local _comp_vis="Панель | Подписка | Нода"
+                    local _vlen=${#_comp_vis}
+                    local _cpad=$(( (38 - _vlen) / 2 ))
+                    [ "$_cpad" -lt 0 ] && _cpad=0
+                    local install_status="\\n$(printf '%*s' "$_cpad" '')${_c_panel}Панель${DARKGRAY} | ${_c_sub}Подписка${DARKGRAY} | ${_c_node}Нода${NC}"
 
                     local rw_title="📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()

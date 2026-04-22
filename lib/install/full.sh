@@ -349,7 +349,7 @@ installation_full() {
     # 9. Создание API токена для subscription-page
     create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1
 
-    printf "${DARKGRAY}  ✔  Обновление конфигураций${NC}\n"
+    print_success "Обновление конфигураций"
 
     # 10. Шаблон selfsteal
     randomhtml
@@ -712,7 +712,7 @@ installation_panel_with_node() {
 
     create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    printf "${DARKGRAY}  ✔  Обновление конфигураций${NC}\n"
+    print_success "Обновление конфигураций"
 
     randomhtml
 
