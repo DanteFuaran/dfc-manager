@@ -272,7 +272,7 @@ show_arrow_menu() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "$_key_hint"
         echo
-        echo
+        # Ровно одна пустая строка после подсказки навигации.
 
         local key
         read -rsn1 key 2>/dev/null || key=""
