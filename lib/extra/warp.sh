@@ -645,24 +645,7 @@ add_warp_to_config() {
 }
 
 remove_warp_from_config() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   ➖ УДАЛЕНИЕ WARP ИЗ КОНФИГУРАЦИИ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-
-    # Предупреждение — операция должна выполняться на сервере с панелью
-    echo -e "${RED}⚠️  ВНИМАНИЕ!${NC}"
-    echo -e "${YELLOW}Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
-    echo -e "${DARKGRAY}Из профиля будет удалён WARP-инбаунд и связанные правила маршрутизации.${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    printf " ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
-    read -rsn 1 key 2>/dev/null || true
-    echo
-    echo
-
-    if [ "$key" = $'\x1b' ]; then
+    if ! confirm_nav --delete "$(echo -e "➖ Удаление WARP из конфигурации\n${YELLOW}Только на сервере с панелью. Из профиля удалятся WARP-инбаунд и маршруты.${NC}")"; then
         return 0
     fi
 
@@ -767,7 +750,7 @@ remove_warp_from_config() {
     tput cnorm 2>/dev/null || true
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${RED}   ➖ УДАЛЕНИЕ WARP ИЗ КОНФИГУРАЦИИ${NC}"
+    echo -e "${BLUE}   ➖ Изменение конфигурации${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
