@@ -178,9 +178,7 @@ _installation_subpage_on_panel() {
         fi
     else
         echo
-        print_success "Сертификат для $SUB_DOMAIN уже существует"
-        echo
-        echo
+        print_cert_exists "$SUB_DOMAIN"
     fi
     break
     done
@@ -476,8 +474,7 @@ _installation_subpage_on_node() {
             return
         fi
     else
-        print_success "Сертификат для $SUB_DOMAIN уже существует"
-        echo
+        print_cert_exists "$SUB_DOMAIN"
     fi
     break 3  # все промпты пройдены — выход из всех циклов
     done  # loop3
@@ -734,7 +731,7 @@ _installation_subpage_standalone() {
     else
         CERT_METHOD=$(detect_cert_method "$SUB_DOMAIN")
         echo
-        print_success "Сертификат для $SUB_DOMAIN уже существует"
+        print_cert_exists "$SUB_DOMAIN"
     fi
     break 3  # все промпты пройдены — выход из всех циклов
     done  # loop3

@@ -429,14 +429,12 @@ install_beszel() {
     base_domain=$(extract_domain "$BESZEL_DOMAIN")
 
     if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
-        print_success "Сертификат для ${BESZEL_DOMAIN} уже существует"
-        echo
+        print_cert_exists "${BESZEL_DOMAIN}"
         CERT_DOMAIN="$BESZEL_DOMAIN"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
     elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
-        print_success "Сертификат для ${base_domain} уже существует"
-        echo
+        print_cert_exists "${base_domain}"
         CERT_DOMAIN="$base_domain"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
@@ -781,14 +779,12 @@ change_domain_beszel() {
     base_domain=$(extract_domain "$NEW_DOMAIN")
 
     if [ -f "/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem" ]; then
-        print_success "Сертификат для ${NEW_DOMAIN} уже существует"
-        echo
+        print_cert_exists "${NEW_DOMAIN}"
         CERT_DOMAIN="$NEW_DOMAIN"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
     elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
-        print_success "Сертификат для ${base_domain} уже существует"
-        echo
+        print_cert_exists "${base_domain}"
         CERT_DOMAIN="$base_domain"
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"

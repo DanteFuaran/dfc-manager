@@ -128,10 +128,8 @@ installation_panel() {
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         tput cnorm 2>/dev/null || true
         for domain in "${!domains_to_check[@]}"; do
-            print_success "Сертификат для $domain уже существует"
+            print_cert_exists "$domain"
         done
-        echo
-        echo
     fi
     break
     done
