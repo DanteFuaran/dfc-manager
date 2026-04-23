@@ -75,6 +75,9 @@ installation_panel() {
         echo
     fi
 
+    echo
+    echo
+
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
     local SUPERADMIN_PASSWORD
@@ -91,7 +94,6 @@ installation_panel() {
     local needs_certs=false
     if check_if_certificates_needed domains_to_check; then
         needs_certs=true
-        echo
         show_arrow_menu "🔐  Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
@@ -124,7 +126,7 @@ installation_panel() {
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         for domain in "${!domains_to_check[@]}"; do
-            print_success "Сертификат для $domain уже существует"
+            printf "${GREEN}✅ Сертификат для %s уже существует${NC}\n" "$domain"
         done
         echo
     fi
@@ -164,7 +166,6 @@ installation_panel() {
     COOKIE_NAME=$(generate_cookie_key)
     COOKIE_VALUE=$(generate_cookie_key)
 
-    echo
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
         if [ "$with_subpage" = true ]; then
@@ -291,6 +292,7 @@ installation_panel() {
         (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
         show_spinner "Перезапуск nginx" || true
 
+        echo
         # Ожидаем готовность после перезапуска
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
         tput cnorm 2>/dev/null || true
