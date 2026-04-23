@@ -52,7 +52,7 @@ handle_certificates() {
 
         # Проверяем наличие сертификата
         if [ -d "/etc/letsencrypt/live/$domain" ] || [ -d "/etc/letsencrypt/live/$base_domain" ]; then
-            print_cert_exists "$domain"
+            print_success "Сертификат для $domain уже существует"
             continue
         fi
 
@@ -72,8 +72,7 @@ handle_certificates() {
         esac
     done
 
-    echo
-    echo
+    # Не добавляем лишние пустые строки — следующий шаг должен идти сразу.
 }
 
 detect_cert_method() {
