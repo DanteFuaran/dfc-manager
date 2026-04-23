@@ -300,22 +300,58 @@ prompt_domain_with_retry() {
     done
 }
 
-# Возвращает 0, если на хосте есть TCP LISTEN на $1 (число порта)
+# Возвращает 0, если на хосте есть TCP LISTEN на $1 (число порта).
+# Несколько способов: ss (фильтр sport), разбор всей таблицы ss (любой столбец),
+# lsof, netstat — чтобы не пропустить docker-proxy / IPv6 / нестандартный вывод ss.
 tcp_port_is_listening() {
     local port="${1:-}"
     [[ "$port" =~ ^[0-9]+$ ]] || return 1
-    command -v ss >/dev/null 2>&1 || return 1
-    # NR>1 — пропуск строки заголовка (без флага -H для совместимости со старым iproute2)
-    if ss -tln 2>/dev/null | awk -v p="$port" '
-        NR > 1 {
-            n = split($4, a, ":")
-            lp = a[n] + 0
-            if (lp == p + 0) { exit 0 }
-        }
-        END { exit 1 }'
-    then
-        return 0
+
+    if command -v ss >/dev/null 2>&1; then
+        # iproute2: только сокеты с локальным портом = $port
+        if ss -tlnH "sport = :$port" 2>/dev/null | grep -q '^LISTEN'; then
+            return 0
+        fi
+        # Разбор полной таблицы: ищем поле, оканчивающееся на :PORT (IPv4, [::], %if и т.д.)
+        if ss -tln 2>/dev/null | awk -v p="$port" '
+            BEGIN { found = 0 }
+            NR > 1 {
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /:[0-9]+$/) {
+                        ad = $i
+                        sub(/^.*:/, "", ad)
+                        if ((ad + 0) == (p + 0)) { found = 1 }
+                    }
+                }
+            }
+            END { exit(found ? 0 : 1) }'
+        then
+            return 0
+        fi
     fi
+
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -tln 2>/dev/null | awk -v p="$port" '
+            BEGIN { found = 0 }
+            /LISTEN/ {
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /:[0-9]+$/) {
+                        ad = $i
+                        sub(/^.*:/, "", ad)
+                        if ((ad + 0) == (p + 0)) { found = 1 }
+                    }
+                }
+            }
+            END { exit(found ? 0 : 1) }'
+        then
+            return 0
+        fi
+    fi
+
     return 1
 }
 

@@ -10,18 +10,28 @@ _delete_component_panel() {
     fi
     export DFC_UI_SPINNER_ALIGN=1
     trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "    ${RED}🗑️  Удаление панели Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     (
         cd /opt/remnawave 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
-    show_spinner "Удаление панели Remnawave"
+    show_spinner "Удаление панели Remnawave" "Панель Remnawave удалена"
     rm -rf /opt/remnawave
 
     # Обновляем nginx: минимальный конфиг или удаляем
     nginx_ensure_conf_for_remaining
     nginx_cleanup_unused_certs
 
+    clear
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "    ${GREEN}🗑️  Удаление панели Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
     print_success "Панель Remnawave удалена"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -37,7 +47,7 @@ _delete_component_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "    ${RED}🗑️  Удаление ноды Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -98,7 +108,15 @@ _delete_component_node() {
 
         nginx_cleanup_unused_certs
     ) &
-    show_spinner "Нода Remnawave успешно удалена!"
+    show_spinner "Удаление Remnawave (Нода)" "Нода Remnawave успешно удалена!"
+
+    clear
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    print_success "Нода Remnawave успешно удалена!"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || true
@@ -110,7 +128,10 @@ _delete_component_subpage() {
     fi
     export DFC_UI_SPINNER_ALIGN=1
     trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
-    echo
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "    ${RED}🗑️  Удаление страницы подписки${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     # Извлекаем информацию для перегенерации nginx.conf до удаления
@@ -182,17 +203,27 @@ _delete_component_subpage() {
 
     nginx_cleanup_unused_certs
 
+    local _sub_del_err=""
     # Ждём доступности панели (проверяем напрямую, т.к. nginx требует cookie)
     if [ -n "$_panel_domain" ]; then
-        if show_spinner_until_ready "http://127.0.0.1:3001/health" "Запуск панели" 90; then
-            echo
-            print_success "Страница подписки удалена"
-        else
-            print_error "Панель не отвечает после перезапуска. Проверьте состояние сервисов."
+        if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Запуск панели" 90; then
+            _sub_del_err="Панель не отвечает после перезапуска. Проверьте состояние сервисов."
         fi
-    else
+    fi
+
+    clear
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    if [ -z "$_sub_del_err" ]; then
+        echo -e "    ${GREEN}🗑️  Удаление страницы подписки${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         print_success "Страница подписки удалена"
+    else
+        echo -e "    ${RED}🗑️  Удаление страницы подписки${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
+        print_error "$_sub_del_err"
     fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"

@@ -1181,14 +1181,16 @@ installation_node_with_existing_subpage() {
         return 1
     fi
 
-    # Останавливаем существующую страницу подписки
-    (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
-    show_spinner "Остановка страницы подписки" || true
-
+    # Порт REALITY на хосте — до остановки subpage/nginx, иначе освобождённый 443/8443
+    # даст ложное «порт свободен» (MTProto, прокси и т.д.).
     local NODE_INBOUND_PORT=8443
     if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
         return 1
     fi
+
+    # Останавливаем существующую страницу подписки
+    (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
+    show_spinner "Остановка страницы подписки" || true
 
     # Генерируем конфиги для ноды + страницы подписки
     (
