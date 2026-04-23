@@ -50,9 +50,9 @@ installation_panel() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ "$with_subpage" = true ]; then
-        echo -e "${BLUE}   📦 Установка панели и страницы подписки${NC}"
+        echo -e "${BLUE}📦 Установка панели и страницы подписки${NC}"
     else
-        echo -e "${BLUE}         📦 Установка панели${NC}"
+        echo -e "${BLUE}📦 Установка панели${NC}"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:" PANEL_DOMAIN || { _abort_fresh_panel_install; return; }
