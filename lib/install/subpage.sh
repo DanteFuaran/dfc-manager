@@ -178,6 +178,7 @@ _installation_subpage_on_panel() {
         fi
     else
         echo
+        echo
         print_cert_exists "$SUB_DOMAIN"
     fi
     break
@@ -472,6 +473,8 @@ _installation_subpage_on_node() {
             return
         fi
     else
+        echo
+        echo
         print_cert_exists "$SUB_DOMAIN"
     fi
     break 3  # все промпты пройдены — выход из всех циклов
@@ -728,6 +731,7 @@ _installation_subpage_standalone() {
         echo
     else
         CERT_METHOD=$(detect_cert_method "$SUB_DOMAIN")
+        echo
         echo
         print_cert_exists "$SUB_DOMAIN"
     fi

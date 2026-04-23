@@ -72,7 +72,6 @@ installation_panel() {
             fi
         done
         [ "$_sub_esc" = true ] && continue
-        echo
     fi
 
     echo

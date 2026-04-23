@@ -129,14 +129,14 @@ main_menu() {
                                             [[ $sub_choice -eq 1 ]] && with_subpage=false
 
                                             show_arrow_menu "🌐  Установка ноды" \
-                                                "✔️   Установить на этот сервер" \
-                                                "❌  Установлю на отдельный сервер (рекомендуется)" \
+                                                "✔️   Установлю на отдельный сервер (рекомендуется)" \
+                                                "❌  Установить на этот сервер" \
                                                 "──────────────────────────────────────" \
                                                 "⬅️   Назад"
                                             local node_choice=$?
                                             [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
                                             local with_node=false
-                                            [[ $node_choice -eq 0 ]] && with_node=true
+                                            [[ $node_choice -eq 1 ]] && with_node=true
 
                                             if [ "$with_subpage" = true ] && [ "$with_node" = true ]; then
                                                 installation_full
