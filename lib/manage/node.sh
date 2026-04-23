@@ -140,7 +140,7 @@ add_node_to_panel() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     ➕  Подключение ноды в панель${NC}"
+    echo -e "$(center "➕ Подключение ноды в панель" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${DARKGRAY}⚠️  Добавление ноды в панель предназначена для запуска${NC}"
@@ -258,7 +258,7 @@ add_node_to_panel() {
         show_continue_prompt || true
         return 1
     fi
-    print_success "Ключи сгенерированы"
+    printf "${GREEN}✅${NC}\033[0m %b\n" "Ключи сгенерированы"
 
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
@@ -268,25 +268,10 @@ add_node_to_panel() {
         return 1
     fi
     read config_profile_uuid inbound_uuid <<< "$config_result"
-    print_success "Конфигурационный профиль: $entity_name"
+    printf "${GREEN}✅${NC}\033[0m %b\n" "Конфигурационный профиль: $entity_name"
 
+    # Порт ноды всегда 2222
     local NODE_LISTEN_PORT=2222
-    echo
-    local _np=""
-    reading_inline "Порт ноды на сервере установки (NODE_PORT) ${DARKGRAY}(2222)${DARKGRAY}:" _np
-    local _npr=$?
-    if [[ $_npr -eq 2 ]]; then
-        show_continue_prompt || true
-        return 1
-    fi
-    if [ -n "$_np" ]; then
-        _np="${_np//[^0-9]/}"
-        if [[ "$_np" =~ ^[0-9]+$ ]] && [ "$_np" -ge 1 ] && [ "$_np" -le 65535 ]; then
-            NODE_LISTEN_PORT="$_np"
-        else
-            print_error "Некорректный порт, используется 2222"
-        fi
-    fi
 
     print_action "Создание ноды ($entity_name)..."
     if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
@@ -325,7 +310,7 @@ add_node_to_panel() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     ➕  Подключение ноды в панель${NC}"
+    echo -e "$(center "➕ Подключение ноды в панель" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${RED}─────────────────────────────────────────────────${NC}"

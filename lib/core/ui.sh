@@ -5,7 +5,7 @@
 print_action()  { :; }
 print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
 # Как у show_spinner: зелёная галочка с колонки 0, текст сообщения обычным цветом
-print_success() { printf "${GREEN}\u2705${NC}\033[0m  %b\n" "$1"; }
+print_success() { printf "${GREEN}\u2705${NC}\033[0m %b\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
 
 # Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
@@ -63,7 +63,7 @@ show_spinner() {
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
+        printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
     else
         printf "\r\033[K${RED}\u2716${NC}\033[0m  %s\n" "$done_msg"
     fi
@@ -89,7 +89,7 @@ show_spinner_timer() {
         done
         elapsed=$((elapsed + 1))
     done
-    printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
+    printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
     tput cnorm 2>/dev/null || true
 }
 
@@ -135,7 +135,7 @@ show_spinner_until_ready() {
     rm -f "$_done_file"
 
     if [ "$_result" = "ok" ]; then
-        printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$msg"
+        printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$msg"
         tput cnorm 2>/dev/null || true
         return 0
     fi
@@ -253,6 +253,9 @@ show_arrow_menu() {
         else
             echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
         fi
+        # Всегда оставляем минимум 2 пустые строки после легенды навигации
+        echo
+        echo
 
         local key
         read -rsn1 key 2>/dev/null || key=""

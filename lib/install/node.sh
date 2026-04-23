@@ -86,7 +86,7 @@ installation_node_connect() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     ➕ Подключение ноды в панель${NC}"
+    echo -e "${BLUE}     ➕ Подключение ноды в панель${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -229,24 +229,8 @@ installation_node_connect() {
     read config_profile_uuid inbound_uuid <<< "$config_result"
     print_success "Конфигурационный профиль: $entity_name"
 
+    # Порт ноды всегда 2222
     local NODE_LISTEN_PORT=2222
-    echo
-    local _np=""
-    reading_inline "Порт ноды на сервере установки (NODE_PORT) ${DARKGRAY}(2222)${DARKGRAY}:" _np
-    local _npr=$?
-    if [[ $_npr -eq 2 ]]; then
-        echo
-        show_continue_prompt || return 1
-        return 1
-    fi
-    if [ -n "$_np" ]; then
-        _np="${_np//[^0-9]/}"
-        if [[ "$_np" =~ ^[0-9]+$ ]] && [ "$_np" -ge 1 ] && [ "$_np" -le 65535 ]; then
-            NODE_LISTEN_PORT="$_np"
-        else
-            print_error "Некорректный порт, используется 2222"
-        fi
-    fi
 
     print_action "Создание ноды ($entity_name)..."
     if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
@@ -573,6 +557,8 @@ installation_node_local() {
         else
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
+        echo
+        echo
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
@@ -582,7 +568,9 @@ installation_node_local() {
     else
         echo
         echo
-        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        echo
+        echo
     fi
 
     echo
@@ -853,6 +841,8 @@ installation_node_remote() {
         esac
 
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        echo
+        echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
@@ -861,7 +851,9 @@ installation_node_remote() {
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
-        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        echo
+        echo
     fi
 
     echo
@@ -1056,7 +1048,7 @@ installation_node_with_existing_subpage() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}          📦 Установка ноды${NC}"
+    echo -e "$(center "📦 Установка ноды" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Извлекаем данные из существующей установки subpage
@@ -1085,7 +1077,7 @@ installation_node_with_existing_subpage() {
         else
             clear
             echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "${GREEN}          📦 Установка ноды${NC}"
+            echo -e "$(center "📦 Установка ноды" "$BLUE")"
             echo -e "${BLUE}══════════════════════════════════════${NC}"
         fi
     done
@@ -1124,13 +1116,15 @@ installation_node_with_existing_subpage() {
         esac
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
+        echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
-        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
+        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        echo
         echo
     fi
 
@@ -1272,7 +1266,7 @@ installation_node_with_existing_subpage() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     if [ "$health_ok" = true ]; then
-        echo -e "$(center "Нода успешно подключена!" "$GREEN")"
+        echo -e "$(center "Нода успешно подключена!")"
     else
         echo -e "$(center "⚠️  Нода установлена, но не подключилась к панели" "$YELLOW")"
     fi

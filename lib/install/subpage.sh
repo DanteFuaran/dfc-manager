@@ -114,7 +114,7 @@ _installation_subpage_on_panel() {
     # Показываем заголовок и сразу запрашиваем авторизацию
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "$(center "📄 Установка страницы подписки" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -169,6 +169,7 @@ _installation_subpage_on_panel() {
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
         echo
+        echo
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
@@ -178,6 +179,8 @@ _installation_subpage_on_panel() {
     else
         echo
         print_success "Сертификат для $SUB_DOMAIN уже существует"
+        echo
+        echo
     fi
     break
     done
@@ -354,7 +357,7 @@ _installation_subpage_on_node() {
     while true; do  # loop1: панель домен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
@@ -408,7 +411,7 @@ _installation_subpage_on_node() {
     while true; do  # loop3: API токен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${DARKGRAY}Обнаружена нода на этом сервере.${NC}"
@@ -627,7 +630,7 @@ _installation_subpage_standalone() {
     while true; do  # loop1: панель домен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     PANEL_URL=""
     local _first_panel=true
@@ -678,7 +681,7 @@ _installation_subpage_standalone() {
     while true; do  # loop3: API токен
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    📄 Установка страницы подписки${NC}"
+    echo -e "${BLUE}    📄 Установка страницы подписки${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:${NC} ${GREEN}${PANEL_URL#https://}${NC}"

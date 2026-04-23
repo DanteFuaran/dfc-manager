@@ -50,9 +50,9 @@ installation_panel() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ "$with_subpage" = true ]; then
-        echo -e "${BLUE}📦 Установка панели и страницы подписки${NC}"
+        echo -e "$(center "📦 Установка панели и страницы подписки" "$BLUE")"
     else
-        echo -e "${BLUE}📦 Установка панели${NC}"
+        echo -e "$(center "📦 Установка панели" "$BLUE")"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:" PANEL_DOMAIN || { _abort_fresh_panel_install; return; }
@@ -117,6 +117,7 @@ installation_panel() {
             continue
         fi
         echo
+        echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || { _abort_fresh_panel_install; return; }
@@ -127,8 +128,9 @@ installation_panel() {
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         tput cnorm 2>/dev/null || true
         for domain in "${!domains_to_check[@]}"; do
-            printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$domain"
+            print_success "Сертификат для $domain уже существует"
         done
+        echo
         echo
     fi
     break

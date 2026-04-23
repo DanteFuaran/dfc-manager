@@ -73,6 +73,7 @@ handle_certificates() {
     done
 
     echo
+    echo
 }
 
 detect_cert_method() {

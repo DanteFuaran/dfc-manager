@@ -44,7 +44,7 @@ installation_full() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}📦 Установка панели, подписки и ноды${NC}"
+    echo -e "$(center "📦 Установка панели, подписки и ноды" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -108,6 +108,7 @@ installation_full() {
 
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
+        echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
@@ -120,6 +121,7 @@ installation_full() {
         for domain in "${!domains_to_check[@]}"; do
             print_success "Сертификат для $domain уже существует"
         done
+        echo
         echo
     fi
 
@@ -445,7 +447,7 @@ installation_panel_with_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}📦 Установка панели, подписки и ноды${NC}"
+    echo -e "$(center "📦 Установка панели, подписки и ноды" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
@@ -514,6 +516,7 @@ installation_panel_with_node() {
         esac
         reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
         echo
+        echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
@@ -524,6 +527,7 @@ installation_panel_with_node() {
         for domain in "${!domains_to_check[@]}"; do
             print_success "Сертификат для $domain уже существует"
         done
+        echo
         echo
     fi
 
