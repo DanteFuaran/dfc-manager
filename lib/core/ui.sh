@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════════
 
 print_action()  { :; }
-print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
+print_error()   { printf "${RED}✖  %b${NC}\n" "$1"; }
 # Как у show_spinner: зелёная галочка с колонки 0, текст сообщения обычным цветом
 print_success() { printf "${GREEN}\u2705${NC}\033[0m %b\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
