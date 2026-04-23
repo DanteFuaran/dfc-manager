@@ -304,10 +304,10 @@ manage_delete_components() {
                 )
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "       ${BLUE}🗑️  Удаление завершено${NC}"
+                echo -e "       ${GREEN}🗑️  Удаление завершено${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                printf " ${GREEN}\u2705${NC}\033[0m  %s\n" "Все компоненты были удалены"
+                printf "${GREEN}\u2705${NC}\033[0m  %s\n" "Все компоненты были удалены"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
