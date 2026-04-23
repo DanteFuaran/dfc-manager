@@ -76,4 +76,4 @@ handle_interrupt() {
 }
 
 trap cleanup_terminal EXIT
-trap handle_interrupt INT TERM
+trap handle_interrupt INT TERM HUP

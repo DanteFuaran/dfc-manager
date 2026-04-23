@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.105
+#   DFC Manager v0.1.106
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -32,7 +32,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         fi
     done
     unset _vf2 _b2
-    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 130' INT TERM
+    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear; printf "\033[0;31mСкрипт был остановлен пользователем\033[0m\n\n"; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 130' INT TERM
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"
