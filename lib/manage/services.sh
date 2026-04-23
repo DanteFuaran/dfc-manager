@@ -79,7 +79,7 @@ manage_update() {
     echo
 
     if ! is_panel_installed && ! is_node_installed; then
-        echo -e "${RED}✖  Не найдено установленных компонентов.${NC}"
+        print_error "Не найдено установленных компонентов."
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
@@ -195,7 +195,7 @@ manage_logs() {
 
         if [ ${#log_items[@]} -eq 0 ]; then
             clear
-            echo -e "${RED}✖  Сервисы не найдены.${NC}"
+            print_error "Сервисы не найдены."
             echo
             show_continue_prompt || return 1
             return

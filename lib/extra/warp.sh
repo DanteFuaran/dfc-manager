@@ -82,7 +82,7 @@ install_warp_native() {
         node_found=true
     fi
     if [ "$node_found" = false ]; then
-        echo -e "${YELLOW}⚠️  Нода не найдена на этом сервере${NC}"
+        print_warning "Нода не найдена на этом сервере"
         echo -e "${DARKGRAY}WARP работает только с установленной нодой.${NC}"
         echo
         show_continue_prompt || return 1
@@ -335,7 +335,7 @@ add_warp_to_config() {
     echo
 
     # Предупреждение — операция должна выполняться на сервере с панелью
-    echo -e "${YELLOW}⚠️  Вы уверены, что находитесь на сервере с установленной панелью?${NC}"
+    print_warning "Вы уверены, что находитесь на сервере с установленной панелью?"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     printf "     ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отменить${NC}"
@@ -425,7 +425,7 @@ add_warp_to_config() {
 
     # Проверяем, есть ли уже warp-out
     if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  WARP уже добавлен в эту конфигурацию${NC}"
+        print_warning "WARP уже добавлен в эту конфигурацию"
         echo
         show_continue_prompt || return 1
         return 0
@@ -623,11 +623,11 @@ add_warp_to_config() {
             print_success "Нода обновлена"
         fi
     else
-        echo -e "${YELLOW}⚠️  Не удалось получить UUID WARP-инбаунда (хост и сквады не обновлены)${NC}"
+        print_warning "Не удалось получить UUID WARP-инбаунда (хост и сквады не обновлены)"
     fi
 
     echo
-    echo -e "${GREEN}✅ WARP добавлен в конфигурацию${NC}"
+    print_success "WARP добавлен в конфигурацию"
 
     # Открываем порт в UFW на этом сервере
     if command -v ufw >/dev/null 2>&1; then
@@ -637,7 +637,7 @@ add_warp_to_config() {
     echo "${warp_port}" > /etc/wireguard/.warp_port
 
     echo
-    echo -e "${YELLOW}⚠️  Теперь установите WARP на сервере ноды${NC}"
+    print_warning "Теперь установите WARP на сервере ноды"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
@@ -834,7 +834,7 @@ remove_warp_from_config() {
                 print_success "Хосты WARP не найдены"
             fi
         else
-            echo -e "${YELLOW}⚠️  Не удалось получить список хостов${NC}"
+            print_warning "Не удалось получить список хостов"
         fi
 
         # Закрываем порт если пользователь выбрал "Закрыть" до начала операции

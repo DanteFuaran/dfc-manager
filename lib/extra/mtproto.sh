@@ -702,7 +702,7 @@ _mt_do_install() {
                     if ss -tuln 2>/dev/null | grep -q ":${PROXY_PORT} "; then
                         echo
                         echo -e "${BLUE}══════════════════════════════════════${NC}"
-                        echo -e "${RED}✖ Порт ${PROXY_PORT} занят${DARKGRAY} — освободите или выберите другой${NC}"
+                        print_error "Порт ${PROXY_PORT} занят — освободите или выберите другой"
                         echo -e "${BLUE}══════════════════════════════════════${NC}"
                         echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
                         tput civis 2>/dev/null || true

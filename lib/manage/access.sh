@@ -74,7 +74,7 @@ restore_nginx_config() {
     fi
 
     echo
-    echo -e "${GREEN}✅ Nginx восстановлен к заводским настройкам${NC}"
+    print_success "Nginx восстановлен к заводским настройкам"
     echo
     echo -e "${GREEN}🔗 Cookie-ссылка для входа в панель:${NC}"
     echo -e "${WHITE}https://${panel_domain}/?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
@@ -131,11 +131,11 @@ manage_change_bot_domain() {
 
     echo
     sed -i "s|^WEBHOOK_URL=.*|WEBHOOK_URL=${new_url}|" "$rw_env"
-    echo -e "${GREEN}✅ Обновление домена телеграм бота${NC}"
+    print_success "Обновление домена телеграм бота"
 
     (cd "${DIR_PANEL}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
     if show_spinner "Перезапуск панели Remnawave"; then
-        echo -e "${GREEN}✅ Готово${NC}"
+        print_success "Готово"
     fi
 
     echo
@@ -822,7 +822,7 @@ change_credentials() {
 DELETE FROM admin;
 EOSQL
     then
-        echo -e "✅ Обновление данных суперадмина"
+        print_success "Обновление данных суперадмина"
     else
         print_error "Не удалось обновить данные суперадмина"
         (
@@ -862,7 +862,7 @@ EOSQL
     tput cnorm 2>/dev/null || true
 
     echo
-    echo -e "${GREEN}✅ Сброс выполнен успешно!${NC}"
+    print_success "Сброс выполнен успешно!"
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo

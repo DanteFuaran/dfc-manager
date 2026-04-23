@@ -425,7 +425,7 @@ install_script() {
     # Первичная установка — скачиваем полный архив (ветка берётся из $SCRIPT_BRANCH → version-файл)
     if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-manager/archive/refs/heads/${SCRIPT_BRANCH}.tar.gz" \
         | tar -xz -C "${DIR_SCRIPT}" --strip-components=1; then
-        echo -e "${RED}✖ Не удалось скачать скрипт${NC}"
+        print_error "Не удалось скачать скрипт"
         exit 1
     fi
 

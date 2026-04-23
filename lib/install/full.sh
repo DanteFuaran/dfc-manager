@@ -26,7 +26,7 @@ installation_full() {
     if [ -f "/opt/remnawave/docker-compose.yml" ]; then
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "   ${YELLOW}⚠️  REMNAWAVE УЖЕ УСТАНОВЛЕН${NC}"
+        print_warning "REMNAWAVE УЖЕ УСТАНОВЛЕН"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}На этом сервере уже установлен Remnawave.${NC}"
@@ -276,7 +276,7 @@ installation_full() {
         randomhtml
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   ⚠️  УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА${NC}"
+        print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Панель:${NC}       https://$PANEL_DOMAIN"
@@ -286,9 +286,9 @@ installation_full() {
         echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
         echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
-        echo -e "${RED}⚠️  Нода не настроена автоматически. Настройте вручную.${NC}"
+        print_warning "Нода не настроена автоматически. Настройте вручную."
         echo
-        echo -e "${RED}⚠️  ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!${NC}"
+        print_warning "ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!"
         echo
         show_continue_prompt || return 1
         return
@@ -362,7 +362,7 @@ installation_full() {
     # 9. Создание API токена для subscription-page
     create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1
 
-    printf "${GREEN}✅${NC}  %b\n" "Обновление конфигураций"
+    print_success "Обновление конфигураций"
 
     # 10. Шаблон selfsteal
     randomhtml
@@ -410,7 +410,7 @@ installation_full() {
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
-    echo -e "${YELLOW}⚠️  При первом входе в панель произойдет создание администратора.${NC}"
+    print_warning "При первом входе в панель произойдет создание администратора."
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
     echo -e "${YELLOW}   время в меню \"🔓  Доступ к панели\".${NC}"
     echo
@@ -428,7 +428,7 @@ installation_panel_with_node() {
     if [ -f "/opt/remnawave/docker-compose.yml" ]; then
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "   ${YELLOW}⚠️  REMNAWAVE УЖЕ УСТАНОВЛЕН${NC}"
+        print_warning "REMNAWAVE УЖЕ УСТАНОВЛЕН"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}На этом сервере уже установлен Remnawave.${NC}"
@@ -660,7 +660,7 @@ installation_panel_with_node() {
         print_error "Не удалось получить токен авторизации"
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   ⚠️  УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА${NC}"
+        print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}🔗 ССЫЛКА ВХОДА В ПАНЕЛЬ:${NC}"
@@ -669,9 +669,9 @@ installation_panel_with_node() {
         echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
         echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
-        echo -e "${RED}⚠️  Нода не настроена автоматически. Настройте вручную.${NC}"
+        print_warning "Нода не настроена автоматически. Настройте вручную."
         echo
-        echo -e "${RED}⚠️  ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!${NC}"
+        print_warning "ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!"
         echo
         show_continue_prompt || return 1
         return
@@ -736,7 +736,7 @@ installation_panel_with_node() {
 
     create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    printf "${GREEN}✅${NC}  %b\n" "Обновление конфигураций"
+    print_success "Обновление конфигураций"
 
     randomhtml
 
@@ -786,7 +786,7 @@ installation_panel_with_node() {
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
-    echo -e "${YELLOW}⚠️  При первом входе в панель произойдет создание администратора.${NC}"
+    print_warning "При первом входе в панель произойдет создание администратора."
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
     echo -e "${YELLOW}   время в меню \"🔓  Доступ к панели\".${NC}"
     echo

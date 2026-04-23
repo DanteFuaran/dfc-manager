@@ -158,7 +158,7 @@ DOCKER_EOF
             show_spinner "Применение настроек Docker"
             echo
             print_success "Docker логи: max-size=${log_size}, max-file=${log_files}"
-            echo -e "${YELLOW}⚠️  Docker перезапущен. Контейнеры будут перезапущены автоматически.${NC}"
+            print_warning "Docker перезапущен. Контейнеры будут перезапущены автоматически."
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             show_continue_prompt || return 1

@@ -13,7 +13,7 @@ installation_node() {
         echo -e "${RED}      ⚠️  Нода уже установлена${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        echo -e "${DARKGRAY}⚠️  На этом сервере уже установлена нода.${NC}"
+        print_warning "На этом сервере уже установлена нода."
         echo -e "   ${DARKGRAY}Чтобы переустановить ноду, нажмите ${BLUE}Enter${DARKGRAY}.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -124,7 +124,7 @@ installation_node_connect() {
                 _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
                     jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
                 echo
-                echo -e "${RED}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                print_warning "Домен $SELFSTEAL_DOMAIN уже используется в панели"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
@@ -259,7 +259,7 @@ installation_node_connect() {
         done <<< "$squad_uuids"
         print_success "Сквады обновлены"
     else
-        echo -e "${YELLOW}⚠️  Сквады не найдены${NC}"
+        print_warning "Сквады не найдены"
     fi
 
     # ─── Получаем SECRET_KEY для удалённого сервера ───
@@ -277,7 +277,7 @@ installation_node_connect() {
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q "$SELFSTEAL_DOMAIN" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _is_local_node=true
     fi
-    echo -e "${YELLOW}⚠️  Сертификат (Секретный ключ) для установки ноды${NC}"
+    print_warning "Сертификат (Секретный ключ) для установки ноды"
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
@@ -443,7 +443,7 @@ installation_node_local() {
                 _existing_name=$(make_api_request "GET" "$domain_url/api/nodes" "$_chk_token" | \
                     jq -r --arg addr "$SELFSTEAL_DOMAIN" '.response[] | select(.address == $addr) | .name' 2>/dev/null)
                 echo
-                echo -e "${RED}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                print_warning "Домен $SELFSTEAL_DOMAIN уже используется в панели"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
@@ -760,7 +760,7 @@ installation_node_local() {
             fi
         else
             print_error "Не удалось создать API токен"
-            echo -e "${YELLOW}⚠️  Subscription-page может не работать. Создайте токен вручную:${NC}"
+            print_warning "Subscription-page может не работать. Создайте токен вручную:"
             echo -e "   ${WHITE}Remnawave Dashboard → Settings → API Tokens${NC}"
         fi
     fi

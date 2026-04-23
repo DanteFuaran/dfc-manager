@@ -13,7 +13,7 @@ installation_panel() {
         clear
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "   ${YELLOW}⚠️  ПАНЕЛЬ УЖЕ УСТАНОВЛЕНА${NC}"
+        print_warning "ПАНЕЛЬ УЖЕ УСТАНОВЛЕНА"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}На этом сервере уже установлена панель.${NC}"
@@ -256,7 +256,7 @@ installation_panel() {
         clear
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "   ${GREEN}⚠️  УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА${NC}"
+        print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}🔗 ССЫЛКА ВХОДА В ПАНЕЛЬ:${NC}"
@@ -265,9 +265,9 @@ installation_panel() {
         echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
         echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
-        echo -e "${RED}⚠️  API токен не создан автоматически. Создайте вручную.${NC}"
+        print_warning "API токен не создан автоматически. Создайте вручную."
         echo
-        echo -e "${RED}⚠️  ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!${NC}"
+        print_warning "ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!"
         echo
         show_continue_prompt || return 1
         return
@@ -342,7 +342,7 @@ installation_panel() {
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
-    echo -e "${YELLOW}⚠️  При первом входе в панель произойдет создание администратора.${NC}"
+    print_warning "При первом входе в панель произойдет создание администратора."
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
     echo -e "${YELLOW}   время через главное меню скрипта.${NC}"
     echo

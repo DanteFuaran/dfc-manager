@@ -91,7 +91,7 @@ check_domain() {
     server_ip=$(get_server_ip)
 
     if [ -z "$domain_ip" ]; then
-        echo -e "${RED}✖  Домена ${YELLOW}$domain${RED} не существует${NC}"
+        print_error "Домена $domain не существует"
         echo -e "${RED}   Проверьте запись домена или пропустите проверку.${NC}"
         return 1
     fi
@@ -150,7 +150,7 @@ check_domain() {
     # ═══════════════════════════════════════════════════════════
     
     if [ "$ip_match" = false ]; then
-        echo -e "${RED}✖  Домен ${YELLOW}$domain${RED} указывает на ${YELLOW}${domain_ip}${RED}, а не на IP сервера ${YELLOW}${server_ip}${NC}"
+        print_error "Домен $domain указывает на $domain_ip, а не на IP сервера $server_ip"
         echo -e "${RED}   Проверьте запись домена или пропустите проверку.${NC}"
         return 1
     fi

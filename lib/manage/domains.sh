@@ -715,7 +715,7 @@ change_node_domain() {
     )
 
     if [ -z "$current_node_domain" ]; then
-        echo -e "${YELLOW}⚠️  Нода не обнаружена в конфигурации nginx.${NC}"
+        print_warning "Нода не обнаружена в конфигурации nginx."
         echo -e "${WHITE}Смена домена ноды доступна только при установке${NC}"
         echo -e "${WHITE}типа \"Панель + Нода\" на одном сервере.${NC}"
         echo
@@ -792,7 +792,7 @@ change_node_domain() {
     echo
     print_success "Домен ноды изменён на ${new_domain}"
     echo
-    echo -e "${YELLOW}⚠️  Не забудьте обновить домен ноды в панели Remnawave${NC}"
+    print_warning "Не забудьте обновить домен ноды в панели Remnawave"
     echo
     read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
     echo

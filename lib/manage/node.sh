@@ -143,7 +143,7 @@ add_node_to_panel() {
     echo -e "$(center "➕ Подключение ноды в панель" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${DARKGRAY}⚠️  Добавление ноды в панель предназначена для запуска${NC}"
+    print_warning "Добавление ноды в панель предназначена для запуска"
     echo -e "${DARKGRAY}   на сервере с установленной панелью Remnawave.${NC}"
     echo
     echo -e "${DARKGRAY}   После завершения подключения, запустите установку${NC}"
@@ -183,7 +183,7 @@ add_node_to_panel() {
                 _step=2
             elif [[ $_cnd_rc -eq 1 ]]; then
                 echo
-                echo -e "${RED}⚠️  Домен $SELFSTEAL_DOMAIN уже используется в панели${NC}"
+                print_warning "Домен $SELFSTEAL_DOMAIN уже используется в панели"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 _flush_stdin
@@ -258,7 +258,7 @@ add_node_to_panel() {
         show_continue_prompt || true
         return 1
     fi
-    printf "${GREEN}✅${NC}\033[0m %b\n" "Ключи сгенерированы"
+    print_success "Ключи сгенерированы"
 
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
@@ -268,7 +268,7 @@ add_node_to_panel() {
         return 1
     fi
     read config_profile_uuid inbound_uuid <<< "$config_result"
-    printf "${GREEN}✅${NC}\033[0m %b\n" "Конфигурационный профиль: $entity_name"
+    print_success "Конфигурационный профиль: $entity_name"
 
     # Порт ноды всегда 2222
     local NODE_LISTEN_PORT=2222
@@ -299,7 +299,7 @@ add_node_to_panel() {
         done <<< "$squad_uuids"
         print_success "Сквады обновлены"
     else
-        echo -e "${YELLOW}⚠️  Сквады не найдены (будут настроены при создании пользователей)${NC}"
+        print_warning "Сквады не найдены (будут настроены при создании пользователей)"
     fi
 
     # Получаем pubkey панели — он нужен пользователю как SECRET_KEY при установке ноды

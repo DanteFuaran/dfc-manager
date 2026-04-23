@@ -149,7 +149,7 @@ manage_ufw() {
                 ) &
                 wait $!
 
-                echo -e " ${GREEN}✅  Порт ${ufw_port} открыт${NC}"
+                print_success "Порт ${ufw_port} открыт"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1

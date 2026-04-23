@@ -148,7 +148,7 @@ JAIL_EOF
             4) return 0 ;;
         esac
     else
-        echo -e "${YELLOW}⚠️  Fail2ban не установлен${NC}"
+        print_warning "Fail2ban не установлен"
         echo
         echo -e "${DARKGRAY}Fail2ban защищает сервер от брутфорс-атак,${NC}"
         echo -e "${DARKGRAY}блокируя IP-адреса после нескольких неудачных попыток входа.${NC}"

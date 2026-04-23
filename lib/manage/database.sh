@@ -314,7 +314,7 @@ db_restore() {
     fi
 
     if [ "$has_files" = false ]; then
-        echo -e "${YELLOW}⚠️  Бекапы не найдены в ${WHITE}${backup_dir}${NC}"
+        print_warning "Бекапы не найдены в ${backup_dir}"
         echo
         echo -e "${WHITE}Поместите файл бекапа (.tar.gz, .sql.gz или .sql) в эту папку${NC}"
         echo -e "${WHITE}или укажите путь к файлу вручную.${NC}"
@@ -969,7 +969,7 @@ _rw_configure_autobackup() {
     echo -e "${GREEN}       💾 АВТОБЕКАП НАСТРОЕН${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${GREEN}✅ Автобекап успешно настроен${NC}"
+    print_success "Автобекап успешно настроен"
     echo
     local freq_label
     case $frequency in
@@ -994,7 +994,7 @@ _rw_stop_autobackup() {
     echo -e "${GREEN}       💾 АВТОБЕКАП${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${GREEN}✅ Автобекап остановлен${NC}"
+    print_success "Автобекап остановлен"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return

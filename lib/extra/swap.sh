@@ -88,7 +88,7 @@ manage_swap() {
             3) return 0 ;;
         esac
     else
-        echo -e "${YELLOW}⚠️  SWAP не настроен на сервере${NC}"
+        print_warning "SWAP не настроен на сервере"
         echo
 
         show_arrow_menu "💾  Управление SWAP" \
