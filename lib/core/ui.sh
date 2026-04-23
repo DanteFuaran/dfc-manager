@@ -450,6 +450,11 @@ show_continue_prompt() {
     while true; do
         local _cpk
         IFS= read -rsn1 _cpk 2>/dev/null
+        # Если в каком-то месте stty был выставлен без isig, Ctrl+C не пришлёт SIGINT,
+        # а попадёт сюда как символ \x03 — обрабатываем как прерывание.
+        if [[ "$_cpk" == $'\x03' ]]; then
+            handle_interrupt
+        fi
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
             tput cnorm 2>/dev/null; echo
             return 0   # Enter → назад на одно меню
