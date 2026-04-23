@@ -250,7 +250,6 @@ show_arrow_menu() {
         else
             echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
         fi
-        echo
 
         local key
         read -rsn1 key 2>/dev/null || key=""
