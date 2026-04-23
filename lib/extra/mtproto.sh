@@ -1568,6 +1568,8 @@ _mt_do_uninstall() {
     if ! confirm_nav --delete "🗑️  Удаление MTProto"; then
         return
     fi
+    echo
+    echo
 
     # 1) compose down + снятие контейнера
     (
