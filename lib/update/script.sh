@@ -37,7 +37,7 @@ _delete_component_node() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${BLUE}🗑️  Удаление ноды Remnawave${NC}"
+    echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -98,7 +98,7 @@ _delete_component_node() {
 
         nginx_cleanup_unused_certs
     ) &
-    show_spinner "Удаление Remnawave (Нода)"
+    show_spinner "Нода Remnawave успешно удалена!"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || true

@@ -598,9 +598,16 @@ installation_node_local() {
     # Копируем сертификат ноды в /opt/nginx/ssl/
     nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
-    # TCP-порт API ноды (network_mode: host)
+    # TCP-порт API ноды (2222) — спрашиваем ДО остановки, чтобы видеть реальную картину занятых портов
     local NODE_LISTEN_PORT=2222
     if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        return 1
+    fi
+
+    # TCP-порт входящего VLESS REALITY (8443) — проверяем ДО остановки сервисов,
+    # чтобы обнаружить сторонние процессы (MTProto и др.), которые не остановятся вместе с панелью
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
         return 1
     fi
 
@@ -610,12 +617,6 @@ installation_node_local() {
         docker compose down >/dev/null 2>&1
     ) &
     show_spinner "Остановка сервисов" || true
-
-    # TCP-порт входящего VLESS REALITY (Xray inbound, network_mode: host)
-    local NODE_INBOUND_PORT=8443
-    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
-        return 1
-    fi
 
     (
         exec >/dev/null 2>&1
@@ -787,7 +788,7 @@ installation_node_local() {
     echo -e "  ${GREEN}🎉 Нода добавлена на сервер панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "$(center "✅ Нода успешно добавлена!" "$GREEN")"
+    echo -e "$(center "✅ Нода успешно добавлена!" "$WHITE")"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
