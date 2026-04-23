@@ -109,7 +109,7 @@ installation_node_connect() {
             _input_step=2
         fi
         if [[ $_input_step -eq 2 ]]; then
-            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
+            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:" SELFSTEAL_DOMAIN true true || return
             # ─── Проверка домена в панели ───
             local _chk_token
             _chk_token=$(cat "${DIR_SCRIPT}/token")
@@ -157,7 +157,7 @@ installation_node_connect() {
         fi
         if [[ $_input_step -eq 3 ]]; then
             while true; do
-                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
+                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${DARKGRAY}:" entity_name
                 local _rc_en=$?
                 if [[ $_rc_en -eq 2 ]]; then
                     tput rc 2>/dev/null || true
@@ -295,7 +295,7 @@ installation_node_connect() {
 installation_node_local() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     🌐 Установка ноды на сервер${NC}"
+    echo -e "${BLUE}     🌐 Установка ноды на сервер${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     # Проверяем пакеты
@@ -407,7 +407,7 @@ installation_node_local() {
     while true; do
         if [[ $_input_step -eq 1 ]]; then
             tput sc 2>/dev/null || true
-            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true true || return
+            prompt_domain_with_retry "Введите домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:" SELFSTEAL_DOMAIN true true || return
             _input_step=2
         fi
         if [[ $_input_step -eq 2 ]]; then
@@ -475,7 +475,7 @@ installation_node_local() {
         fi
         if [[ $_input_step -eq 3 ]]; then
             while true; do
-                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${YELLOW}:" entity_name
+                reading_inline "Введите имя для ноды ${DARKGRAY}(например, Germany)${DARKGRAY}:" entity_name
                 local _rc_en=$?
                 if [[ $_rc_en -eq 2 ]]; then
                     tput rc 2>/dev/null || true
@@ -564,7 +564,7 @@ installation_node_local() {
     else
         echo
         echo
-        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
     fi
 
     echo
@@ -756,17 +756,7 @@ installation_node_local() {
     echo -e "  ${GREEN}🎉 Нода добавлена на сервер панели${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
-    if [ "$has_local_sub" = true ]; then
-        echo -e "${WHITE}Подписка:${NC}     https://$sub_domain"
-    elif [ -n "$sub_domain" ]; then
-        echo -e "${WHITE}Подписка:${NC}     https://$sub_domain ${DARKGRAY}(удалённая)${NC}"
-    fi
-    echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
-    echo
-    echo -e "${BLUE}──────────────────────────────────────${NC}"
-    echo
-    echo -e "${GREEN}✅ Нода успешно добавлена${NC}"
+    echo -e "$(center "✅ Нода успешно добавлена!" "$GREEN")"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
@@ -795,7 +785,7 @@ installation_node_remote() {
         trap 'rm -rf "'"${NODE_INSTALL_DIR}"'" 2>/dev/null; handle_interrupt' INT TERM
     fi
 
-    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:" SELFSTEAL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
 
     local PANEL_IP
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
@@ -840,7 +830,7 @@ installation_node_remote() {
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
-        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
     fi
 
     echo
@@ -1046,7 +1036,7 @@ installation_node_with_existing_subpage() {
     local SELFSTEAL_DOMAIN PANEL_IP
     while true; do
         echo
-        prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${YELLOW}:" SELFSTEAL_DOMAIN true || return
+        prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:" SELFSTEAL_DOMAIN true || return
         if prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP; then
             break
         else
@@ -1097,7 +1087,7 @@ installation_node_with_existing_subpage() {
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
-        print_success "Сертификат для $SELFSTEAL_DOMAIN уже существует"
+        printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$SELFSTEAL_DOMAIN"
         echo
     fi
 

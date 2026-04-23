@@ -136,7 +136,7 @@ _installation_subpage_on_panel() {
     local CERT_METHOD="$AUTO_CERT_METHOD"
     local LETSENCRYPT_EMAIL=""
     while true; do
-    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || return
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || return
 
     unset domains_to_check
     declare -A domains_to_check
@@ -392,7 +392,7 @@ _installation_subpage_on_node() {
     while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || break
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
     clear
@@ -404,7 +404,7 @@ _installation_subpage_on_node() {
     echo -e "${DARKGRAY}Страница подписки будет добавлена к ноде.${NC}"
     echo
     echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:${NC} ${GREEN}${PANEL_URL#https://}${NC}"
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo
@@ -662,7 +662,7 @@ _installation_subpage_standalone() {
     while true; do  # loop2: домен подписки
     # Запрашиваем домен подписки
     local SUB_DOMAIN
-    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || break
+    prompt_domain_with_retry "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || break
 
     while true; do  # loop3: API токен
     clear
@@ -671,7 +671,7 @@ _installation_subpage_standalone() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${BLUE}➜${NC}  ${YELLOW}Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:${NC} ${GREEN}${PANEL_URL#https://}${NC}"
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${NC} ${GREEN}${SUB_DOMAIN}${NC}"
     # Запрашиваем API токен
     local API_TOKEN=""
     echo

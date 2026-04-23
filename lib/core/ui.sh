@@ -387,7 +387,16 @@ reading_inline() {
     local _rl_stty
     _rl_stty=$(stty -g 2>/dev/null || echo "")
     tput cnorm 2>/dev/null
-    echo -en "${BLUE}➜${NC}   ${YELLOW}${prompt}${NC} \033[32m"
+    # Промпты без ANSI: двоеточие в конце — серым (как подсказки в скобках)
+    local _p="$prompt"
+    while [[ "${_p: -1:1}" == " " ]]; do _p="${_p% }"; done
+    if [[ "$prompt" == *$'\033'* ]]; then
+        echo -en "${BLUE}➜${NC}   ${YELLOW}${prompt}${NC} \033[32m"
+    elif [[ "${_p: -1:1}" == ":" ]]; then
+        echo -en "${BLUE}➜${NC}   ${YELLOW}${_p%:}${DARKGRAY}:${NC} \033[32m"
+    else
+        echo -en "${BLUE}➜${NC}   ${YELLOW}${prompt}${NC} \033[32m"
+    fi
     while IFS= read -r -s -n1 char; do
         if [[ -z "$char" ]]; then
             break
