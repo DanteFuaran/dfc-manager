@@ -42,19 +42,19 @@ installation_panel() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ "$with_subpage" = true ]; then
-        echo -e "${GREEN}   📦 УСТАНОВКА ПАНЕЛИ + СТРАНИЦЫ ПОДПИСКИ${NC}"
+        echo -e "${BLUE}   📦 Установка панели и страницы подписки${NC}"
     else
-        echo -e "${GREEN}         📦 Установка панели${NC}"
+        echo -e "${BLUE}         📦 Установка панели${NC}"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${YELLOW}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
     local SUB_DOMAIN=""
     if [ "$with_subpage" = true ]; then
-        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN true || continue
+        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || continue
     else
         local _sub_esc=false
         while true; do
-            reading_inline "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${YELLOW}:" SUB_DOMAIN
+            reading_inline "Домен страницы подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN
             local _rc=$?
             if [ $_rc -eq 2 ]; then _sub_esc=true; break; fi
             if [[ "$SUB_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]; then
