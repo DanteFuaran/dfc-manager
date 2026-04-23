@@ -29,16 +29,24 @@ installation_panel() {
         is_fresh_install=true
     fi
 
-    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
-    [ "$with_subpage" = true ] && mkdir -p "${DIR_SUB}"
+    # При отмене первичной установки удаляем и панель, и каталог страницы подписки (если он создавался)
+    _abort_fresh_panel_install() {
+        [ "$is_fresh_install" != true ] && return 0
+        rm -rf "${DIR_PANEL}" 2>/dev/null || true
+        if [ "$with_subpage" = true ]; then
+            rm -rf "${DIR_SUB}" 2>/dev/null || true
+        fi
+    }
 
     # Устанавливаем trap для удаления при прерывании (только для первичной установки)
     if [ "$is_fresh_install" = true ]; then
-        trap 'rm -rf "${DIR_PANEL}" 2>/dev/null; handle_interrupt' INT TERM
+        trap '_abort_fresh_panel_install; handle_interrupt' INT TERM
     fi
 
     local cert_choice
     while true; do
+    mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
+    [ "$with_subpage" = true ] && mkdir -p "${DIR_SUB}"
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ "$with_subpage" = true ]; then
@@ -47,10 +55,10 @@ installation_panel() {
         echo -e "${BLUE}         📦 Установка панели${NC}"
     fi
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null; return; }
+    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:" PANEL_DOMAIN || { _abort_fresh_panel_install; return; }
     local SUB_DOMAIN=""
     if [ "$with_subpage" = true ]; then
-        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || continue
+        prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:" SUB_DOMAIN true || { rm -rf "${DIR_SUB}" 2>/dev/null || true; continue; }
     else
         local _sub_esc=false
         while true; do
@@ -90,7 +98,10 @@ installation_panel() {
             "──────────────────────────────────────" \
             "⬅️   Назад"
         cert_choice=$?
-        [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]] && continue
+        if [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]]; then
+            [ "$with_subpage" = true ] && rm -rf "${DIR_SUB}" 2>/dev/null || true
+            continue
+        fi
 
         case $cert_choice in
             0) CERT_METHOD=2 ;;
@@ -99,11 +110,14 @@ installation_panel() {
 
         echo
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
-        [[ $? -eq 2 ]] && continue
+        if [[ $? -eq 2 ]]; then
+            [ "$with_subpage" = true ] && rm -rf "${DIR_SUB}" 2>/dev/null || true
+            continue
+        fi
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
-            setup_cloudflare_credentials || return
+            setup_cloudflare_credentials || { _abort_fresh_panel_install; return; }
         fi
 
         echo
@@ -124,7 +138,7 @@ installation_panel() {
     if [ "$needs_certs" = true ]; then
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
-            [ "$is_fresh_install" = true ] && rm -rf "${DIR_PANEL}" 2>/dev/null
+            _abort_fresh_panel_install
             read -s -n 1 -p "$(echo -e "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Назад${NC}")"
             echo
             return
