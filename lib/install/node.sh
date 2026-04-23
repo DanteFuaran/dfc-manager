@@ -571,8 +571,6 @@ installation_node_local() {
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
 
-    echo
-
     local NODE_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
         NODE_CERT_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
@@ -852,7 +850,6 @@ installation_node_remote() {
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
 
-    echo
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi

@@ -183,8 +183,6 @@ _installation_subpage_on_panel() {
     break
     done
 
-    echo
-
     local SUB_CERT_DOMAIN
     if [ "$CERT_METHOD" = "1" ]; then
         SUB_CERT_DOMAIN=$(extract_domain "$SUB_DOMAIN")
@@ -739,7 +737,6 @@ _installation_subpage_standalone() {
     done  # loop2
     done  # loop1
 
-    echo
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
     fi
