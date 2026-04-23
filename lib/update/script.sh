@@ -290,8 +290,6 @@ manage_delete_components() {
                 if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
                     continue
                 fi
-                echo
-                echo
                 (
                 export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then

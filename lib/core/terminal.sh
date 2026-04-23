@@ -70,7 +70,7 @@ handle_interrupt() {
     tput cnorm 2>/dev/null || true
     printf "\033[0m" 2>/dev/null || true
     clear
-    printf '\n\033[0;31mСкрипт прерван пользователем\033[0m\n\n'
+    printf '\033[0;31mСкрипт был остановлен пользователем\033[0m\n'
     cleanup_uninstalled 2>/dev/null || true
     exit 130
 }
