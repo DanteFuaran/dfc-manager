@@ -391,10 +391,8 @@ prompt_host_inbound_port() {
     local default_port="${2:-8443}"
     local candidate="$default_port"
     while tcp_port_is_listening "$candidate"; do
-        echo
-        print_warning "Порт $candidate занят пожалуйста выберите другой порт:"
         local _newp=""
-        reading_inline "Введите свободный порт ${DARKGRAY}(например 8444)${DARKGRAY}:" _newp
+        reading_inline "Порт $candidate занят пожалуйста введите другой порт:" _newp
         local _rc=$?
         if [[ $_rc -eq 2 ]]; then
             return 1
