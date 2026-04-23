@@ -106,7 +106,8 @@ installation_full() {
             3) return ;;
         esac
 
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && return
         echo
         echo
 
@@ -512,7 +513,8 @@ installation_panel_with_node() {
             2) : ;;
             3) return ;;
         esac
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && return
         echo
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then

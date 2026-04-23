@@ -836,7 +836,8 @@ installation_node_remote() {
             2|3) return ;;
         esac
 
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && return
         echo
         echo
 
@@ -1108,7 +1109,8 @@ installation_node_with_existing_subpage() {
             1) CERT_METHOD=1 ;;
             2|3) return ;;
         esac
-        reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+        reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+        [[ $? -eq 2 ]] && return
         echo
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then

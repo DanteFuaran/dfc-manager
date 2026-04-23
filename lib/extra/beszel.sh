@@ -463,7 +463,8 @@ install_beszel() {
 
         case $cert_choice in
             0) # ACME
-                reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
                 if [ -z "$BESZEL_EMAIL" ]; then
                     print_error "Email не может быть пустым"
                     echo
@@ -484,7 +485,8 @@ install_beszel() {
                 CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
                 ;;
             1) # Cloudflare
-                reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
                 if [ -z "$BESZEL_EMAIL" ]; then
                     print_error "Email не может быть пустым"
                     echo
@@ -799,7 +801,8 @@ change_domain_beszel() {
 
         case $cert_choice in
             0)
-                reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
                 if [ -z "$BESZEL_EMAIL" ]; then
                     print_error "Email не может быть пустым"
                     echo
@@ -819,7 +822,8 @@ change_domain_beszel() {
                 CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
                 ;;
             1)
-                reading "Email для Let's Encrypt:" BESZEL_EMAIL || return 1
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
                 if [ -z "$BESZEL_EMAIL" ]; then
                     print_error "Email не может быть пустым"
                     echo
