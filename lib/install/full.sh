@@ -25,7 +25,6 @@ installation_full() {
     # Проверяем, не установлено ли уже
     if [ -f "/opt/remnawave/docker-compose.yml" ]; then
         clear
-        echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "   ${YELLOW}⚠️  REMNAWAVE УЖЕ УСТАНОВЛЕН${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -428,7 +427,6 @@ installation_panel_with_node() {
 
     if [ -f "/opt/remnawave/docker-compose.yml" ]; then
         clear
-        echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "   ${YELLOW}⚠️  REMNAWAVE УЖЕ УСТАНОВЛЕН${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -661,7 +659,6 @@ installation_panel_with_node() {
     if [ -z "$token" ]; then
         print_error "Не удалось получить токен авторизации"
         clear
-        echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "${GREEN}   ⚠️  УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"

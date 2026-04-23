@@ -114,7 +114,6 @@ remove_node_from_panel() {
     tput cnorm 2>/dev/null || true
 
     clear
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${GREEN}🎉 Нода удалена, панель настроена!${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"

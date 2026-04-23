@@ -27,7 +27,6 @@ _delete_component_panel() {
     nginx_cleanup_unused_certs
 
     clear
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${GREEN}🗑️  Удаление панели Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -111,7 +110,6 @@ _delete_component_node() {
     show_spinner "Удаление Remnawave (Нода)" "Нода Remnawave успешно удалена!"
 
     clear
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${GREEN}🗑️  Удаление ноды Remnawave${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -212,7 +210,6 @@ _delete_component_subpage() {
     fi
 
     clear
-    echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     if [ -z "$_sub_del_err" ]; then
         echo -e "    ${GREEN}🗑️  Удаление страницы подписки${NC}"
