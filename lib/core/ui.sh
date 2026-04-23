@@ -42,7 +42,7 @@ show_spinner_prepare() {
     local i=0 msg="$1"
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r\033[K${BLUE}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        printf "\r\033[K${BLUE}%s${NC}\033[0m  ${BLUE}%s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
@@ -192,54 +192,77 @@ show_arrow_menu() {
 
     _flush_stdin
 
+    # ── Кешируем заголовок (sed только один раз, не при каждом рендере) ──────────
+    local _hdr="${MENU_TITLE_COLOR:-$BLUE}"
+    local _title_pad1="" _title_line1="$title" _title_pad2="" _title_line2=""
+    local _title_two_line=false
+    if [[ "$title" == *\\* ]]; then
+        _title_two_line=true
+        local _t1="${title%%\\n*}" _t2="${title#*\\n}"
+        local _tc1; _tc1=$(printf '%b' "$_t1" | sed 's/\x1b\[[0-9;]*m//g')
+        local _p1=$(( (38 - ${#_tc1}) / 2 )); [ $_p1 -lt 0 ] && _p1=0
+        _title_pad1=$(printf "%${_p1}s" "")
+        _title_line1="$_t1"
+        local _tc2; _tc2=$(printf '%b' "$_t2" | sed 's/\x1b\[[0-9;]*m//g')
+        local _p2=$(( (38 - ${#_tc2}) / 2 )); [ $_p2 -lt 0 ] && _p2=0
+        _title_pad2=$(printf "%${_p2}s" "")
+        _title_line2="$_t2"
+    else
+        local _tc; _tc=$(printf '%b' "$title" | sed 's/\x1b\[[0-9;]*m//g')
+        local _p=$(( (38 - ${#_tc}) / 2 )); [ $_p -lt 0 ] && _p=0
+        _title_pad1=$(printf "%${_p}s" "")
+    fi
+
+    # ── Кешируем очищенные строки пунктов меню (sed вне цикла рендера) ───────────
+    local -a _clean_opts=()
+    local _ci
+    for _ci in "${!options[@]}"; do
+        if [[ "${options[$_ci]}" == $'\x01'* ]] || [[ "${options[$_ci]}" == $'\x02'* ]] || \
+           [[ "${options[$_ci]}" =~ ^[─━═\ \t]*$ ]]; then
+            _clean_opts[$_ci]="${options[$_ci]}"
+        else
+            local _s; _s=$(printf '%b' "${options[$_ci]}" | sed 's/\x1b\[[0-9;]*m//g')
+            _clean_opts[$_ci]="$_s"
+        fi
+    done
+
+    # ── Фиксируем подсказку навигации один раз до цикла ──────────────────────────
+    local _esc_label="${MENU_ESC_LABEL:-Назад}"
+    local _key_hint
+    if [ -n "${MENU_KEY_HINT:-}" ]; then
+        _key_hint="${MENU_KEY_HINT}"
+        unset MENU_KEY_HINT
+    else
+        _key_hint="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
+    fi
+    local _no_blank="${MENU_NO_BLANK:-}"
+    unset MENU_NO_BLANK MENU_ESC_LABEL MENU_TITLE_COLOR
+
     while true; do
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        local _hdr="${MENU_TITLE_COLOR:-$BLUE}"
-        if [[ "$title" == *\\* ]]; then
-            local _first="${title%%\\n*}"
-            local _rest="${title#*\\n}"
-            local _clean
-            _clean=$(echo -e "$_first" | sed 's/\x1b\[[0-9;]*m//g')
-            local _vlen=${#_clean}
-            local _pad=$(( (38 - _vlen) / 2 ))
-            [ $_pad -lt 0 ] && _pad=0
-            printf "%${_pad}s" ""
-            echo -e "${_hdr}${_first}${NC}"
-            # Вторая строка заголовка (статус и т.п.) — тоже по центру в ширину 38
-            _clean=$(echo -e "$_rest" | sed 's/\x1b\[[0-9;]*m//g')
-            _vlen=${#_clean}
-            _pad=$(( (38 - _vlen) / 2 ))
-            [ $_pad -lt 0 ] && _pad=0
-            printf "%${_pad}s" ""
-            echo -e "${_rest}"
+        if [ "$_title_two_line" = true ]; then
+            printf "%s" "$_title_pad1"
+            echo -e "${_hdr}${_title_line1}${NC}"
+            printf "%s" "$_title_pad2"
+            echo -e "${_title_line2}"
         else
-            local _clean
-            _clean=$(echo -e "$title" | sed 's/\x1b\[[0-9;]*m//g')
-            local _vlen=${#_clean}
-            local _pad=$(( (38 - _vlen) / 2 ))
-            [ $_pad -lt 0 ] && _pad=0
-            printf "%${_pad}s" ""
-            echo -e "${_hdr}$title${NC}"
+            printf "%s" "$_title_pad1"
+            echo -e "${_hdr}${title}${NC}"
         fi
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        [[ -z "${MENU_NO_BLANK:-}" ]] && echo
-        unset MENU_NO_BLANK
+        [[ -z "$_no_blank" ]] && echo
 
+        local i
         for i in "${!options[@]}"; do
-            # Проверяем, является ли элемент разделителем
-            if [[ "${options[$i]}" =~ ^[─━═\s]*$ ]]; then
-                # Разделители без отступа - вровень с рамкой (синие)
+            if [[ "${options[$i]}" =~ ^[─━═\ \t]*$ ]]; then
                 echo -e "${DARKGRAY}${options[$i]}${NC}"
             elif [[ "${options[$i]}" == $'\x02'* ]]; then
-                # Серый разделитель (──────)
                 echo -e "${DARKGRAY}${options[$i]:1}${NC}"
             elif [[ "${options[$i]}" == $'\x01'* ]]; then
-                # Заголовок-секция (не выбирается), допускает цвета в тексте
                 echo -e "${options[$i]:1}"
             elif [ $i -eq $selected ]; then
-                local _clean_item; _clean_item=$(echo -e "${options[$i]}" | sed 's/\x1b\[[0-9;]*m//g')
-                echo -e "${BLUE}▶${NC} ${YELLOW}${_clean_item}${NC}"
+                echo -e "${BLUE}▶${NC} ${YELLOW}${_clean_opts[$i]}${NC}"
             else
                 echo -e "  ${options[$i]}"
             fi
@@ -247,14 +270,7 @@ show_arrow_menu() {
 
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        local _esc_label="${MENU_ESC_LABEL:-Назад}"
-        if [ -n "${MENU_KEY_HINT:-}" ]; then
-            echo -e "${MENU_KEY_HINT}"
-            unset MENU_KEY_HINT
-        else
-            echo -e "${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: ${_esc_label}${NC}"
-        fi
-        # Всегда оставляем минимум 2 пустые строки после легенды навигации
+        echo -e "$_key_hint"
         echo
         echo
 
