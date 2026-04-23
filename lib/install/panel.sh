@@ -119,8 +119,6 @@ installation_panel() {
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || { _abort_fresh_panel_install; return; }
         fi
-
-        echo
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         tput cnorm 2>/dev/null || true

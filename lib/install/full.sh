@@ -113,8 +113,6 @@ installation_full() {
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
-
-        echo
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         echo
@@ -518,7 +516,6 @@ installation_panel_with_node() {
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         fi
-        echo
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
         echo
