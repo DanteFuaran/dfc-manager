@@ -129,6 +129,7 @@ generate_docker_compose_full() {
     local panel_cert_domain=$1
     local sub_cert_domain=$2
     local node_cert_domain=$3
+    local node_port="${4:-2222}"
 
     # Проверяем, существует ли сеть remnawave-network
     local network_exists=false
@@ -269,7 +270,7 @@ COMPOSE_VOLUMES
 
     # ─── Нода (/opt/remnanode/docker-compose.yml) ───
     mkdir -p "/opt/remnanode"
-    cat > /opt/remnanode/docker-compose.yml <<'NODE_COMPOSE'
+    cat > /opt/remnanode/docker-compose.yml <<NODE_COMPOSE
 services:
   remnanode:
     image: remnawave/node:latest
@@ -284,12 +285,12 @@ services:
         hard: 1048576
     network_mode: host
     environment:
-      - NODE_PORT=2222
+      - NODE_PORT=${node_port}
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 ${node_port}']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -1443,6 +1444,7 @@ EOL
 generate_docker_compose_panel_with_node() {
     local panel_cert_domain=$1
     local node_cert_domain=$2
+    local node_port="${3:-2222}"
 
     local network_exists=false
     if docker network ls --format '{{.Name}}' | grep -qx "remnawave-network"; then
@@ -1582,7 +1584,7 @@ COMPOSE_VOLUMES
 
     # ─── Нода (/opt/remnanode/docker-compose.yml) ───
     mkdir -p "/opt/remnanode"
-    cat > /opt/remnanode/docker-compose.yml <<'NODE_COMPOSE'
+    cat > /opt/remnanode/docker-compose.yml <<NODE_COMPOSE
 services:
   remnanode:
     image: remnawave/node:latest
@@ -1597,12 +1599,12 @@ services:
         hard: 1048576
     network_mode: host
     environment:
-      - NODE_PORT=2222
+      - NODE_PORT=${node_port}
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 ${node_port}']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -2165,6 +2167,7 @@ generate_docker_compose_node_with_subpage() {
     local api_token=$4
     local certificate=$5
     local target_dir="${6:-/opt/remnanode}"
+    local node_port="${7:-2222}"
 
     # ─── Нода (/opt/remnanode/docker-compose.yml) ───
     mkdir -p "$target_dir"
@@ -2183,12 +2186,12 @@ services:
         hard: 1048576
     network_mode: host
     environment:
-      - NODE_PORT=2222
+      - NODE_PORT=${node_port}
       - SECRET_KEY=$(echo -e "$certificate")
     volumes:
       - /dev/shm:/dev/shm:rw
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 ${node_port}']
       interval: 15s
       timeout: 5s
       retries: 3

@@ -271,8 +271,26 @@ add_node_to_panel() {
     read config_profile_uuid inbound_uuid <<< "$config_result"
     print_success "Конфигурационный профиль: $entity_name"
 
+    local NODE_LISTEN_PORT=2222
+    echo
+    local _np=""
+    reading_inline "Порт ноды на сервере установки (NODE_PORT) ${DARKGRAY}(2222)${DARKGRAY}:" _np
+    local _npr=$?
+    if [[ $_npr -eq 2 ]]; then
+        show_continue_prompt || true
+        return 1
+    fi
+    if [ -n "$_np" ]; then
+        _np="${_np//[^0-9]/}"
+        if [[ "$_np" =~ ^[0-9]+$ ]] && [ "$_np" -ge 1 ] && [ "$_np" -le 65535 ]; then
+            NODE_LISTEN_PORT="$_np"
+        else
+            print_error "Некорректный порт, используется 2222"
+        fi
+    fi
+
     print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
         print_success "Нода создана"
     else
         print_error "Не удалось создать ноду"

@@ -449,13 +449,15 @@ create_node() {
     local inbound_uuid=$4
     local node_address="${5:-172.30.0.1}"
     local node_name="${6:-Steal}"
+    local node_port="${7:-2222}"
 
     local request_body
     request_body=$(jq -n --arg name "$node_name" --arg address "$node_address" \
-        --arg config_uuid "$config_profile_uuid" --arg inbound "$inbound_uuid" '{
+        --arg config_uuid "$config_profile_uuid" --arg inbound "$inbound_uuid" \
+        --argjson port "$node_port" '{
         name: $name,
         address: $address,
-        port: 2222,
+        port: $port,
         configProfile: {
             activeConfigProfileUuid: $config_uuid,
             activeInbounds: [$inbound]

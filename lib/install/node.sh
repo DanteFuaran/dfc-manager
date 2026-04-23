@@ -229,8 +229,27 @@ installation_node_connect() {
     read config_profile_uuid inbound_uuid <<< "$config_result"
     print_success "Конфигурационный профиль: $entity_name"
 
+    local NODE_LISTEN_PORT=2222
+    echo
+    local _np=""
+    reading_inline "Порт ноды на сервере установки (NODE_PORT) ${DARKGRAY}(2222)${DARKGRAY}:" _np
+    local _npr=$?
+    if [[ $_npr -eq 2 ]]; then
+        echo
+        show_continue_prompt || return 1
+        return 1
+    fi
+    if [ -n "$_np" ]; then
+        _np="${_np//[^0-9]/}"
+        if [[ "$_np" =~ ^[0-9]+$ ]] && [ "$_np" -ge 1 ] && [ "$_np" -le 65535 ]; then
+            NODE_LISTEN_PORT="$_np"
+        else
+            print_error "Некорректный порт, используется 2222"
+        fi
+    fi
+
     print_action "Создание ноды ($entity_name)..."
-    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
+    if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
         print_success "Нода создана"
     else
         print_error "Не удалось создать ноду"
@@ -579,6 +598,12 @@ installation_node_local() {
     # Копируем сертификат ноды в /opt/nginx/ssl/
     nginx_copy_cert "$NODE_CERT_DOMAIN" 2>/dev/null || true
 
+    # TCP-порт API ноды (network_mode: host)
+    local NODE_LISTEN_PORT=2222
+    if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        return 1
+    fi
+
     # ─── Остановка и подготовка файлов ───
     (
         cd /opt/remnawave
@@ -591,9 +616,9 @@ installation_node_local() {
         mkdir -p /var/www/html
 
         if [ "$has_local_sub" = true ]; then
-            generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN"
+            generate_docker_compose_full "$panel_cert_domain" "$sub_cert_domain" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
         else
-            generate_docker_compose_panel_with_node "$panel_cert_domain" "$NODE_CERT_DOMAIN"
+            generate_docker_compose_panel_with_node "$panel_cert_domain" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
         fi
 
         if [ -n "$existing_api_token" ]; then
@@ -617,8 +642,8 @@ installation_node_local() {
                           hostname -I | awk '{print $1}')
         # Подсеть remnawave-network покрывает панель в Docker; отдельно gateway не нужен.
         # Публичный IP — hairpin/SNAT, если панель ходит к ноде по внешнему адресу.
-        [ -n "$_nw_subnet" ] && ufw allow from "$_nw_subnet" to any port 2222 >/dev/null 2>&1 || true
-        [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port 2222 >/dev/null 2>&1 || true
+        [ -n "$_nw_subnet" ] && ufw allow from "$_nw_subnet" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
+        [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
@@ -669,7 +694,7 @@ installation_node_local() {
         cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name" 8443) || exit 1
         echo "$cr" > "$_tmp_cr"
         read cpu_u ci_u <<< "$cr"
-        create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" || exit 1
+        create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT" || exit 1
     ) &
     if ! show_spinner "Создание Ноды"; then
         print_error "Не удалось зарегистрировать ноду. Восстановление..."
@@ -879,6 +904,12 @@ installation_node_remote() {
     # Создаём директорию для selfsteal до запуска Docker (том монтируется в nginx)
     mkdir -p /var/www/html
 
+    local NODE_LISTEN_PORT=2222
+    if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
+        return 1
+    fi
+
     # Docker-compose для ноды
     (
         ensure_nginx
@@ -895,12 +926,12 @@ services:
         hard: 1048576
     network_mode: host
     environment:
-      - NODE_PORT=2222
+      - NODE_PORT=${NODE_LISTEN_PORT}
       - SECRET_KEY=$(echo -e "$CERTIFICATE")
     volumes:
       - /dev/shm:/dev/shm:rw
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222']
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 ${NODE_LISTEN_PORT}']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -916,7 +947,7 @@ EOL
     show_spinner "Подготовка файлов" || true
 
     (
-        ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
+        ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
         ufw allow 8443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
@@ -1132,6 +1163,11 @@ installation_node_with_existing_subpage() {
     mkdir -p /var/www/html
     mkdir -p "${NODE_INSTALL_DIR}"
 
+    local NODE_LISTEN_PORT=2222
+    if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        return 1
+    fi
+
     # Останавливаем существующую страницу подписки
     (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
     show_spinner "Остановка страницы подписки" || true
@@ -1141,7 +1177,7 @@ installation_node_with_existing_subpage() {
         generate_docker_compose_node_with_subpage \
             "$NODE_CERT_DOMAIN" "$SUB_CERT_DOMAIN" \
             "$PANEL_URL" "$API_TOKEN" "$CERTIFICATE" \
-            "$NODE_INSTALL_DIR"
+            "$NODE_INSTALL_DIR" "$NODE_LISTEN_PORT"
         generate_nginx_conf_node_with_subpage \
             "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" \
@@ -1151,7 +1187,7 @@ installation_node_with_existing_subpage() {
 
     # Настройка файрвола
     (
-        ufw allow from "$PANEL_IP" to any port 2222 >/dev/null 2>&1
+        ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
         ufw allow 8443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1

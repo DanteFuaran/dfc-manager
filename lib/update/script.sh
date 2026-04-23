@@ -158,7 +158,8 @@ _delete_component_subpage() {
         if is_panel_installed && [ -n "$_panel_domain" ] && [ -n "$_cookie_name" ] && [ -n "$_cookie_value" ]; then
             if [ -f "/opt/remnanode/docker-compose.yml" ] && [ -n "$_node_domain" ] && [ -n "$_node_cert" ]; then
                 # Панель + нода (без subpage)
-                generate_docker_compose_panel_with_node "$_panel_cert" "$_node_cert"
+                _node_port=$(grep -oE 'NODE_PORT=[0-9]+' /opt/remnanode/docker-compose.yml 2>/dev/null | head -1 | cut -d= -f2)
+                generate_docker_compose_panel_with_node "$_panel_cert" "$_node_cert" "${_node_port:-2222}"
                 generate_nginx_conf_panel_with_node "$_panel_domain" "$_node_domain" \
                     "$_panel_cert" "$_node_cert" \
                     "$_cookie_name" "$_cookie_value"

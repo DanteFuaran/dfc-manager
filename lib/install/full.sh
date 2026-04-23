@@ -176,9 +176,16 @@ installation_full() {
                        curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
                        hostname -I | awk '{print $1}')
 
+    local NODE_LISTEN_PORT=2222
+    if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        echo
+        show_continue_prompt || true
+        return
+    fi
+
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
-        generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
+        generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
@@ -187,8 +194,8 @@ installation_full() {
 
     (
         setup_firewall
-        ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
-        [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port 2222 >/dev/null 2>&1 || true
+        ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
+        [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
@@ -326,7 +333,7 @@ installation_full() {
     fi
 
     # 6. Создание ноды
-    if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
+    if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
         print_error "Не удалось создать ноду"
     fi
 
@@ -556,9 +563,16 @@ installation_panel_with_node() {
                        curl -s4 --max-time 5 api.ipify.org 2>/dev/null || \
                        hostname -I | awk '{print $1}')
 
+    local NODE_LISTEN_PORT=2222
+    if ! prompt_remnanode_listen_port NODE_LISTEN_PORT 2222; then
+        echo
+        show_continue_prompt || true
+        return
+    fi
+
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
-        generate_docker_compose_panel_with_node "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN"
+        generate_docker_compose_panel_with_node "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
         generate_nginx_conf_panel_with_node "$PANEL_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
@@ -567,8 +581,8 @@ installation_panel_with_node() {
 
     (
         setup_firewall
-        ufw allow from "${network_subnet}" to any port 2222 >/dev/null 2>&1 || true
-        [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port 2222 >/dev/null 2>&1 || true
+        ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
+        [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow 8443/tcp >/dev/null 2>&1 || true
     ) &
@@ -691,7 +705,7 @@ installation_panel_with_node() {
         return
     fi
 
-    if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"; then
+    if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
         print_error "Не удалось создать ноду"
     fi
 

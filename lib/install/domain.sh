@@ -300,6 +300,53 @@ prompt_domain_with_retry() {
     done
 }
 
+# Возвращает 0, если на хосте есть TCP LISTEN на $1 (число порта)
+tcp_port_is_listening() {
+    local port="${1:-}"
+    [[ "$port" =~ ^[0-9]+$ ]] || return 1
+    command -v ss >/dev/null 2>&1 || return 1
+    if ss -tlnH 2>/dev/null | awk -v p="$port" '
+        {
+            n = split($4, a, ":")
+            lp = a[n] + 0
+            if (lp == p + 0) { exit 0 }
+        }
+        END { exit 1 }'
+    then
+        return 0
+    fi
+    return 1
+}
+
+# Останавливает remnanode, проверяет занятость TCP-порта (по умолчанию 2222);
+# при занятости предлагает ввести другой. Имя переменной — первый аргумент.
+# Возврат: 1 при отмене (Esc), 0 при успехе.
+prompt_remnanode_listen_port() {
+    local var_name="${1:-NODE_LISTEN_PORT}"
+    local default_port="${2:-2222}"
+    (cd /opt/remnanode 2>/dev/null && docker compose down -t 2 >/dev/null 2>&1) || true
+    sleep 0.3
+    local candidate="$default_port"
+    while tcp_port_is_listening "$candidate"; do
+        echo
+        print_warning "TCP-порт $candidate уже занят (нода слушает API на этом порту, network_mode: host)."
+        local _newp=""
+        reading_inline "Введите свободный порт для ноды ${DARKGRAY}(например 2223)${DARKGRAY}:" _newp
+        local _rc=$?
+        if [[ $_rc -eq 2 ]]; then
+            return 1
+        fi
+        _newp="${_newp//[^0-9]/}"
+        if [[ ! "$_newp" =~ ^[0-9]+$ ]] || [ "$_newp" -lt 1 ] || [ "$_newp" -gt 65535 ]; then
+            print_error "Укажите число от 1 до 65535"
+            continue
+        fi
+        candidate="$_newp"
+    done
+    printf -v "$var_name" '%s' "$candidate"
+    return 0
+}
+
 check_node_domain() {
     local domain_url="$1"
     local token="$2"

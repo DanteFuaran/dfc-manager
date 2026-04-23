@@ -222,6 +222,17 @@ _installation_subpage_on_panel() {
     show_spinner "Остановка сервисов"
     echo
 
+    local NODE_LISTEN_PORT=2222
+    if [ "$has_local_node" = true ]; then
+        NODE_LISTEN_PORT=$(echo "$backup_node_compose" | grep -oE 'NODE_PORT=[0-9]+' | head -1 | cut -d= -f2)
+        NODE_LISTEN_PORT="${NODE_LISTEN_PORT:-2222}"
+        if ! prompt_remnanode_listen_port NODE_LISTEN_PORT "$NODE_LISTEN_PORT"; then
+            _restore_config
+            show_continue_prompt || return 1
+            return 1
+        fi
+    fi
+
     # Подготовка файлов (перегенерация docker-compose и nginx)
     if [ "$has_local_node" = true ]; then
         local selfsteal_domain node_cert_domain
@@ -235,7 +246,7 @@ _installation_subpage_on_panel() {
         node_cert_domain=$(grep -A5 "server_name ${selfsteal_domain};" ${DIR_NGINX}nginx.conf | grep -oP '/ssl/\K[^/]+' | head -1)
         [ -z "$node_cert_domain" ] && node_cert_domain="$selfsteal_domain"
         (
-            generate_docker_compose_full "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain"
+            generate_docker_compose_full "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain" "$NODE_LISTEN_PORT"
             generate_nginx_conf_full "$panel_domain" "$SUB_DOMAIN" "$selfsteal_domain" \
                 "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
