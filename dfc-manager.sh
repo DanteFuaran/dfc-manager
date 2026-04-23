@@ -18,6 +18,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
             git -C "${_INSTALL_DIR}" fetch --depth 1 origin main >/dev/null 2>&1 \
                 && git -C "${_INSTALL_DIR}" reset --hard origin/main >/dev/null 2>&1 || true
         fi
+        chmod +x "$_INSTALL_SCRIPT" 2>/dev/null || true
         exec "$_INSTALL_SCRIPT" "$@"
     fi
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
