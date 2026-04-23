@@ -72,7 +72,7 @@ handle_interrupt() {
     clear
     printf '\033[0;31mСкрипт был остановлен пользователем\033[0m\n\n'
     cleanup_uninstalled 2>/dev/null || true
-    exit 130
+    exit 0
 }
 
 trap cleanup_terminal EXIT
