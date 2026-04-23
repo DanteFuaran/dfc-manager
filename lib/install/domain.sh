@@ -305,8 +305,9 @@ tcp_port_is_listening() {
     local port="${1:-}"
     [[ "$port" =~ ^[0-9]+$ ]] || return 1
     command -v ss >/dev/null 2>&1 || return 1
-    if ss -tlnH 2>/dev/null | awk -v p="$port" '
-        {
+    # NR>1 — пропуск строки заголовка (без флага -H для совместимости со старым iproute2)
+    if ss -tln 2>/dev/null | awk -v p="$port" '
+        NR > 1 {
             n = split($4, a, ":")
             lp = a[n] + 0
             if (lp == p + 0) { exit 0 }
@@ -332,6 +333,32 @@ prompt_remnanode_listen_port() {
         print_warning "TCP-порт $candidate уже занят (нода слушает API на этом порту, network_mode: host)."
         local _newp=""
         reading_inline "Введите свободный порт для ноды ${DARKGRAY}(например 2223)${DARKGRAY}:" _newp
+        local _rc=$?
+        if [[ $_rc -eq 2 ]]; then
+            return 1
+        fi
+        _newp="${_newp//[^0-9]/}"
+        if [[ ! "$_newp" =~ ^[0-9]+$ ]] || [ "$_newp" -lt 1 ] || [ "$_newp" -gt 65535 ]; then
+            print_error "Укажите число от 1 до 65535"
+            continue
+        fi
+        candidate="$_newp"
+    done
+    printf -v "$var_name" '%s' "$candidate"
+    return 0
+}
+
+# Порт входящего VLESS REALITY на хосте (по умолчанию 8443), без остановки контейнеров.
+# Возврат: 1 при отмене (Esc), 0 при успехе.
+prompt_host_inbound_port() {
+    local var_name="${1:-NODE_INBOUND_PORT}"
+    local default_port="${2:-8443}"
+    local candidate="$default_port"
+    while tcp_port_is_listening "$candidate"; do
+        echo
+        print_warning "TCP-порт $candidate уже занят (входящий VLESS REALITY на хосте, network_mode: host)."
+        local _newp=""
+        reading_inline "Введите свободный порт для входящего соединения ${DARKGRAY}(например 8444)${DARKGRAY}:" _newp
         local _rc=$?
         if [[ $_rc -eq 2 ]]; then
             return 1

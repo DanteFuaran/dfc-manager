@@ -183,6 +183,13 @@ installation_full() {
         return
     fi
 
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
+        echo
+        show_continue_prompt || true
+        return
+    fi
+
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
         generate_docker_compose_full "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
@@ -197,7 +204,7 @@ installation_full() {
         ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
-        ufw allow 8443/tcp >/dev/null 2>&1 || true
+        ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true
 
@@ -319,7 +326,7 @@ installation_full() {
     # 5. Создание config profile с VLESS REALITY
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result
-    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" 8443)
+    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" "$NODE_INBOUND_PORT")
 
     local config_profile_uuid inbound_uuid
     read config_profile_uuid inbound_uuid <<< "$config_result"
@@ -338,7 +345,7 @@ installation_full() {
     fi
 
     # 7. Создание хоста
-    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443; then
+    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" "$NODE_INBOUND_PORT"; then
         print_error "Не удалось зарегистрировать хост"
     fi
 
@@ -570,6 +577,13 @@ installation_panel_with_node() {
         return
     fi
 
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
+        echo
+        show_continue_prompt || true
+        return
+    fi
+
     (
         generate_env_file "$PANEL_DOMAIN" "$SUB_DOMAIN"
         generate_docker_compose_panel_with_node "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN" "$NODE_LISTEN_PORT"
@@ -584,7 +598,7 @@ installation_panel_with_node() {
         ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
-        ufw allow 8443/tcp >/dev/null 2>&1 || true
+        ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
     ) &
     show_spinner "Настройка файрвола" || true
 
@@ -692,7 +706,7 @@ installation_panel_with_node() {
 
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result
-    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" 8443)
+    config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" "$NODE_INBOUND_PORT")
 
     local config_profile_uuid inbound_uuid
     read config_profile_uuid inbound_uuid <<< "$config_result"
@@ -709,7 +723,7 @@ installation_panel_with_node() {
         print_error "Не удалось создать ноду"
     fi
 
-    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443; then
+    if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" "$NODE_INBOUND_PORT"; then
         print_error "Не удалось зарегистрировать хост"
     fi
 

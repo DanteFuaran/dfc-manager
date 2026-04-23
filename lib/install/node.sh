@@ -611,6 +611,12 @@ installation_node_local() {
     ) &
     show_spinner "Остановка сервисов" || true
 
+    # TCP-порт входящего VLESS REALITY (Xray inbound, network_mode: host)
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
+        return 1
+    fi
+
     (
         exec >/dev/null 2>&1
         mkdir -p /var/www/html
@@ -645,7 +651,7 @@ installation_node_local() {
         [ -n "$_nw_subnet" ] && ufw allow from "$_nw_subnet" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
-        ufw allow 8443/tcp >/dev/null 2>&1 || true
+        ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
     ) &
     show_spinner "Подготовка файлов" || true
 
@@ -691,7 +697,7 @@ installation_node_local() {
         pk=$(generate_xray_keys "$domain_url" "$token") || exit 1
         [ -z "$pk" ] && exit 1
         echo "$pk" > "$_tmp_pk"
-        cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name" 8443) || exit 1
+        cr=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$pk" "$entity_name" "$NODE_INBOUND_PORT") || exit 1
         echo "$cr" > "$_tmp_cr"
         read cpu_u ci_u <<< "$cr"
         create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT" || exit 1
@@ -720,7 +726,7 @@ installation_node_local() {
 
     (
         exec >/dev/null 2>&1
-        create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" 8443 || true
+        create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" "$NODE_INBOUND_PORT" || true
         squad_uuids=$(get_default_squad "$domain_url" "$token") || true
         if [ -n "$squad_uuids" ]; then
             while IFS= read -r squad_uuid; do
@@ -910,6 +916,12 @@ installation_node_remote() {
         return 1
     fi
 
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
+        [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null
+        return 1
+    fi
+
     # Docker-compose для ноды
     (
         ensure_nginx
@@ -949,7 +961,7 @@ EOL
     (
         ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
-        ufw allow 8443/tcp >/dev/null 2>&1
+        ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
     show_spinner "Настройка файрвола" || true
@@ -1172,6 +1184,11 @@ installation_node_with_existing_subpage() {
     (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
     show_spinner "Остановка страницы подписки" || true
 
+    local NODE_INBOUND_PORT=8443
+    if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
+        return 1
+    fi
+
     # Генерируем конфиги для ноды + страницы подписки
     (
         generate_docker_compose_node_with_subpage \
@@ -1189,7 +1206,7 @@ installation_node_with_existing_subpage() {
     (
         ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
-        ufw allow 8443/tcp >/dev/null 2>&1
+        ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
     show_spinner "Настройка файрвола" || true
