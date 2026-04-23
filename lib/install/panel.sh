@@ -4,6 +4,7 @@
 
 installation_panel() {
     local with_subpage="${1:-true}"
+    local install_completed=false
 
     # Гарантируем валидную рабочую директорию перед началом
     cd /opt 2>/dev/null || cd / 2>/dev/null
@@ -32,6 +33,7 @@ installation_panel() {
     # При отмене первичной установки удаляем и панель, и каталог страницы подписки (если он создавался)
     _abort_fresh_panel_install() {
         [ "$is_fresh_install" != true ] && return 0
+        [ "$install_completed" = true ] && return 0
         rm -rf "${DIR_PANEL}" 2>/dev/null || true
         if [ "$with_subpage" = true ]; then
             rm -rf "${DIR_SUB}" 2>/dev/null || true
@@ -246,6 +248,7 @@ installation_panel() {
     fi
 
     if [ -z "$token" ]; then
+        install_completed=true
         print_error "Не удалось получить токен авторизации"
         print_error "Создайте API токен вручную через панель: https://$PANEL_DOMAIN"
         clear
@@ -302,8 +305,9 @@ installation_panel() {
         print_error "Не удалось сбросить суперадмина"
     fi
 
-    # Оставляем общий trap активным, чтобы Ctrl+C на финальном экране
-    # всегда проходил через handle_interrupt с корректным clear + сообщением.
+    # Финальный экран достигнут: при Ctrl+C только корректно завершаем скрипт
+    # через handle_interrupt, без отката уже завершённой установки.
+    install_completed=true
 
     clear
     tput civis 2>/dev/null
