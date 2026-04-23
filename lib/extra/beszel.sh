@@ -364,7 +364,7 @@ install_beszel() {
         echo
         tput civis 2>/dev/null || true
         while kill -0 $_chk_pid 2>/dev/null; do
-            printf "\r\033[K ${GREEN}%s${NC}\033[0m" "${_spin[$_si]}"
+            printf "\r\033[K${GREEN}%s${NC}\033[0m" "${_spin[$_si]}"
             _si=$(( (_si+1) % 10 ))
             sleep 0.08
         done
