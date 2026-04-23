@@ -267,12 +267,9 @@ manage_logs() {
 }
 
 manage_reinstall() {
-    CONFIRM_WARN_LINE="${RED}⚠️  Все данные будут удалены!${NC}"
-    if ! confirm_nav --delete "🗑️  Переустановить компоненты" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Переустановить компоненты"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
 
     local rw_path
     rw_path=$(detect_remnawave_path) || return

@@ -1549,12 +1549,12 @@ _mt_do_uninstall() {
         return 0
     fi
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}        🗑️  Удаление MTProto${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
     if ! _mt_installed; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}        🗑️  Удаление MTProto${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo
         # Контейнера нет, но /opt/mtproto/ мог остаться от неудачной установки — чистим тихо.
         if [ -d "$_MT_DIR" ] || grep -q "BEGIN_MT_CONNECT_" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
             _mt_do_uninstall --force
@@ -1565,12 +1565,9 @@ _mt_do_uninstall() {
         _mt_press_enter; return
     fi
 
-    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}MTProto будет удалён с сервера.${NC}")"
-    if ! confirm_nav --delete "🗑️  Удаление MTProto" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление MTProto"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
     echo
     echo
 

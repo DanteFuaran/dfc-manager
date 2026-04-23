@@ -5,12 +5,9 @@
 # ─── Удаление отдельных компонентов Remnawave ───────────────────────────────
 
 _delete_component_panel() {
-    CONFIRM_WARN_LINE="${RED}⚠️  Все данные панели будут удалены!${NC}"
-    if ! confirm_nav --delete "🗑️  Удаление панели Remnawave" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление панели Remnawave"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
     echo
     (
         cd /opt/remnawave 2>/dev/null
@@ -30,12 +27,9 @@ _delete_component_panel() {
 }
 
 _delete_component_node() {
-    CONFIRM_WARN_LINE="${RED}⚠️  Все данные ноды будут удалены!${NC}"
-    if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -107,12 +101,9 @@ _delete_component_node() {
 }
 
 _delete_component_subpage() {
-    CONFIRM_WARN_LINE="${RED}⚠️  Все данные страницы подписки будут удалены!${NC}"
-    if ! confirm_nav --delete "🗑️  Удаление страницы подписки" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление страницы подписки"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
     echo
     echo
 
@@ -261,12 +252,9 @@ manage_delete_components() {
             beszel_agent) uninstall_beszel_agent ;;
             mtproto)      _mt_do_uninstall || true ;;
             delete_all)
-                CONFIRM_WARN_LINE="${RED}⚠️  Удалить все установленные компоненты${NC}"
-                if ! confirm_nav --delete "🗑️  Удаление всех компонентов" "Подтвердить удаление" "Отменить удаление"; then
-                    unset CONFIRM_WARN_LINE
+                if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
                     continue
                 fi
-                unset CONFIRM_WARN_LINE
                 echo
                 echo
                 if is_panel_installed; then
@@ -503,12 +491,9 @@ update_script() {
 }
 
 remove_script_all() {
-    CONFIRM_WARN_LINE="${RED}⚠️  ВСЕ ДАННЫЕ REMNAWAVE БУДУТ УДАЛЕНЫ!${NC}"
-    if ! confirm_nav --delete "💣 Удаление скрипта и данных" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "💣 Удаление скрипта и данных"; then
         return 1
     fi
-    unset CONFIRM_WARN_LINE
 
     echo
 
@@ -595,12 +580,9 @@ remove_script_all() {
 }
 
 remove_script() {
-    CONFIRM_WARN_LINE="${YELLOW}⚠️  Данные скрипта будут удалены.${NC}"
-    if ! confirm_nav --delete "🗑️  Удаление скрипта" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление скрипта"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
 
     rm -f /usr/local/bin/dfc-manager
     rm -f /usr/local/bin/dfc

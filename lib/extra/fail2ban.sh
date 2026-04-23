@@ -126,14 +126,11 @@ JAIL_EOF
                 ;;
             2)
                 echo
-                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Fail2ban будет полностью удалён с сервера.${NC}")"
-                if ! confirm_nav --delete "🗑️  Удаление Fail2ban" "Подтвердить удаление" "Отменить удаление"; then
-                    unset CONFIRM_WARN_LINE
+                if ! confirm_nav --delete "🗑️  Удаление Fail2ban"; then
                     print_error "Операция отменена"
                     sleep 2
                     return 0
                 fi
-                unset CONFIRM_WARN_LINE
                 echo
                 (
                     systemctl stop fail2ban >/dev/null 2>&1

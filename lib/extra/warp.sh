@@ -266,13 +266,12 @@ install_warp_native() {
 }
 
 uninstall_warp_native() {
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}          🗑️  Удаление WARP${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-
     # Проверяем, установлен ли WARP
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${BLUE}          🗑️  Удаление WARP${NC}"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         print_error "WARP не установлен"
         echo
@@ -281,14 +280,11 @@ uninstall_warp_native() {
         return 0
     fi
 
-    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Вы уверены, что хотите удалить WARP?${NC}")"
-    if ! confirm_nav --delete "🗑️  Удаление WARP" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🗑️  Удаление WARP"; then
         print_error "Операция отменена"
         sleep 2
         return 0
     fi
-    unset CONFIRM_WARN_LINE
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"

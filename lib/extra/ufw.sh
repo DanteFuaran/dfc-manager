@@ -197,12 +197,9 @@ manage_ufw() {
 
                     # Запрашиваем подтверждение — не покидаем подменю ни при каком ответе
                     echo
-                    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Правило:${NC} ${WHITE}${rules[$del_choice]}${NC}")"
-                    if ! confirm_nav --delete "➖  Удалить правило UFW" "Подтвердить удаление" "Отменить удаление"; then
-                        unset CONFIRM_WARN_LINE
+                    if ! confirm_nav --delete "➖  Удалить правило UFW"; then
                         continue
                     fi
-                    unset CONFIRM_WARN_LINE
 
                     # Подтверждено — удаляем правило
                     local rule_num=$((del_choice + 1))
@@ -226,12 +223,9 @@ manage_ufw() {
                     show_continue_prompt || return 1
                     continue
                 fi
-                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}Будет удалено правил:${NC} ${WHITE}${rule_count}${NC}")"
-                if ! confirm_nav --delete "🗑️  Удалить все правила UFW" "Подтвердить удаление" "Отменить удаление"; then
-                    unset CONFIRM_WARN_LINE
+                if ! confirm_nav --delete "🗑️  Удалить все правила UFW"; then
                     continue
                 fi
-                unset CONFIRM_WARN_LINE
                 echo
                 (
                     local cnt
@@ -250,12 +244,9 @@ manage_ufw() {
             4) continue ;;
             5)
                 # Удалить UFW
-                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}UFW будет отключён и удалён с сервера.${NC}")"
-                if ! confirm_nav --delete "❌  Удалить Firewall (UFW)" "Подтвердить удаление" "Отменить удаление"; then
-                    unset CONFIRM_WARN_LINE
+                if ! confirm_nav --delete "❌  Удалить Firewall (UFW)"; then
                     continue
                 fi
-                unset CONFIRM_WARN_LINE
                 echo
                 (
                     ufw disable >/dev/null 2>&1 || true

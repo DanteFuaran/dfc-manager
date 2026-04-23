@@ -574,15 +574,12 @@ db_restore() {
         return
     fi
 
-    CONFIRM_WARN_LINE="$(echo -e "${WHITE}Файл:${NC} ${DARKGRAY}${selected_name}${NC}\n${WHITE}Режим:${NC} ${YELLOW}Полное восстановление${NC}\n\n${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Все текущие данные панели будут потеряны.${NC}\n${WHITE}Логин и пароль для входа в панель будут сброшены.${NC}")"
-    if ! confirm_nav --delete "📥 Полное восстановление базы" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "📥 Полное восстановление базы"; then
         print_error "Операция отменена"
         rm -rf "$tmp_extract" 2>/dev/null
         sleep 2
         return 0
     fi
-    unset CONFIRM_WARN_LINE
 
     echo
 

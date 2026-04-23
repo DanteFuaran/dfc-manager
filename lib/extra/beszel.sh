@@ -1027,12 +1027,9 @@ uninstall_beszel() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Панель мониторинга Beszel будет удалена.${NC}")"
-        if ! confirm_nav --delete "🗑️  Удаление Beszel" "Подтвердить удаление" "Отменить удаление"; then
-            unset CONFIRM_WARN_LINE
+        if ! confirm_nav --delete "🗑️  Удаление Beszel"; then
             return
         fi
-        unset CONFIRM_WARN_LINE
         echo
         echo
     fi
@@ -1234,12 +1231,9 @@ uninstall_beszel_agent() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Агент Beszel будет остановлен и удалён.${NC}")"
-        if ! confirm_nav --delete "🗑️  Удаление агента Beszel" "Подтвердить удаление" "Отменить удаление"; then
-            unset CONFIRM_WARN_LINE
+        if ! confirm_nav --delete "🗑️  Удаление агента Beszel"; then
             return
         fi
-        unset CONFIRM_WARN_LINE
         echo
     fi
 

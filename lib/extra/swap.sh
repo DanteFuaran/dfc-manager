@@ -64,14 +64,11 @@ manage_swap() {
             1)
                 # Только удаляем
                 echo
-                CONFIRM_WARN_LINE="$(echo -e "${YELLOW}SWAP будет отключён и файл подкачки удалён.${NC}")"
-                if ! confirm_nav --delete "🗑️  Удаление SWAP" "Подтвердить удаление" "Отменить удаление"; then
-                    unset CONFIRM_WARN_LINE
+                if ! confirm_nav --delete "🗑️  Удаление SWAP"; then
                     print_error "Операция отменена"
                     sleep 2
                     return 0
                 fi
-                unset CONFIRM_WARN_LINE
                 echo
                 (
                     swapoff -a 2>/dev/null

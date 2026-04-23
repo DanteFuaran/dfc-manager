@@ -53,12 +53,9 @@ restore_nginx_config() {
         fi
     fi
 
-    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  Nginx будет восстановлен к заводским настройкам.${NC}\n${YELLOW}   Конфигурация: только панель (порт 443).${NC}\n${YELLOW}   Нода и подписка будут отключены от Nginx.${NC}\n\n${DARKGRAY}  Домен панели:   ${WHITE}${panel_domain}${NC}\n${DARKGRAY}  Сертификат:     ${WHITE}${panel_cert}${NC}")"
-    if ! confirm_nav --delete "⚠️  Экстренное восстановление Nginx" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "⚠️  Экстренное восстановление Nginx"; then
         return
     fi
-    unset CONFIRM_WARN_LINE
 
     # ─── Генерируем заводской конфиг: только панель ───
     # (_nginx_http_header сохраняет внешние блоки (Beszel и др.) и восстанавливает их)
@@ -806,14 +803,11 @@ EOF
 }
 
 change_credentials() {
-    CONFIRM_WARN_LINE="$(echo -e "${YELLOW}⚠️  ВНИМАНИЕ!${NC}\n${WHITE}Эта операция удалит текущего суперадмина из базы данных.${NC}\n${WHITE}При следующем входе в панель вам будет предложено создать нового суперадмина.${NC}")"
-    if ! confirm_nav --delete "🔐 Сброс суперадмина" "Подтвердить удаление" "Отменить удаление"; then
-        unset CONFIRM_WARN_LINE
+    if ! confirm_nav --delete "🔐 Сброс суперадмина"; then
         print_error "Операция отменена"
         sleep 2
         return
     fi
-    unset CONFIRM_WARN_LINE
 
     echo
     echo

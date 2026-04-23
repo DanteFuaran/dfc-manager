@@ -472,31 +472,39 @@ show_install_error() {
 }
 
 # Двухпунктное подтверждение (↑↓, Enter, Esc), как show_arrow_menu.
-# confirm_nav [--delete] "Заголовок" "Подтвердить…" "Отменить…"
-#   --delete — красный заголовок (операции удаления).
-# Перед вызовом можно задать CONFIRM_WARN_LINE — предупреждение над пунктами (не выбирается).
+# confirm_nav [--delete] "Заголовок"  — только заголовок: красный шрифт, пункты «✔️ Подтвердить» / «❌ Отменить»,
+#   Enter в подсказке: «Выбор»; CONFIRM_WARN_LINE не используется (детали — вторая строка заголовка через \n).
+# confirm_nav "Заголовок" "Пункт да" "Пункт нет"  — синий заголовок; опционально CONFIRM_WARN_LINE над пунктами.
 # Возврат: 0 — подтверждено (первый пункт), 1 — отмена (второй пункт или Esc).
 confirm_nav() {
     local _del=false
     [[ "${1:-}" == "--delete" ]] && { _del=true; shift; }
     local _title="${1:?}"
-    local _yes="${2:?}"
-    local _no="${3:?}"
+    local _yes _no
+
+    if [ "$_del" = true ]; then
+        _yes="✔️ Подтвердить"
+        _no="❌ Отменить"
+    else
+        _yes="${2:?}"
+        _no="${3:?}"
+    fi
 
     local -a _opts=()
-    if [ -n "${CONFIRM_WARN_LINE:-}" ]; then
+    if [ -n "${CONFIRM_WARN_LINE:-}" ] && [ "$_del" != true ]; then
         _opts+=($'\x01'"${CONFIRM_WARN_LINE}")
     fi
     _opts+=("$_yes" "$_no")
 
     if [ "$_del" = true ]; then
         MENU_TITLE_COLOR="${RED}"
+        MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     else
         MENU_TITLE_COLOR="${BLUE}"
+        MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация    ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     fi
     MENU_ESC_LABEL="Отмена"
-    MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация    ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
-    if [ -n "${CONFIRM_WARN_LINE:-}" ]; then
+    if [ -n "${CONFIRM_WARN_LINE:-}" ] && [ "$_del" != true ]; then
         MENU_INITIAL_IDX=1
     else
         MENU_INITIAL_IDX=0

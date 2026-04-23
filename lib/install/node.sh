@@ -38,12 +38,9 @@ installation_node() {
         [[ $_choice -eq 0 ]] && return 1
 
         # Enter — подтверждение переустановки
-        CONFIRM_WARN_LINE="${RED}⚠️  Все данные текущей ноды будут удалены!${NC}"
-        if ! confirm_nav --delete "⚠️  Переустановка ноды" "Подтвердить удаление" "Отменить удаление"; then
-            unset CONFIRM_WARN_LINE
+        if ! confirm_nav --delete "⚠️  Переустановка ноды"; then
             return 0
         fi
-        unset CONFIRM_WARN_LINE
 
         # Останавливаем и удаляем контейнер ноды с томами
         (
