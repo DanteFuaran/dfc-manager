@@ -393,8 +393,7 @@ installation_full() {
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
-    echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
+    echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
@@ -758,8 +757,7 @@ installation_panel_with_node() {
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
-    echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
+    echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo

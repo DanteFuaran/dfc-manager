@@ -13,7 +13,7 @@ print_success() {
     if [ -n "${DFC_UI_SPINNER_ALIGN:-}" ]; then
         printf "${GREEN}\u2705${NC}\033[0m  %b\n" "$1"
     else
-        printf "${GREEN}✅  %b${NC}\n" "$1"
+        printf "${GREEN}✅${NC}\033[0m  %b\n" "$1"
     fi
 }
 print_warning() {

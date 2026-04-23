@@ -576,8 +576,7 @@ EOL
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-        echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
+        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
@@ -819,8 +818,7 @@ _installation_subpage_standalone() {
         echo
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
-        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-        echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
+        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
