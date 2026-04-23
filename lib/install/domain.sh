@@ -384,7 +384,7 @@ prompt_remnanode_listen_port() {
     return 0
 }
 
-# Порт входящего VLESS REALITY на хосте (по умолчанию 8443), без остановки контейнеров.
+# Порт входящего соединения на хосте (по умолчанию 8443), без остановки контейнеров.
 # Возврат: 1 при отмене (Esc), 0 при успехе.
 prompt_host_inbound_port() {
     local var_name="${1:-NODE_INBOUND_PORT}"
@@ -392,9 +392,9 @@ prompt_host_inbound_port() {
     local candidate="$default_port"
     while tcp_port_is_listening "$candidate"; do
         echo
-        print_warning "TCP-порт $candidate уже занят (входящий VLESS REALITY на хосте, network_mode: host)."
+        print_warning "Порт $candidate занят пожалуйста выберите другой порт:"
         local _newp=""
-        reading_inline "Введите свободный порт для входящего соединения ${DARKGRAY}(например 8444)${DARKGRAY}:" _newp
+        reading_inline "Введите свободный порт ${DARKGRAY}(например 8444)${DARKGRAY}:" _newp
         local _rc=$?
         if [[ $_rc -eq 2 ]]; then
             return 1
