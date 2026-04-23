@@ -109,7 +109,6 @@ installation_full() {
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
         echo
-        echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
@@ -515,7 +514,6 @@ installation_panel_with_node() {
         esac
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
-        echo
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return

@@ -169,7 +169,6 @@ _installation_subpage_on_panel() {
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
         echo
-        echo
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
             echo
@@ -459,7 +458,6 @@ _installation_subpage_on_node() {
 
         LETSENCRYPT_EMAIL=$(grep -r "email" /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
         if [ -z "$LETSENCRYPT_EMAIL" ]; then
-            echo
             reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
             [[ $? -eq 2 ]] && continue
         else
@@ -719,7 +717,6 @@ _installation_subpage_standalone() {
             1) CERT_METHOD=1 ;;
         esac
 
-        echo
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && continue
         echo

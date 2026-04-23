@@ -472,7 +472,6 @@ install_beszel() {
                     return 0
                 fi
                 echo
-                echo
                 if ! get_cert_acme "$BESZEL_DOMAIN" "$BESZEL_EMAIL"; then
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -496,7 +495,6 @@ install_beszel() {
                 if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                     setup_cloudflare_credentials || return 1
                 fi
-                echo
                 echo
                 if ! get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL"; then
                     echo
@@ -809,7 +807,6 @@ change_domain_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
-                echo
                 if ! get_cert_acme "$NEW_DOMAIN" "$BESZEL_EMAIL"; then
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -833,7 +830,6 @@ change_domain_beszel() {
                 if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                     setup_cloudflare_credentials || return 1
                 fi
-                echo
                 if ! get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL"; then
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"

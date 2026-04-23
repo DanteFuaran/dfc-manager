@@ -553,11 +553,11 @@ installation_node_local() {
 
         LETSENCRYPT_EMAIL=$(grep -r "email" /etc/letsencrypt/accounts/ 2>/dev/null | grep -oP '"[^@]+@[^"]+' | head -1 | tr -d '"')
         if [ -z "$LETSENCRYPT_EMAIL" ]; then
-            reading "Email для Let's Encrypt:" LETSENCRYPT_EMAIL || return
+            reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
+            [[ $? -eq 2 ]] && return
         else
             echo -e "${GREEN}✅${NC} Email для сертификата: $LETSENCRYPT_EMAIL"
         fi
-        echo
         echo
 
         if ! handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"; then
@@ -839,7 +839,6 @@ installation_node_remote() {
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
         echo
-        echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
@@ -1111,7 +1110,6 @@ installation_node_with_existing_subpage() {
         esac
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
-        echo
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return

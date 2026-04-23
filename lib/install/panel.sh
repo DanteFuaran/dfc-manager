@@ -109,13 +109,11 @@ installation_panel() {
             1) CERT_METHOD=1 ;;
         esac
 
-        echo
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         if [[ $? -eq 2 ]]; then
             [ "$with_subpage" = true ] && rm -rf "${DIR_SUB}" 2>/dev/null || true
             continue
         fi
-        echo
         echo
 
         if [ "$CERT_METHOD" -eq 1 ]; then
