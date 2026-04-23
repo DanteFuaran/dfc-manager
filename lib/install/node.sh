@@ -609,6 +609,7 @@ installation_node_local() {
     if ! prompt_host_inbound_port NODE_INBOUND_PORT 8443; then
         return 1
     fi
+    echo
 
     # ─── Остановка и подготовка файлов ───
     (
