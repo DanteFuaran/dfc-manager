@@ -9,7 +9,7 @@ print_success() {
     if [ -n "${DFC_UI_SPINNER_ALIGN:-}" ]; then
         printf " ${GREEN}\u2705${NC}\033[0m  %b\n" "$1"
     else
-        printf "${GREEN}✅ %b${NC}\n" "$1"
+        printf "${GREEN}✅  %b${NC}\n" "$1"
     fi
 }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
@@ -63,7 +63,7 @@ show_spinner() {
     [ -n "${DFC_UI_SPINNER_ALIGN:-}" ] && _sl=" "
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m   %s" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
@@ -92,7 +92,7 @@ show_spinner_timer() {
     while [ $elapsed -lt $seconds ]; do
         local remaining=$((seconds - elapsed))
         for ((j=0; j<12; j++)); do
-            printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
+            printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m   %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
             sleep $delay
             i=$(( (i+1) % 10 ))
         done
@@ -132,12 +132,12 @@ show_spinner_until_ready() {
     local _checker_pid=$!
 
     tput civis 2>/dev/null || true
-    printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+    printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m   %s" "${spin[$i]}" "$msg"
 
     while kill -0 $_checker_pid 2>/dev/null; do
         i=$(( (i + 1) % 10 ))
         sleep $delay
-        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m   %s" "${spin[$i]}" "$msg"
     done
     wait $_checker_pid 2>/dev/null
 
