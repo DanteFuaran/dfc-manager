@@ -54,6 +54,7 @@ apply_template() {
         "${_api_url}" -o /var/www/html/index.html; then
         echo "$name" > /var/www/.current_template
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed
+        tput cnorm 2>/dev/null || true
         echo -e "${GREEN}✅${NC}  Установка шаблона: ${WHITE}${name}${NC}"
     else
         echo -e "${RED}✖${NC} Ошибка загрузки шаблона. Проверьте интернет-соединение."

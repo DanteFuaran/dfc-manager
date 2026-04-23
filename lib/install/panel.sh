@@ -125,6 +125,7 @@ installation_panel() {
         echo
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
+        tput cnorm 2>/dev/null || true
         for domain in "${!domains_to_check[@]}"; do
             printf "${GREEN}✅  Сертификат для %s уже существует${NC}\n" "$domain"
         done

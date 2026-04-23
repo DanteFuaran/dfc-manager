@@ -3,16 +3,23 @@
 # ═══════════════════════════════════════════════
 
 print_action()  { :; }
-print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
+print_error() {
+    tput cnorm 2>/dev/null || true
+    printf "${RED}✖ %b${NC}\n" "$1"
+}
 # DFC_UI_SPINNER_ALIGN=1 — режим удаления (lib/update/script.sh): зелёная только галочка, текст обычный.
 print_success() {
+    tput cnorm 2>/dev/null || true
     if [ -n "${DFC_UI_SPINNER_ALIGN:-}" ]; then
         printf "${GREEN}\u2705${NC}\033[0m  %b\n" "$1"
     else
         printf "${GREEN}✅  %b${NC}\n" "$1"
     fi
 }
-print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
+print_warning() {
+    tput cnorm 2>/dev/null || true
+    printf "${YELLOW}⚠️  %b${NC}\n" "$1"
+}
 
 # Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
 # Использование: center "текст" "$COLOR"
@@ -51,7 +58,6 @@ show_spinner_prepare() {
     done
     wait $pid 2>/dev/null || true
     printf "\r\033[K"
-    tput cnorm 2>/dev/null || true
 }
 
 show_spinner() {
@@ -72,7 +78,6 @@ show_spinner() {
     else
         printf "\r\033[K${RED}\u2716${NC}\033[0m  %s\n" "$done_msg"
     fi
-    tput cnorm 2>/dev/null || true
     return $exit_code
 }
 
@@ -95,7 +100,6 @@ show_spinner_timer() {
         elapsed=$((elapsed + 1))
     done
     printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
-    tput cnorm 2>/dev/null || true
 }
 
 show_spinner_until_ready() {
@@ -141,11 +145,9 @@ show_spinner_until_ready() {
 
     if [ "$_result" = "ok" ]; then
         printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$msg"
-        tput cnorm 2>/dev/null || true
         return 0
     fi
     printf "\r\033[K${YELLOW}⚠️${NC}\033[0m  %s (таймаут)\n" "$msg"
-    tput cnorm 2>/dev/null || true
     return 1
 }
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.78
+#   DFC Manager v0.1.79
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -163,6 +163,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
         [ $_ELAPSED -lt 1 ] && sleep $((1 - _ELAPSED))
     ) &
     show_spinner_prepare "Подготовка скрипта к запуску"
+    tput cnorm 2>/dev/null || true
 
     if [ -f "$_UPDATE_FLAG" ]; then
         rm -f "$_UPDATE_FLAG"
