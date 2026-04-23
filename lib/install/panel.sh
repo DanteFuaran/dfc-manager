@@ -339,7 +339,7 @@ installation_panel() {
         echo
     fi
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
+    echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo

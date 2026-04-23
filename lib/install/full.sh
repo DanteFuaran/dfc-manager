@@ -349,7 +349,6 @@ installation_full() {
     # 9. Создание API токена для subscription-page
     create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1
 
-    tput cnorm 2>/dev/null || true
     printf "${GREEN}✅${NC}  %b\n" "Обновление конфигураций"
 
     # 10. Шаблон selfsteal
@@ -395,7 +394,7 @@ installation_full() {
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
+    echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
@@ -713,7 +712,6 @@ installation_panel_with_node() {
 
     create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    tput cnorm 2>/dev/null || true
     printf "${GREEN}✅${NC}  %b\n" "Обновление конфигураций"
 
     randomhtml
@@ -761,7 +759,7 @@ installation_panel_with_node() {
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo
     echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-    echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
+    echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
     echo
     echo -e "${DARKGRAY}───────────────────────────────────────────────────────────${NC}"
     echo

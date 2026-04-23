@@ -577,7 +577,7 @@ EOL
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-        echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
+        echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
@@ -820,7 +820,7 @@ _installation_subpage_standalone() {
         echo -e "${BLUE}──────────────────────────────────────${NC}"
         echo
         echo -e "${YELLOW}📋 Команды запуска меню управления:${NC}"
-        echo -e "${GREEN}dfc-manager${NC} или ${GREEN}dfc${NC}"
+        echo -e "${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
     else
