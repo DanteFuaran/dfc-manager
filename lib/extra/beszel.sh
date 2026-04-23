@@ -310,6 +310,10 @@ manage_beszel() {
 }
 
 install_beszel() {
+    # Скрываем курсор на всё время шага, чтобы спиннеры не «подвисали» визуально
+    tput civis 2>/dev/null || true
+    trap 'tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "${GREEN}       📊 Установка Beszel${NC}"
@@ -451,10 +455,9 @@ install_beszel() {
         CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
-        show_arrow_menu "🔒  SSL сертификат" \
+        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
-            "🔐  Самоподписанный сертификат" \
             "──────────────────────────────────────" \
             "❌  Отмена"
         local cert_choice=$?
@@ -477,6 +480,7 @@ install_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
+                echo
                 CERT_DOMAIN="$BESZEL_DOMAIN"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
@@ -500,23 +504,10 @@ install_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
+                echo
                 CERT_DOMAIN="$base_domain"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
-                ;;
-            2) # Самоподписанный
-                local SELF_SIGNED_DIR
-                SELF_SIGNED_DIR=$(mktemp -d)
-                (
-                    openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-                        -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
-                        -out "${SELF_SIGNED_DIR}/fullchain.pem" \
-                        -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
-                ) &
-                show_spinner "Генерация самоподписанного сертификата"
-                CERT_DOMAIN="$BESZEL_DOMAIN"
-                CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
-                CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
                 ;;
             *) return 0 ;;
         esac
@@ -749,11 +740,10 @@ YAML
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       📊   Beszel успешно установлена !${NC}"
+    echo -e "$(center "📊 Beszel успешно установлена!" "$GREEN")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${YELLOW}🔗 Панель мониторинга:${NC}"
-    echo -e "${WHITE}https://${BESZEL_DOMAIN}${NC}"
+    echo -e "${YELLOW}🔗 Панель мониторинга: ${WHITE}https://${BESZEL_DOMAIN}${NC}"
     echo
     echo -e "${DARKGRAY}──────────────────────────────────────${NC}"
     echo
@@ -766,6 +756,9 @@ YAML
 
 # ─── Изменение домена Beszel ───
 change_domain_beszel() {
+    tput civis 2>/dev/null || true
+    trap 'tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
+
     if ! is_beszel_installed; then
         print_error "Beszel не установлен"
         return 1
@@ -800,10 +793,9 @@ change_domain_beszel() {
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
     else
-        show_arrow_menu "🔒  SSL сертификат" \
+        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
-            "🔐  Самоподписанный сертификат" \
             "──────────────────────────────────────" \
             "❌  Отмена"
         local cert_choice=$?
@@ -825,6 +817,7 @@ change_domain_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
+                echo
                 CERT_DOMAIN="$NEW_DOMAIN"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
@@ -847,23 +840,10 @@ change_domain_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
+                echo
                 CERT_DOMAIN="$base_domain"
                 CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
                 CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
-                ;;
-            2)
-                local SELF_SIGNED_DIR
-                SELF_SIGNED_DIR=$(mktemp -d)
-                (
-                    openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-                        -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
-                        -out "${SELF_SIGNED_DIR}/fullchain.pem" \
-                        -subj "/CN=${NEW_DOMAIN}" >/dev/null 2>&1
-                ) &
-                show_spinner "Генерация самоподписанного сертификата"
-                CERT_DOMAIN="$NEW_DOMAIN"
-                CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
-                CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
                 ;;
             *) return 0 ;;
         esac
