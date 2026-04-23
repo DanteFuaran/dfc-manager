@@ -302,10 +302,8 @@ installation_panel() {
         print_error "Не удалось сбросить суперадмина"
     fi
 
-    # Удаляем trap при успешном завершении
-    if [ "$is_fresh_install" = true ]; then
-        trap - INT TERM
-    fi
+    # Оставляем общий trap активным, чтобы Ctrl+C на финальном экране
+    # всегда проходил через handle_interrupt с корректным clear + сообщением.
 
     clear
     tput civis 2>/dev/null
