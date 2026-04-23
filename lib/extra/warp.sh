@@ -342,7 +342,6 @@ add_warp_to_config() {
     read -rsn 1 key 2>/dev/null || true
     echo
     echo
-    echo
 
     if [ "$key" = $'\x1b' ]; then
         return 0
