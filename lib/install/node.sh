@@ -567,7 +567,6 @@ installation_node_local() {
         fi
     else
         echo
-        echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
 
@@ -847,7 +846,6 @@ installation_node_remote() {
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
         echo
-        echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
 
@@ -1116,7 +1114,6 @@ installation_node_with_existing_subpage() {
         fi
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
-        echo
         echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
