@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════
 #   DFC Manager — Установщик Remnawave VPN Panel
-#   DFC Manager v0.1.98
+#   DFC Manager v0.1.97
 #   https://github.com/DanteFuaran/dfc-manager
 #   Установка: bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-manager/main/dfc-manager.sh)
 # ═══════════════════════════════════════════════════════════
@@ -18,7 +18,6 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
             git -C "${_INSTALL_DIR}" fetch --depth 1 origin main >/dev/null 2>&1 \
                 && git -C "${_INSTALL_DIR}" reset --hard origin/main >/dev/null 2>&1 || true
         fi
-        chmod +x "$_INSTALL_SCRIPT" 2>/dev/null || true
         exec "$_INSTALL_SCRIPT" "$@"
     fi
     _BLUE='\033[1;34m'; _RED='\033[0;31m'; _NC='\033[0m'
@@ -163,7 +162,7 @@ if [ "${DFC_AUTO_UPDATED:-}" != "1" ]; then
         _ELAPSED=$(($(date +%s) - _START_TIME))
         [ $_ELAPSED -lt 1 ] && sleep $((1 - _ELAPSED))
     ) &
-    show_spinner_prepare "${BLUE}Подготовка скрипта к запуску${NC}"
+    show_spinner_prepare "Подготовка скрипта к запуску"
     tput cnorm 2>/dev/null || true
 
     if [ -f "$_UPDATE_FLAG" ]; then

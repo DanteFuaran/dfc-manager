@@ -260,7 +260,7 @@ manage_delete_components() {
             echo -e "${RED}   🗑️   Удаление компонентов${NC}"
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             echo
-            echo -e "$(center "🔍  Компоненты не установлены")"
+            echo -e "  🔍  Компоненты не установлены"
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
             show_continue_prompt || true
@@ -290,6 +290,8 @@ manage_delete_components() {
                 if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
                     continue
                 fi
+                echo
+                echo
                 (
                 export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then
@@ -334,7 +336,7 @@ manage_delete_components() {
                 echo -e "       ${GREEN}🗑️  Удаление завершено${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "$(center "✅ Все компоненты были удалены!")"
+                printf "${GREEN}\u2705${NC}\033[0m  %s\n" "Все компоненты были удалены"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
@@ -423,7 +425,7 @@ install_script() {
     # Первичная установка — скачиваем полный архив (ветка берётся из $SCRIPT_BRANCH → version-файл)
     if ! curl -sL --connect-timeout 15 --max-time 120 "https://github.com/DanteFuaran/dfc-manager/archive/refs/heads/${SCRIPT_BRANCH}.tar.gz" \
         | tar -xz -C "${DIR_SCRIPT}" --strip-components=1; then
-        echo -e "${RED}✖ Не удалось скачать скрипт${NC}"
+        print_error "Не удалось скачать скрипт"
         exit 1
     fi
 
