@@ -4,7 +4,14 @@
 
 print_action()  { :; }
 print_error()   { printf "${RED}✖ %b${NC}\n" "$1"; }
-print_success() { printf "${GREEN}✅ %b${NC}\n" "$1"; }
+# DFC_UI_SPINNER_ALIGN=1 — режим удаления (lib/update/script.sh): зелёная только галочка, текст обычный.
+print_success() {
+    if [ -n "${DFC_UI_SPINNER_ALIGN:-}" ]; then
+        printf " ${GREEN}\u2705${NC}\033[0m  %b\n" "$1"
+    else
+        printf "${GREEN}✅ %b${NC}\n" "$1"
+    fi
+}
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
 
 # Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
@@ -52,18 +59,20 @@ show_spinner() {
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 msg="$1" done_msg="${2:-$1}"
+    local _sl=""
+    [ -n "${DFC_UI_SPINNER_ALIGN:-}" ] && _sl=" "
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r\033[K${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
+        printf "\r\033[K${_sl}${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
     else
-        printf "\r\033[K${RED}\u2716${NC}\033[0m  %s\n" "$done_msg"
+        printf "\r\033[K${_sl}${RED}\u2716${NC}\033[0m  %s\n" "$done_msg"
     fi
     tput cnorm 2>/dev/null || true
     return $exit_code
@@ -77,17 +86,20 @@ show_spinner_timer() {
     local i=0
     local delay=0.08
     local elapsed=0
+    local _sl=""
+    [ -n "${DFC_UI_SPINNER_ALIGN:-}" ] && _sl=" "
     tput civis 2>/dev/null || true
     while [ $elapsed -lt $seconds ]; do
         local remaining=$((seconds - elapsed))
         for ((j=0; j<12; j++)); do
-            printf "\r\033[K${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
+            printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
             sleep $delay
             i=$(( (i+1) % 10 ))
         done
         elapsed=$((elapsed + 1))
     done
-    printf "\r\033[K${GREEN}✅${NC}\033[0m  %s\n" "$done_msg"
+    printf "\r\033[K${_sl}${GREEN}\u2705${NC}\033[0m  %s\n" "$done_msg"
+    tput cnorm 2>/dev/null || true
 }
 
 show_spinner_until_ready() {
@@ -96,6 +108,8 @@ show_spinner_until_ready() {
     local timeout=${3:-120}
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 delay=0.08
+    local _sl=""
+    [ -n "${DFC_UI_SPINNER_ALIGN:-}" ] && _sl=" "
     local _done_file
     _done_file=$(mktemp)
 
@@ -118,12 +132,12 @@ show_spinner_until_ready() {
     local _checker_pid=$!
 
     tput civis 2>/dev/null || true
-    printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+    printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
 
     while kill -0 $_checker_pid 2>/dev/null; do
         i=$(( (i + 1) % 10 ))
         sleep $delay
-        printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        printf "\r\033[K${_sl}${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
     done
     wait $_checker_pid 2>/dev/null
 
@@ -132,11 +146,11 @@ show_spinner_until_ready() {
     rm -f "$_done_file"
 
     if [ "$_result" = "ok" ]; then
-        printf "\r\033[K${GREEN}✅${NC}\033[0m  %s\n" "$msg"
+        printf "\r\033[K${_sl}${GREEN}\u2705${NC}\033[0m  %s\n" "$msg"
         tput cnorm 2>/dev/null || true
         return 0
     fi
-    printf "\r\033[K${YELLOW}⚠️${NC}\033[0m  %s (таймаут)\n" "$msg"
+    printf "\r\033[K${_sl}${YELLOW}⚠️${NC}\033[0m  %s (таймаут)\n" "$msg"
     tput cnorm 2>/dev/null || true
     return 1
 }

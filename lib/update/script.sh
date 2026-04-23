@@ -8,6 +8,8 @@ _delete_component_panel() {
     if ! confirm_nav --delete "🗑️  Удаление панели Remnawave"; then
         return
     fi
+    export DFC_UI_SPINNER_ALIGN=1
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
     echo
     (
         cd /opt/remnawave 2>/dev/null
@@ -30,6 +32,8 @@ _delete_component_node() {
     if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave"; then
         return
     fi
+    export DFC_UI_SPINNER_ALIGN=1
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -104,6 +108,8 @@ _delete_component_subpage() {
     if ! confirm_nav --delete "🗑️  Удаление страницы подписки"; then
         return
     fi
+    export DFC_UI_SPINNER_ALIGN=1
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
     echo
     echo
 
@@ -257,6 +263,8 @@ manage_delete_components() {
                 fi
                 echo
                 echo
+                (
+                export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then
                     ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &
                     show_spinner "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
@@ -293,12 +301,13 @@ manage_delete_components() {
                 show_spinner "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
                 ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
                 show_spinner "Очистка Nginx" "Nginx очищен"
+                )
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo -e "       ${BLUE}🗑️  Удаление завершено${NC}"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                echo -e "  ${GREEN}✅ Все компоненты были удалены${NC}"
+                printf " ${GREEN}\u2705${NC}\033[0m  %s\n" "Все компоненты были удалены"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
@@ -495,6 +504,8 @@ remove_script_all() {
         return 1
     fi
 
+    (
+    export DFC_UI_SPINNER_ALIGN=1
     echo
 
     # Beszel Hub
@@ -576,6 +587,7 @@ remove_script_all() {
     cleanup_old_aliases
     print_success "Скрипт и все данные удалены"
     echo
+    )
     exit 0
 }
 

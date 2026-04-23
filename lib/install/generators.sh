@@ -3,15 +3,15 @@
 # ═══════════════════════════════════════════════
 
 generate_password() {
-    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%' | head -c 24
+    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%' 2>/dev/null | head -c 24
 }
 
 generate_username() {
-    openssl rand -base64 12 | tr -dc 'a-zA-Z' | head -c 8
+    openssl rand -base64 12 | tr -dc 'a-zA-Z' 2>/dev/null | head -c 8
 }
 
 generate_secret() {
-    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64
+    openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' 2>/dev/null | head -c 64
 }
 
 generate_webhook_secret() {
@@ -19,12 +19,14 @@ generate_webhook_secret() {
 }
 
 generate_admin_password() {
-    # Генерация пароля минимум 24 символа с заглавными, строчными буквами и цифрами
-    local upper=$(tr -dc 'A-Z' < /dev/urandom | head -c 8)
-    local lower=$(tr -dc 'a-z' < /dev/urandom | head -c 8)
-    local digits=$(tr -dc '0-9' < /dev/urandom | head -c 8)
-    # Перемешиваем и добавляем ещё символов для длины
-    echo "${upper}${lower}${digits}" | fold -w1 | shuf | tr -d '\n' && tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 8
+    # Генерация пароля: классы A-Z, a-z, 0-9; tr|head даёт SIGPIPE — stderr tr глушим (без «Broken pipe» в UI)
+    local upper lower digits shufpart tail
+    upper=$(LC_ALL=C tr -dc 'A-Z' </dev/urandom 2>/dev/null | head -c 8)
+    lower=$(LC_ALL=C tr -dc 'a-z' </dev/urandom 2>/dev/null | head -c 8)
+    digits=$(LC_ALL=C tr -dc '0-9' </dev/urandom 2>/dev/null | head -c 8)
+    shufpart=$(echo "${upper}${lower}${digits}" | fold -w1 | shuf | tr -d '\n')
+    tail=$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom 2>/dev/null | head -c 8)
+    printf '%s%s\n' "$shufpart" "$tail"
 }
 
 generate_admin_username() {
@@ -35,7 +37,7 @@ generate_admin_username() {
 generate_cookie_key() {
     # Генерация случайного ключа для cookie-защиты панели (16 символов, буквы + цифры)
     local key
-    key=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 16)
+    key=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' 2>/dev/null | head -c 16)
     echo "$key"
 }
 
