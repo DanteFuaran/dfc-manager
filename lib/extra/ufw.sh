@@ -250,6 +250,10 @@ manage_ufw() {
                 if ! confirm_nav --delete "❌  Удалить Firewall (UFW)"; then
                     continue
                 fi
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "$(center "❌  Удалить Firewall (UFW)" "$BLUE")"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 (
                     ufw disable >/dev/null 2>&1 || true
@@ -258,10 +262,11 @@ manage_ufw() {
                     true
                 ) &
                 show_spinner "Удаление UFW"
-                print_success "UFW успешно удалён"
+                echo
+                echo -e "${GREEN}✅ UFW был успешно удалён!${NC}"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                show_continue_prompt || return 1
+                show_continue_prompt "Выход" || return 1
                 ;;
             6) continue ;;
             7) return 0 ;;

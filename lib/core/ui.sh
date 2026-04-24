@@ -443,12 +443,13 @@ reading_inline() {
     printf -v "$var_name" '%s' "$input"
 }
 
-# Промпт "Enter: Продолжить    Esc: Назад"
+# Промпт "Enter: Продолжить    Esc: Назад" (или Esc: <ярлык>, если передан первый аргумент, напр. «Выход»)
 # Возвращает: 0 = Enter (назад на одно меню), 1 = Esc (в главное меню)
 show_continue_prompt() {
+    local _esc_lbl="${1:-Назад}"
     _flush_stdin
     tput civis 2>/dev/null
-    printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: Назад${NC}"
+    printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
     while true; do
         local _cpk
         IFS= read -rsn1 _cpk 2>/dev/null
