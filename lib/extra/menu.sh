@@ -11,8 +11,8 @@ manage_extra_settings() {
         ip link show warp 2>/dev/null | grep -q "warp" && _warp_st="${GREEN}(установлен)${NC}" || _warp_st="${DARKGRAY}(не установлен)${NC}"
         command -v fail2ban-client >/dev/null 2>&1 && _f2b_st="${GREEN}(установлен)${NC}" || _f2b_st="${DARKGRAY}(не установлен)${NC}"
 
-        show_arrow_menu "🧩 Дополнительные программы" \
-            "🔥 UFW - Firewall      ${_ufw_st}" \
+        show_arrow_menu "🧩  Дополнительные программы" \
+            "🔥  UFW - Firewall      ${_ufw_st}" \
             "🌐  WARP - Cloudflare   ${_warp_st}" \
             "🛡️   Fail2ban - Defence  ${_f2b_st}" \
             "──────────────────────────────────────" \
@@ -47,7 +47,7 @@ manage_server_testing() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
-        show_arrow_menu "🧪 Тестирование сервера" \
+        show_arrow_menu "🧪  Тестирование сервера" \
             "⚡  Тест скорости сети" \
             "🌍  Доступность популярных сервисов" \
             "🔒  Региональные ограничения" \
@@ -531,7 +531,7 @@ manage_server_optimization() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
-        show_arrow_menu "⚙️ Оптимизация сервера" \
+        show_arrow_menu "⚙️  Оптимизация сервера" \
             "💾  SWAP" \
             "🚀  BBR" \
             "──────────────────────────────────────" \
