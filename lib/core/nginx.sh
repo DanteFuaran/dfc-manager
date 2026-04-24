@@ -363,8 +363,12 @@ ${_fb_real_ip}
 # Использование: nginx_copy_cert "example.com"
 nginx_copy_cert() {
     local domain="$1"
-    local src="/etc/letsencrypt/live/${domain}"
-    local dst="${DIR_NGINX}ssl/${domain}"
+    local le_base="$domain"
+    local r
+    r=$(le_live_basename "$domain" 2>/dev/null) || r=""
+    [ -n "$r" ] && le_base="$r"
+    local src="/etc/letsencrypt/live/${le_base}"
+    local dst="${DIR_NGINX}ssl/${le_base}"
     [ -f "${src}/fullchain.pem" ] || return 1
     mkdir -p "$dst"
     cp -fL "${src}/fullchain.pem" "${dst}/fullchain.pem"

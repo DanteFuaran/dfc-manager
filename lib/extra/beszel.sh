@@ -428,16 +428,18 @@ install_beszel() {
     local base_domain
     base_domain=$(extract_domain "$BESZEL_DOMAIN")
 
-    if [ -f "/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem" ]; then
+    local _le_found
+    _le_found=$(le_live_basename "$BESZEL_DOMAIN" 2>/dev/null) || _le_found=""
+    if [ -n "$_le_found" ]; then
         print_cert_exists "${BESZEL_DOMAIN}"
-        CERT_DOMAIN="$BESZEL_DOMAIN"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
-    elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
+        CERT_DOMAIN="$_le_found"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+    elif _le_found=$(le_live_basename "$base_domain" 2>/dev/null) && [ -n "$_le_found" ]; then
         print_cert_exists "${base_domain}"
-        CERT_DOMAIN="$base_domain"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+        CERT_DOMAIN="$_le_found"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     elif [ "$_is_ip_mode" = true ]; then
         # IP-адрес — автоматически самоподписанный сертификат
         local SELF_SIGNED_DIR
@@ -479,9 +481,14 @@ install_beszel() {
                     return 0
                 fi
                 echo
-                CERT_DOMAIN="$BESZEL_DOMAIN"
-                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${BESZEL_DOMAIN}/fullchain.pem"
-                CERT_HOST_KEY="/etc/letsencrypt/live/${BESZEL_DOMAIN}/privkey.pem"
+                _le_found=$(le_live_basename "$BESZEL_DOMAIN" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$BESZEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
                 ;;
             1) # Cloudflare
                 reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
@@ -503,9 +510,14 @@ install_beszel() {
                     return 0
                 fi
                 echo
-                CERT_DOMAIN="$base_domain"
-                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-                CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+                _le_found=$(le_live_basename "$base_domain" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$base_domain" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
                 ;;
             *) return 0 ;;
         esac
@@ -778,16 +790,18 @@ change_domain_beszel() {
     local base_domain
     base_domain=$(extract_domain "$NEW_DOMAIN")
 
-    if [ -f "/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem" ]; then
+    local _le_found
+    _le_found=$(le_live_basename "$NEW_DOMAIN" 2>/dev/null) || _le_found=""
+    if [ -n "$_le_found" ]; then
         print_cert_exists "${NEW_DOMAIN}"
-        CERT_DOMAIN="$NEW_DOMAIN"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
-    elif [ -f "/etc/letsencrypt/live/${base_domain}/fullchain.pem" ]; then
+        CERT_DOMAIN="$_le_found"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+    elif _le_found=$(le_live_basename "$base_domain" 2>/dev/null) && [ -n "$_le_found" ]; then
         print_cert_exists "${base_domain}"
-        CERT_DOMAIN="$base_domain"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+        CERT_DOMAIN="$_le_found"
+        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     else
         show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
@@ -814,9 +828,14 @@ change_domain_beszel() {
                     return 0
                 fi
                 echo
-                CERT_DOMAIN="$NEW_DOMAIN"
-                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${NEW_DOMAIN}/fullchain.pem"
-                CERT_HOST_KEY="/etc/letsencrypt/live/${NEW_DOMAIN}/privkey.pem"
+                _le_found=$(le_live_basename "$NEW_DOMAIN" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$NEW_DOMAIN" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
                 ;;
             1)
                 reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
@@ -837,9 +856,14 @@ change_domain_beszel() {
                     return 0
                 fi
                 echo
-                CERT_DOMAIN="$base_domain"
-                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${base_domain}/fullchain.pem"
-                CERT_HOST_KEY="/etc/letsencrypt/live/${base_domain}/privkey.pem"
+                _le_found=$(le_live_basename "$base_domain" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$base_domain" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
                 ;;
             *) return 0 ;;
         esac

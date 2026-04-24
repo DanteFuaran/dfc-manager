@@ -41,6 +41,32 @@ _parse_cert_error() {
     fi
 }
 
+# Реальное имя подкаталога в /etc/letsencrypt/live/ (регистр, линия -0001 не ищем).
+le_live_basename() {
+    local d="$1"
+    local low cand
+    low=$(printf '%s' "$d" | tr '[:upper:]' '[:lower:]')
+    for cand in "$d" "$low"; do
+        if [ -f "/etc/letsencrypt/live/${cand}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${cand}/privkey.pem" ]; then
+            printf '%s' "$cand"
+            return 0
+        fi
+    done
+    if [ -d /etc/letsencrypt/live ]; then
+        for dir in /etc/letsencrypt/live/*/; do
+            [ -d "$dir" ] || continue
+            cand=$(basename "$dir")
+            if [ "$(printf '%s' "$cand" | tr '[:upper:]' '[:lower:]')" = "$low" ]; then
+                if [ -f "${dir}fullchain.pem" ] && [ -f "${dir}privkey.pem" ]; then
+                    printf '%s' "$cand"
+                    return 0
+                fi
+            fi
+        done
+    fi
+    return 1
+}
+
 handle_certificates() {
     local -n domains_ref=$1
     local cert_method="$2"
@@ -149,6 +175,8 @@ _ensure_certbot() { _ensure_system_deps; }
 get_cert_cloudflare() {
     local domain="$1"
     local email="$2"
+    local dnorm
+    dnorm=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')
 
     _ensure_certbot || return 1
 
@@ -166,24 +194,34 @@ get_cert_cloudflare() {
         certbot certonly --dns-cloudflare \
             --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
             --dns-cloudflare-propagation-seconds 60 \
-            -d "$domain" -d "*.$domain" \
+            -d "$dnorm" -d "*.$dnorm" \
             --email "$email" --agree-tos --non-interactive \
             --key-type ecdsa > "$_tmp_log" 2>&1
         _ec=$?
-        echo $_ec > "$_exit_file"
-        exit $_ec
+        if [ "$_ec" -ne 0 ] && [ -f "$_tmp_log" ] && le_live_basename "$dnorm" >/dev/null 2>&1; then
+            if grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+                _ec=0
+            fi
+        fi
+        echo "$_ec" > "$_exit_file"
     ) &
-    show_spinner "Получение wildcard сертификата для *.$domain"
+    show_spinner "Получение wildcard сертификата для *.$dnorm"
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
-    if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
+    local _lebn
+    _lebn=$(le_live_basename "$dnorm" 2>/dev/null) || _lebn=""
+    if [ "$_exit_code" -ne 0 ] && [ -n "$_lebn" ] && [ -f "$_tmp_log" ] && \
+        grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+        _exit_code=0
+    fi
+    if [ "$_exit_code" -ne 0 ] || [ -z "$_lebn" ]; then
         local _cert_reason _raw_log
         _cert_reason=$(_parse_cert_error "$_tmp_log")
         _raw_log=$(grep -vE '^[[:space:]]*$' "$_tmp_log" 2>/dev/null | tail -35)
         rm -f "$_tmp_log" "$_exit_file"
         echo
-        print_error "Не удалось получить сертификат для $domain"
+        print_error "Не удалось получить сертификат для $dnorm"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
         # Показываем развёрнутый лог только если он содержит больше одной новой строки (=не дублирует Причину)
         local _raw_lines
@@ -210,6 +248,9 @@ get_cert_cloudflare() {
 get_cert_acme() {
     local domain="$1"
     local email="$2"
+    # Let's Encrypt и каталог live/ — в нижнем регистре; иначе дубликат и «не найдено».
+    local dnorm
+    dnorm=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')
 
     _ensure_certbot || return 1
 
@@ -226,13 +267,19 @@ get_cert_acme() {
     (
         set +e
         certbot certonly --standalone \
-            -d "$domain" \
+            -d "$dnorm" \
             --email "$email" --agree-tos --non-interactive \
             --http-01-port 80 \
             --key-type ecdsa > "$_tmp_log" 2>&1
-        echo $? > "$_exit_file"
+        _ec=$?
+        if [ "$_ec" -ne 0 ] && [ -f "$_tmp_log" ] && le_live_basename "$dnorm" >/dev/null 2>&1; then
+            if grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+                _ec=0
+            fi
+        fi
+        echo "$_ec" > "$_exit_file"
     ) &
-    show_spinner "Получение сертификата для $domain"
+    show_spinner "Получение сертификата для $dnorm"
 
     # Закрываем порт 80 ПОСЛЕ завершения certbot
     ufw delete allow 80/tcp >/dev/null 2>&1 || true
@@ -241,13 +288,19 @@ get_cert_acme() {
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
-    if [ "$_exit_code" -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$domain" ]; then
+    local _lebn
+    _lebn=$(le_live_basename "$dnorm" 2>/dev/null) || _lebn=""
+    if [ "$_exit_code" -ne 0 ] && [ -n "$_lebn" ] && [ -f "$_tmp_log" ] && \
+        grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+        _exit_code=0
+    fi
+    if [ "$_exit_code" -ne 0 ] || [ -z "$_lebn" ]; then
         local _cert_reason _raw_log
         _cert_reason=$(_parse_cert_error "$_tmp_log")
         _raw_log=$(grep -vE '^[[:space:]]*$' "$_tmp_log" 2>/dev/null | tail -35)
         rm -f "$_tmp_log" "$_exit_file"
         echo
-        print_error "Не удалось получить сертификат для $domain"
+        print_error "Не удалось получить сертификат для $dnorm"
         echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
         local _raw_lines
         _raw_lines=$(echo "$_raw_log" | wc -l)
