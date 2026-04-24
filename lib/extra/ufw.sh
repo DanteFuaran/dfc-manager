@@ -41,7 +41,7 @@ manage_ufw() {
                 "➖  Удалить правило" \
                 "🧹  Удалить все правила" \
                 "──────────────────────────────────────" \
-                "🗑️   Удалить Firewall (ufw)" \
+                "🗑️   Удаление Firewall (ufw)" \
                 "──────────────────────────────────────" \
                 "⬅️   Назад"
             local choice=$?
@@ -246,24 +246,46 @@ manage_ufw() {
                 ;;
             4) continue ;;
             5)
-                # Удалить UFW
-                if ! confirm_nav --delete "❌  Удалить Firewall (UFW)"; then
+                # Удалить UFW (пакет ufw; disable/reset без интерактива, иначе apt purge не доходит)
+                if ! confirm_nav --delete "❌  Удаление Firewall (ufw)"; then
                     continue
                 fi
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "$(center "❌  Удалить Firewall (UFW)" "$BLUE")"
+                echo -e "$(center "❌  Удаление Firewall (ufw)" "$RED")"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 (
-                    ufw disable >/dev/null 2>&1 || true
-                    apt-get purge -y ufw >/dev/null 2>&1
-                    apt-get autoremove -y >/dev/null 2>&1
-                    true
+                    set +e
+                    export DEBIAN_FRONTEND=noninteractive
+                    local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+                    local _lw=0
+                    while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
+                          /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
+                          >/dev/null 2>&1; do
+                        sleep 2
+                        _lw=$(( _lw + 2 ))
+                        [ "$_lw" -ge 120 ] && break
+                    done
+                    if command -v ufw >/dev/null 2>&1; then
+                        ufw --force disable >/dev/null 2>&1 \
+                            || { yes y 2>/dev/null | ufw disable >/dev/null 2>&1; } || true
+                        ufw --force reset >/dev/null 2>&1 \
+                            || { yes y 2>/dev/null | ufw reset >/dev/null 2>&1; } || true
+                    fi
+                    apt-get purge -y -qq $DPKG_OPTS ufw >/dev/null 2>&1
+                    _ufw_pe=$?
+                    apt-get autoremove -y -qq $DPKG_OPTS >/dev/null 2>&1 || true
+                    exit "$_ufw_pe"
                 ) &
-                show_spinner "Удаление UFW"
-                echo
-                echo -e "${GREEN}✅ UFW был успешно удалён!${NC}"
+                if ! show_spinner "Удаление Firewall (ufw)" "Firewall (ufw) был успешно удалён!"; then
+                    echo
+                    print_error "Не удалось удалить пакет ufw. Выполните вручную: apt-get purge -y ufw"
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    show_continue_prompt "Выход" || return 1
+                    continue
+                fi
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt "Выход" || return 1
