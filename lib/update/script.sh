@@ -5,7 +5,7 @@
 # ─── Удаление отдельных компонентов Remnawave ───────────────────────────────
 
 _delete_component_panel() {
-    if ! confirm_nav --delete "🗑️ Удаление панели Remnawave"; then
+    if ! confirm_nav --delete "🗑️  Удаление панели Remnawave"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -38,7 +38,7 @@ _delete_component_panel() {
 }
 
 _delete_component_node() {
-    if ! confirm_nav --delete "🗑️ Удаление ноды Remnawave"; then
+    if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -121,7 +121,7 @@ _delete_component_node() {
 }
 
 _delete_component_subpage() {
-    if ! confirm_nav --delete "🗑️ Удаление страницы подписки"; then
+    if ! confirm_nav --delete "🗑️  Удаление страницы подписки"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -274,7 +274,7 @@ manage_delete_components() {
         fi
         del_items+=("⬅️   Назад"); del_actions+=("back")
 
-        show_arrow_menu "🗑️ Удаление компонентов" "${del_items[@]}"
+        show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
         local del_choice=$?
         [[ $del_choice -eq 255 ]] && return
         local del_action="${del_actions[$del_choice]:-sep}"
@@ -287,18 +287,18 @@ manage_delete_components() {
             beszel_agent) uninstall_beszel_agent ;;
             mtproto)      _mt_do_uninstall || true ;;
             delete_all)
-                if ! confirm_nav --delete "🗑️ Удаление всех компонентов"; then
+                if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
                     continue
                 fi
                 (
                 export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then
                     ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &
-                    show_spinner "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
+                    show_spinner --step "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
                 fi
                 if is_node_installed; then
                     ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
-                    show_spinner "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
+                    show_spinner --step "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
                 fi
                 if is_subpage_remote_installed || [ -d "/opt/subscribe-page" ] || [ -d "/opt/remnasubpage" ]; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
@@ -306,35 +306,35 @@ manage_delete_components() {
                         [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; }
                         rm -rf "$_d" 2>/dev/null || true
                       done; exit 0 ) &
-                    show_spinner "Удаление Remnawave (Страница подписки)" "Удаление Remnawave (Страница подписки)"
+                    show_spinner --step "Удаление Remnawave (Страница подписки)" "Удаление Remnawave (Страница подписки)"
                 fi
                 if [ -f "/opt/beszel/docker-compose.yml" ]; then
                     ( uninstall_beszel --force >/dev/null 2>&1 || true ) &
-                    show_spinner "Удаление Beszel" "Beszel удалён"
+                    show_spinner --step "Удаление Beszel" "Beszel удалён"
                 fi
                 if [ -f "/opt/beszel-agent/docker-compose.yml" ]; then
                     ( uninstall_beszel_agent --force >/dev/null 2>&1 || true ) &
-                    show_spinner "Удаление Beszel Agent" "Beszel Agent удалён"
+                    show_spinner --step "Удаление Beszel Agent" "Beszel Agent удалён"
                 fi
                 # Удаляем MTProto даже если контейнер уже снят, но есть остаточные
                 # файлы (/opt/mtproto) или nginx-блоки MT_CONNECT_*.
                 if _mt_installed || [ -d "/opt/mtproto" ] || \
                    grep -q "# BEGIN_MT_CONNECT_\|# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
                     ( _mt_do_uninstall --force >/dev/null 2>&1 || true ) &
-                    show_spinner "Удаление MTProto" "MTProto удалён"
+                    show_spinner --step "Удаление MTProto" "MTProto удалён"
                 fi
                 # Firewall: оставляем только allow SSH, остальные пронумерованные правила удаляем.
                 ( ufw_delete_all_rules_except_ssh >/dev/null 2>&1 || true ) &
-                show_spinner "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
+                show_spinner --step "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
                 ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
-                show_spinner "Очистка Nginx" "Nginx очищен"
+                show_spinner --step "Очистка Nginx" "Nginx очищен"
                 )
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "       ${GREEN}🗑️  Удаление завершено${NC}"
+                echo -e "       🗑️  Удаление завершено"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
-                printf "${GREEN}\u2705${NC}\033[0m  %s\n" "Все компоненты были удалены"
+                printf "${GREEN}\u2705 %s${NC}\n" "Все компоненты были удалены"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
@@ -619,7 +619,7 @@ remove_script_all() {
 }
 
 remove_script() {
-    if ! confirm_nav --delete "🗑️ Удаление скрипта"; then
+    if ! confirm_nav --delete "🗑️  Удаление скрипта"; then
         return
     fi
 

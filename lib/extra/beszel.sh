@@ -121,7 +121,7 @@ _beszel_setup_firewall() {
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq $DPKG_OPTS ufw >/dev/null 2>&1
         ) &
-        show_spinner "Установка Firewall (ufw)" || true
+        show_spinner --step "Установка Firewall (ufw)" || true
     fi
     command -v ufw >/dev/null 2>&1 || return 0
 
@@ -344,7 +344,7 @@ manage_beszel() {
         items+=("──────────────────────────────────────"); actions+=("sep")
         items+=("⬅️   Назад");                             actions+=("back")
 
-        show_arrow_menu "📊 Beszel" "${items[@]}"
+        show_arrow_menu "📊  Beszel" "${items[@]}"
         local choice=$?
         local action="${actions[$choice]:-back}"
 
@@ -504,7 +504,7 @@ install_beszel() {
         CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
-        show_arrow_menu "${BLUE}🔒 SSL сертификат${NC}" \
+        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
@@ -849,7 +849,7 @@ change_domain_beszel() {
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     else
-        show_arrow_menu "${BLUE}🔒 SSL сертификат${NC}" \
+        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
@@ -1073,7 +1073,7 @@ uninstall_beszel() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        if ! confirm_nav --delete "🗑️ Удаление Beszel"; then
+        if ! confirm_nav --delete "🗑️  Удаление Beszel"; then
             return
         fi
         echo
@@ -1129,7 +1129,7 @@ uninstall_beszel() {
 install_beszel_agent() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "🖥️ Подключение агента Beszel" "$BLUE")"
+    echo -e "$(center "🖥️  Подключение агента Beszel" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if is_beszel_agent_installed; then
@@ -1217,7 +1217,7 @@ install_beszel_agent() {
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner "Обновление пакетов системы"
+    show_spinner --step "Обновление пакетов системы"
     echo
 
     # ─── UFW: SSH и порт агента (без постоянного 80/443 — нода ходит к хабу исходящим) ───
@@ -1252,12 +1252,12 @@ volumes:
   beszel-agent-data:
 YAML
     ) &
-    show_spinner "Подготовка файлов"
+    show_spinner --step "Подготовка файлов"
 
     (
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
     ) &
-    if ! show_spinner "Добавление агента Beszel"; then
+    if ! show_spinner --step "Добавление агента Beszel"; then
         echo
         print_error "Не удалось запустить агент. Проверьте логи: cd ${DIR_BESZEL_AGENT} && docker compose logs"
         echo
@@ -1278,7 +1278,7 @@ uninstall_beszel_agent() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        if ! confirm_nav --delete "🗑️ Удаление агента Beszel"; then
+        if ! confirm_nav --delete "🗑️  Удаление агента Beszel"; then
             return
         fi
         echo

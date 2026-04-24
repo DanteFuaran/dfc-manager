@@ -50,21 +50,38 @@ show_spinner_prepare() {
     printf "\r\033[K"
 }
 
+# Спиннер длительной операции. Финальная строка по умолчанию — зелёная.
+#   show_spinner "Сообщение" [done_msg]
+# Промежуточный шаг (нейтральный спиннер и «✅» без зелёного — только финал зелёный):
+#   show_spinner --step "Сообщение" [done_msg]
 show_spinner() {
+    local _step_nc=false
+    if [[ "${1:-}" == "--step" ]]; then
+        _step_nc=true
+        shift
+    fi
     local pid=$!
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local i=0 msg="$1" done_msg="${2:-$1}"
+    local i=0 msg="${1:?}" done_msg="${2:-$1}"
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
-        printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        if [ "$_step_nc" = true ]; then
+            printf "\r\033[K\033[0m%s  %s" "${spin[$i]}" "$msg"
+        else
+            printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
+        fi
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        printf "\r\033[K${GREEN}\u2705 %s${NC}\n" "$done_msg"
+        if [ "$_step_nc" = true ]; then
+            printf "\r\033[K\033[0m\u2705 %s\n" "$done_msg"
+        else
+            printf "\r\033[K${GREEN}\u2705 %s${NC}\n" "$done_msg"
+        fi
     else
         printf "\r\033[K${RED}\u2716 %s${NC}\n" "$done_msg"
     fi
