@@ -52,7 +52,7 @@ show_spinner_prepare() {
 
 # Спиннер длительной операции. Финальная строка по умолчанию — зелёная.
 #   show_spinner "Сообщение" [done_msg]
-# Промежуточный шаг (нейтральный спиннер и «✅» без зелёного — только финал зелёный):
+# Промежуточный шаг: зелёный спиннер/галочка, текст NC (финальные баннеры скриптов — отдельно):
 #   show_spinner --step "Сообщение" [done_msg]
 show_spinner() {
     local _step_nc=false
@@ -67,7 +67,7 @@ show_spinner() {
     tput civis 2>/dev/null || true
     while kill -0 $pid 2>/dev/null; do
         if [ "$_step_nc" = true ]; then
-            printf "\r\033[K\033[0m%s  %s" "${spin[$i]}" "$msg"
+            printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         else
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         fi
@@ -78,7 +78,7 @@ show_spinner() {
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
         if [ "$_step_nc" = true ]; then
-            printf "\r\033[K\033[0m\u2705 %s\n" "$done_msg"
+            printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
         else
             printf "\r\033[K${GREEN}\u2705 %s${NC}\n" "$done_msg"
         fi
