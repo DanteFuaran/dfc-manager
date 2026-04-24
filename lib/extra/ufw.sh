@@ -214,7 +214,7 @@ manage_ufw() {
                 if [ "$rule_count" -eq 0 ]; then
                     clear
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo -e "${BLUE}     🗑️  Удалить все правила${NC}"
+                    echo -e "$(center "🗑️  Удалить все правила UFW" "$BLUE")"
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     echo
                     print_warning "Нет правил для удаления"
@@ -226,6 +226,10 @@ manage_ufw() {
                 if ! confirm_nav --delete "🗑️  Удалить все правила UFW"; then
                     continue
                 fi
+                clear
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
+                echo -e "$(center "🗑️  Удалить все правила UFW" "$BLUE")"
+                echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 (
                     local cnt
@@ -236,7 +240,6 @@ manage_ufw() {
                     done
                 ) &
                 show_spinner "Удаление всех правил"
-                print_success "Все правила удалены"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
