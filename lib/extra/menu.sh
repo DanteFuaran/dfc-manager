@@ -12,7 +12,7 @@ manage_extra_settings() {
         command -v fail2ban-client >/dev/null 2>&1 && _f2b_st="${GREEN}(установлен)${NC}" || _f2b_st="${DARKGRAY}(не установлен)${NC}"
 
         show_arrow_menu "🧩  Дополнительные программы" \
-            "🔥  UFW - Firewall      ${_ufw_st}" \
+            "🔥 UFW - Firewall      ${_ufw_st}" \
             "🌐  WARP - Cloudflare   ${_warp_st}" \
             "🛡️   Fail2ban - Defence  ${_f2b_st}" \
             "──────────────────────────────────────" \

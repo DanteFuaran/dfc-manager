@@ -8,7 +8,7 @@ manage_ufw() {
         command -v ufw >/dev/null 2>&1 && ufw_installed=1
 
         if [ "$ufw_installed" -eq 0 ]; then
-            show_arrow_menu "🔥  Firewall (UFW)" \
+            show_arrow_menu "🔥 Firewall (UFW)" \
                 "🛡️   Установить Firewall (UFW)" \
                 "──────────────────────────────────────" \
                 "⬅️   Назад"
@@ -35,7 +35,7 @@ manage_ufw() {
             # Разделитель (index 1) или Назад (index 2)
             [ "$choice" -ge 1 ] && return 0
         else
-            show_arrow_menu "🔥  Firewall (UFW)" \
+            show_arrow_menu "🔥 Firewall (UFW)" \
                 "📋  Показать открытые порты" \
                 "➕  Открыть порт" \
                 "➖  Удалить правило" \
@@ -247,12 +247,12 @@ manage_ufw() {
             4) continue ;;
             5)
                 # Удалить UFW (пакет ufw; disable/reset без интерактива, иначе apt purge не доходит)
-                if ! confirm_nav --delete "❌  Удаление Firewall (ufw)"; then
+                if ! confirm_nav --delete "❌ Удаление Firewall (ufw)"; then
                     continue
                 fi
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "$(center "❌  Удаление Firewall (ufw)" "$RED")"
+                echo -e "$(center "❌ Удаление Firewall (ufw)" "$RED")"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 (
