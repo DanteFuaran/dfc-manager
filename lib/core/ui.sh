@@ -54,12 +54,18 @@ show_spinner_prepare() {
 #   show_spinner "Сообщение" [done_msg]
 # Промежуточный шаг: зелёный спиннер/галочка, текст NC (финальные баннеры скриптов — отдельно):
 #   show_spinner --step "Сообщение" [done_msg]
+# Цепочка фаз (--chain): при успехе только очистить строку (без ✅), следующий спиннер — на её месте:
+#   show_spinner --step --chain "Фаза 1"; show_spinner --step --chain "Фаза 2"; …
 show_spinner() {
     local _step_nc=false
-    if [[ "${1:-}" == "--step" ]]; then
-        _step_nc=true
-        shift
-    fi
+    local _chain=false
+    while [[ "${1:-}" == "--step" || "${1:-}" == "--chain" ]]; do
+        case "$1" in
+            --step)  _step_nc=true; shift ;;
+            --chain) _chain=true; shift ;;
+            *) break ;;
+        esac
+    done
     local pid=$!
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
@@ -77,7 +83,9 @@ show_spinner() {
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
-        if [ "$_step_nc" = true ]; then
+        if [ "$_chain" = true ]; then
+            printf "\r\033[K"
+        elif [ "$_step_nc" = true ]; then
             printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
         else
             printf "\r\033[K${GREEN}\u2705 %s${NC}\n" "$done_msg"

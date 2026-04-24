@@ -43,7 +43,7 @@ manage_server_testing() {
         tput civis 2>/dev/null || true
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   🧪  ТЕСТИРОВАНИЕ СЕРВЕРА${NC}"
+        echo -e "${BLUE}   🧪  ТЕСТИРОВАНИЕ СЕРВЕРА${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
@@ -71,7 +71,7 @@ manage_server_testing() {
 run_speed_test() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        ⚡ Тест скорости сети${NC}"
+    echo -e "${BLUE}        ⚡ Тест скорости сети${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -106,32 +106,72 @@ run_speed_test() {
             "https://install.speedtest.net/app/cli/${_pkg}" -o speedtest.tgz && \
         tar -xzf speedtest.tgz
     ) &
-    show_spinner "Подготовка инструмента тестирования"
-    echo
+    if ! show_spinner --step --chain "Подготовка инструмента тестирования"; then
+        rm -f "$tmpfile"
+        echo
+        echo -e "${RED}Не удалось скачать или распаковать Speedtest CLI.${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        tput civis 2>/dev/null || true
+        while true; do
+            local _k=""
+            IFS= read -rsn1 _k
+            case "$_k" in
+                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+                "")      tput cnorm 2>/dev/null || true; return 0 ;;
+            esac
+        done
+    fi
+
     (
         cd /tmp && \
         ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
     ) &
-    show_spinner "Запущен тест скорости сети" "Диагностика скорости сети завершёна"
-    echo
+    if ! show_spinner --step --chain "Запущен тест скорости сети"; then
+        rm -f "$tmpfile"
+        echo
+        echo -e "${RED}Не удалось выполнить тест скорости${NC}"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
+        tput civis 2>/dev/null || true
+        while true; do
+            local _k=""
+            IFS= read -rsn1 _k
+            case "$_k" in
+                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+                "")      tput cnorm 2>/dev/null || true; return 0 ;;
+            esac
+        done
+    fi
 
     local output
     output=$(cat "$tmpfile" 2>/dev/null) || true
     rm -f "$tmpfile"
 
-    # Парсим результат
+    # Парсим результат (Idle Latency — полная строка с jitter/low/high при наличии)
     local server isp latency download dl_ping upload ul_ping loss
     server=$(echo "$output" | grep -oP 'Server:\s*\K.*?(?=\s*\(id)' | sed 's/\s*$//')
     isp=$(echo "$output" | grep -oP 'ISP:\s*\K.*' | sed 's/\s*$//')
-    latency=$(echo "$output" | grep -oP 'Idle Latency:\s*\K.*' | sed 's/\s*$//')
+    latency=$(echo "$output" | grep -oP 'Idle Latency:\s*\K.*' | head -1 | sed 's/\s*$//')
+    [ -z "$latency" ] && latency=$(echo "$output" | grep -oP 'Latency:\s*\K.*' | head -1 | sed 's/\s*$//')
     download=$(echo "$output" | grep -oP 'Download:\s*\K[\d.]+\s*\S+' | sed 's/\s*$//')
     dl_ping=$(echo "$output" | sed -n '/Download:/{n;s/^\s*//;p;}' | grep -oP '^[\d.]+\s*ms' | sed 's/\s*$//')
     upload=$(echo "$output" | grep -oP 'Upload:\s*\K[\d.]+\s*\S+' | sed 's/\s*$//')
     ul_ping=$(echo "$output" | sed -n '/Upload:/{n;s/^\s*//;p;}' | grep -oP '^[\d.]+\s*ms' | sed 's/\s*$//')
     loss=$(echo "$output" | grep -oP 'Packet Loss:\s*\K.*' | sed 's/\s*$//')
 
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${BLUE}        ⚡ Тест скорости сети${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+
     if [ -n "$server" ]; then
+        echo -e "${GREEN}✅ Диагностика сети завершёна!${NC}"
+        echo
         local _cw=21
         echo -e "${DARKGRAY}──────────────── [ Сервер ] ─────────────────${NC}"
         echo
@@ -166,7 +206,7 @@ run_speed_test() {
 run_services_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN} 🌍 Доступность популярных сервисов${NC}"
+    echo -e "${BLUE} 🌍 Доступность популярных сервисов${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -355,7 +395,7 @@ _print_ipv6_section() {
 run_regional_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     🔒 Региональные ограничения${NC}"
+    echo -e "${BLUE}     🔒 Региональные ограничения${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -395,7 +435,7 @@ run_regional_check() {
 run_geolocation() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        📍 Геолокация IP${NC}"
+    echo -e "${BLUE}        📍 Геолокация IP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -527,7 +567,7 @@ manage_server_optimization() {
         tput civis 2>/dev/null || true
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   ⚙️  ОПТИМИЗАЦИЯ СЕРВЕРА${NC}"
+        echo -e "${BLUE}   ⚙️  ОПТИМИЗАЦИЯ СЕРВЕРА${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
