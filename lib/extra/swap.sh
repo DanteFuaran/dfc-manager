@@ -43,10 +43,10 @@ manage_swap() {
         echo
 
         show_arrow_menu "💾 Управление SWAP" \
-            "💾 Пересоздать SWAP (${swap_size_gb} GB)" \
-            "🗑️ Удалить SWAP" \
+            "💾  Пересоздать SWAP (${swap_size_gb} GB)" \
+            "🗑️   Удалить SWAP" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 
@@ -92,9 +92,9 @@ manage_swap() {
         echo
 
         show_arrow_menu "💾 Управление SWAP" \
-            "💾 Создать SWAP (${swap_size_gb} GB)" \
+            "💾  Создать SWAP (${swap_size_gb} GB)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 

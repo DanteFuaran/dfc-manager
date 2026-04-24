@@ -33,11 +33,11 @@ manage_fail2ban() {
         echo
 
         show_arrow_menu "🛡️ Fail2ban" \
-            "⚙️ Настройки" \
-            "🔄 Перезапустить Fail2ban" \
-            "🗑️ Удалить Fail2ban" \
+            "⚙️   Настройки" \
+            "🔄  Перезапустить Fail2ban" \
+            "🗑️   Удалить Fail2ban" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 
@@ -155,9 +155,9 @@ JAIL_EOF
         echo
 
         show_arrow_menu "🛡️ Fail2ban" \
-            "📥 Установить Fail2ban" \
+            "📥  Установить Fail2ban" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 

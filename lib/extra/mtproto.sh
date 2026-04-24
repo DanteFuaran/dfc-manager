@@ -2455,9 +2455,9 @@ _mt_do_access() {
         # Строка режима (кликабельный тоггл) — добавляется сразу перед списком в allow-режиме
         local _mode_label
         if [ "$_access_mode" = "allow" ]; then
-            _mode_label="🔄 Режим работы: ${GREEN}Белый список${NC}"
+            _mode_label="🔄  Режим работы: ${GREEN}Белый список${NC}"
         else
-            _mode_label="🔄 Режим работы: ${RED}Черный список${NC}"
+            _mode_label="🔄  Режим работы: ${RED}Черный список${NC}"
         fi
 
         # Заголовок списка
@@ -2617,13 +2617,13 @@ _mt_do_access() {
 
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
         if [ "$_access_mode" = "allow" ]; then
-            _ip_items+=("✏️ Добавить IP или группу в список"); _ip_vals+=("manual")
-            _ip_items+=("🗑️ Очистить список"); _ip_vals+=("clear_list")
+            _ip_items+=("✏️   Добавить IP или группу в список"); _ip_vals+=("manual")
+            _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         else
-            _ip_items+=("🗑️ Очистить список"); _ip_vals+=("clear_list")
+            _ip_items+=("🗑️   Очистить список"); _ip_vals+=("clear_list")
         fi
         _ip_items+=($'\x02'"${_sep_ac}"); _ip_vals+=("sep")
-        _ip_items+=("⬅️ Назад"); _ip_vals+=("back")
+        _ip_items+=("⬅️   Назад"); _ip_vals+=("back")
 
         local _first_ip_idx=-1
         for _fi in "${!_ip_vals[@]}"; do
@@ -2789,10 +2789,10 @@ _mt_do_access() {
                 else
                     [ "$_sn_in_l" = true ] \
                         && _sn_items+=("${GREEN}✅  Разблокировать подсеть ${_sn_cidr}${NC}") \
-                        || _sn_items+=("🚫 Заблокировать подсеть ${_sn_cidr}")
+                        || _sn_items+=("🚫  Заблокировать подсеть ${_sn_cidr}")
                 fi
                 _sn_items+=("${_sep_ac}")
-                _sn_items+=("⬅️ Назад")
+                _sn_items+=("⬅️   Назад")
 
                 show_arrow_menu "📡 Подсеть: ${_sn_cidr}" "${_sn_items[@]}"
                 local _sc=$?
@@ -2866,7 +2866,7 @@ _mt_do_access() {
                     _conf_title="Заблокировать IP?"
                     _conf_btn="${RED}🚫  Заблокировать: ${_sel}${NC}"
                 fi
-                local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️ Назад")
+                local -a _conf_items=("$_conf_btn" $'\x02'"${_sep_ac}" "⬅️   Назад")
                 show_arrow_menu "$_conf_title" "${_conf_items[@]}"
                 local _cc=$?
                 if [ "$_cc" -eq 0 ]; then
@@ -2928,26 +2928,26 @@ manage_mtproto() {
         local -a _items=() _actions=()
 
         if [ "$_installed" = false ]; then
-            _items+=("📦 Установить MTProto");     _actions+=("install")
+            _items+=("📦  Установить MTProto");     _actions+=("install")
         else
-            _items+=("📦 Переустановить MTProto"); _actions+=("install")
-            _items+=("⬆️ Обновить образ");          _actions+=("update")
+            _items+=("📦  Переустановить MTProto"); _actions+=("install")
+            _items+=("⬆️   Обновить образ");          _actions+=("update")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
-            _items+=("📊 Статистика подключений");            _actions+=("stats")
-            _items+=("🚫 Управление доступом");               _actions+=("access")
-            _items+=("📄 Конфигурация и ссылка");             _actions+=("config")
-            _items+=("🔑 Сменить конфигурацию");              _actions+=("change_config")
+            _items+=("📊  Статистика подключений");            _actions+=("stats")
+            _items+=("🚫  Управление доступом");               _actions+=("access")
+            _items+=("📄  Конфигурация и ссылка");             _actions+=("config")
+            _items+=("🔑  Сменить конфигурацию");              _actions+=("change_config")
             _items+=("──────────────────────────────────────"); _actions+=("sep")
             if [ "$_running" = true ]; then
-                _items+=("⏹️ Остановить прокси");    _actions+=("stop")
-                _items+=("🔄 Перезапустить прокси"); _actions+=("restart")
+                _items+=("⏹️   Остановить прокси");    _actions+=("stop")
+                _items+=("🔄  Перезапустить прокси"); _actions+=("restart")
             else
-                _items+=("▶️ Запустить прокси");     _actions+=("start")
+                _items+=("▶️   Запустить прокси");     _actions+=("start")
             fi
         fi
 
         _items+=("──────────────────────────────────────"); _actions+=("sep")
-        _items+=("⬅️ Назад");                             _actions+=("back")
+        _items+=("⬅️   Назад");                             _actions+=("back")
 
         show_arrow_menu "$_title" "${_items[@]}"
         local _choice=$?

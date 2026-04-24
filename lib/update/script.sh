@@ -235,22 +235,22 @@ manage_delete_components() {
         local -a del_items=() del_actions=()
 
         is_panel_installed && {
-            del_items+=("🖥️ Remnawave (Панель)"); del_actions+=("panel")
+            del_items+=("🖥️   Remnawave (Панель)"); del_actions+=("panel")
         }
         [ -f "/opt/remnanode/docker-compose.yml" ] && {
-            del_items+=("🌐 Remnawave (Нода)"); del_actions+=("node")
+            del_items+=("🌐  Remnawave (Нода)"); del_actions+=("node")
         }
         ([ -f "/opt/remnasubpage/docker-compose.yml" ] || [ -f "/opt/subscribe-page/docker-compose.yml" ]) && {
-            del_items+=("📄 Remnawave (Страница подписки)"); del_actions+=("subpage")
+            del_items+=("📄  Remnawave (Страница подписки)"); del_actions+=("subpage")
         }
         [ -f "/opt/beszel/docker-compose.yml" ] && {
-            del_items+=("📊 Beszel (Мониторинг)"); del_actions+=("beszel")
+            del_items+=("📊  Beszel (Мониторинг)"); del_actions+=("beszel")
         }
         [ -f "/opt/beszel-agent/docker-compose.yml" ] && {
-            del_items+=("📊 Beszel (Агент)"); del_actions+=("beszel_agent")
+            del_items+=("📊  Beszel (Агент)"); del_actions+=("beszel_agent")
         }
         _mt_installed && {
-            del_items+=("📡 MTProto (Прокси)"); del_actions+=("mtproto")
+            del_items+=("📡  MTProto (Прокси)"); del_actions+=("mtproto")
         }
 
         # Ничего не осталось — показываем экран с сообщением
@@ -269,10 +269,10 @@ manage_delete_components() {
 
         del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         if [ ${#del_actions[@]} -gt 1 ]; then
-            del_items+=("🗑️ Удалить всё"); del_actions+=("delete_all")
+            del_items+=("🗑️   Удалить всё"); del_actions+=("delete_all")
             del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         fi
-        del_items+=("⬅️ Назад"); del_actions+=("back")
+        del_items+=("⬅️   Назад"); del_actions+=("back")
 
         show_arrow_menu "🗑️ Удаление компонентов" "${del_items[@]}"
         local del_choice=$?

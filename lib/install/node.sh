@@ -537,10 +537,10 @@ installation_node_local() {
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐 Метод получения сертификата" \
-                    "🌐 ACME HTTP-01 (Let's Encrypt)" \
-                    "☁️ Cloudflare DNS-01 (wildcard)" \
+                    "🌐  ACME HTTP-01 (Let's Encrypt)" \
+                    "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
-                    "⬅️ Назад"
+                    "⬅️   Назад"
                 local cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
@@ -822,10 +822,10 @@ installation_node_remote() {
         needs_certs=true
         echo
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
@@ -1095,10 +1095,10 @@ installation_node_with_existing_subpage() {
         needs_certs=true
         echo
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in

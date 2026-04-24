@@ -329,20 +329,20 @@ manage_beszel() {
         local -a actions=()
 
         if ! is_beszel_installed; then
-            items+=("📊 Установить панель Beszel"); actions+=("install_hub")
+            items+=("📊  Установить панель Beszel"); actions+=("install_hub")
         else
-            items+=("🌐 Изменить домен Beszel");    actions+=("change_domain")
+            items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
         fi
 
         if ! is_beszel_agent_installed; then
-            items+=("🖥️ Подключить агент (ноду)"); actions+=("install_agent")
+            items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
         elif ! is_beszel_installed; then
             # Агент есть, хаба нет — меняем адрес хаба у агента
-            items+=("🔗 Изменить адрес хаба агента"); actions+=("change_agent_hub")
+            items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
         fi
 
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("⬅️ Назад");                             actions+=("back")
+        items+=("⬅️   Назад");                             actions+=("back")
 
         show_arrow_menu "📊 Beszel" "${items[@]}"
         local choice=$?
@@ -504,11 +504,11 @@ install_beszel() {
         CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
-        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
-            "🌐 ACME (Let's Encrypt HTTP-01)" \
-            "☁️ Cloudflare (DNS-01 Wildcard)" \
+        show_arrow_menu "${BLUE}🔒 SSL сертификат${NC}" \
+            "🌐  ACME (Let's Encrypt HTTP-01)" \
+            "☁️   Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
-            "❌ Отмена"
+            "❌  Отмена"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return 0
 
@@ -849,11 +849,11 @@ change_domain_beszel() {
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     else
-        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
-            "🌐 ACME (Let's Encrypt HTTP-01)" \
-            "☁️ Cloudflare (DNS-01 Wildcard)" \
+        show_arrow_menu "${BLUE}🔒 SSL сертификат${NC}" \
+            "🌐  ACME (Let's Encrypt HTTP-01)" \
+            "☁️   Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
-            "❌ Отмена"
+            "❌  Отмена"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return 0
 

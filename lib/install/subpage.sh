@@ -147,10 +147,10 @@ _installation_subpage_on_panel() {
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐 Метод получения сертификата" \
-                    "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+                    "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
-                    "⬅️ Назад"
+                    "⬅️   Назад"
                 cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
@@ -441,10 +441,10 @@ _installation_subpage_on_node() {
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
                 show_arrow_menu "🔐 Метод получения сертификата" \
-                    "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+                    "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
-                    "⬅️ Назад"
+                    "⬅️   Назад"
                 cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
@@ -703,10 +703,10 @@ _installation_subpage_standalone() {
         needs_certs=true
         echo
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         cert_choice=$?
         [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]] && continue
 

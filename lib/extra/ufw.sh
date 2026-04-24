@@ -9,9 +9,9 @@ manage_ufw() {
 
         if [ "$ufw_installed" -eq 0 ]; then
             show_arrow_menu "🔥 Firewall (UFW)" \
-                "🛡️ Установить Firewall (UFW)" \
+                "🛡️   Установить Firewall (UFW)" \
                 "──────────────────────────────────────" \
-                "⬅️ Назад"
+                "⬅️   Назад"
             local choice=$?
             [[ $choice -eq 255 ]] && return 0
 
@@ -36,14 +36,14 @@ manage_ufw() {
             [ "$choice" -ge 1 ] && return 0
         else
             show_arrow_menu "🔥 Firewall (UFW)" \
-                "📋 Показать открытые порты" \
-                "➕ Открыть порт" \
-                "➖ Удалить правило" \
-                "🧹 Удалить все правила" \
+                "📋  Показать открытые порты" \
+                "➕  Открыть порт" \
+                "➖  Удалить правило" \
+                "🧹  Удалить все правила" \
                 "──────────────────────────────────────" \
-                "🗑️ Удаление Firewall (ufw)" \
+                "🗑️   Удаление Firewall (ufw)" \
                 "──────────────────────────────────────" \
-                "⬅️ Назад"
+                "⬅️   Назад"
             local choice=$?
             [[ $choice -eq 255 ]] && return 0
         fi
@@ -184,7 +184,7 @@ manage_ufw() {
                         menu_items+=("$r")
                     done
                     menu_items+=("──────────────────────────────────────")
-                    menu_items+=("⬅️ Назад")
+                    menu_items+=("⬅️   Назад")
 
                     show_arrow_menu "➖ Удалить правило" "${menu_items[@]}"
                     local del_choice=$?

@@ -13,10 +13,10 @@ manage_extra_settings() {
 
         show_arrow_menu "🧩 Дополнительные программы" \
             "🔥 UFW - Firewall      ${_ufw_st}" \
-            "🌐 WARP - Cloudflare   ${_warp_st}" \
-            "🛡️ Fail2ban - Defence  ${_f2b_st}" \
+            "🌐  WARP - Cloudflare   ${_warp_st}" \
+            "🛡️   Fail2ban - Defence  ${_f2b_st}" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 
@@ -48,12 +48,12 @@ manage_server_testing() {
         echo
 
         show_arrow_menu "🧪 Тестирование сервера" \
-            "⚡ Тест скорости сети" \
-            "🌍 Доступность популярных сервисов" \
-            "🔒 Региональные ограничения" \
-            "📍 Геолокация IP" \
+            "⚡  Тест скорости сети" \
+            "🌍  Доступность популярных сервисов" \
+            "🔒  Региональные ограничения" \
+            "📍  Геолокация IP" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 
@@ -532,10 +532,10 @@ manage_server_optimization() {
         echo
 
         show_arrow_menu "⚙️ Оптимизация сервера" \
-            "💾 SWAP" \
-            "🚀 BBR" \
+            "💾  SWAP" \
+            "🚀  BBR" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 

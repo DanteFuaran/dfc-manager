@@ -145,13 +145,13 @@ manage_logs() {
 
         if [ -n "$rw_path" ]; then
             if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave$'; then
-                log_items+=("🌊 Remnawave (Панель)")
+                log_items+=("🌊  Remnawave (Панель)")
                 log_services+=("remnawave")
                 log_dirs+=("$rw_path")
             fi
 
             if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
-                log_items+=("🔗 Remnawave (Нода)")
+                log_items+=("🔗  Remnawave (Нода)")
                 log_services+=("remnanode")
                 if [ -f "/opt/remnanode/docker-compose.yml" ]; then
                     log_dirs+=("/opt/remnanode")
@@ -161,7 +161,7 @@ manage_logs() {
             fi
 
             if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^remnawave-subscription-page$|^remnasubpage$'; then
-                log_items+=("📄 subscription-page")
+                log_items+=("📄  subscription-page")
                 log_services+=("remnawave-subscription-page")
                 for _sp in /opt/subscribe-page /opt/remnasubpage; do
                     if [ -f "${_sp}/docker-compose.yml" ]; then
@@ -175,7 +175,7 @@ manage_logs() {
             fi
 
             if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
-                log_items+=("🔀 Nginx")
+                log_items+=("🔀  Nginx")
                 log_services+=("nginx")
                 log_dirs+=("${DIR_NGINX%/}")
             fi
@@ -187,7 +187,7 @@ manage_logs() {
                 [ -f "${_d}/docker-compose.yml" ] && _rs_dir="$_d" && break
             done
             if [ -n "$_rs_dir" ]; then
-                log_items+=("🤖 Remnasale (Бот)")
+                log_items+=("🤖  Remnasale (Бот)")
                 log_services+=("__remnasale_all__")
                 log_dirs+=("$_rs_dir")
             fi
@@ -202,7 +202,7 @@ manage_logs() {
         fi
 
         log_items+=("──────────────────────────────────────")
-        log_items+=("⬅️ Назад")
+        log_items+=("⬅️   Назад")
 
         local _sep_idx=${#log_services[@]}
 
@@ -292,13 +292,13 @@ manage_reinstall() {
     print_success "Готово к переустановке"
 
     show_arrow_menu "📦 Выберите тип установки" \
-        "📦 Панель + Нода (один сервер)" \
+        "📦  Панель + Нода (один сервер)" \
         "──────────────────────────────────────" \
-        "🖥️ Только панель" \
-        "🌐 Только нода" \
-        "➕ Подключить ноду в панель" \
+        "🖥️   Только панель" \
+        "🌐  Только нода" \
+        "➕  Подключить ноду в панель" \
         "──────────────────────────────────────" \
-        "⬅️ Назад"
+        "⬅️   Назад"
     local choice=$?
     [[ $choice -eq 255 ]] && return
 

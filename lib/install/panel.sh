@@ -96,10 +96,10 @@ installation_panel() {
     if check_if_certificates_needed domains_to_check; then
         needs_certs=true
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         cert_choice=$?
         if [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]]; then
             [ "$with_subpage" = true ] && rm -rf "${DIR_SUB}" 2>/dev/null || true

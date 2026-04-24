@@ -377,7 +377,7 @@ db_restore() {
             else
                 display_label="${_base_fname} (${_total_mb}M ✂ 2 части)"
             fi
-            menu_items+=("📦 ${display_label}")
+            menu_items+=("📦  ${display_label}")
             continue
         fi
         # Обрабатываем N-частевые split-архивы (*.tar.gz.000.part ... *.tar.gz.NNN.part)
@@ -405,7 +405,7 @@ db_restore() {
             else
                 display_label="${_base_tgz} (${_total_mb}M ✂ ${_nparts} части)"
             fi
-            menu_items+=("📦 ${display_label}")
+            menu_items+=("📦  ${display_label}")
             continue
         fi
         backup_files+=("$file")
@@ -434,7 +434,7 @@ db_restore() {
         else
             display_label="${fname} (${fsize})"
         fi
-        menu_items+=("📄 ${display_label}")
+        menu_items+=("📄  ${display_label}")
     done < <(find "$backup_dir" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.sql.gz" -o -name "*.sql" -o -name "*.tar.gz.part1" -o -name "*_part1.tar.gz" -o -name "*.tar.gz.000.part" \) | sort -r)
 
     if [ ${#backup_files[@]} -eq 0 ]; then
@@ -446,7 +446,7 @@ db_restore() {
     fi
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("⬅️ Назад")
+    menu_items+=("⬅️   Назад")
 
     show_arrow_menu "📥 Выберите бэкап для загрузки" "${menu_items[@]}"
     local choice=$?
@@ -537,18 +537,18 @@ db_restore() {
     # Выбор типа восстановления
     echo
     show_arrow_menu "📥 Тип восстановления" \
-        "📦 Полное восстановление" \
+        "📦  Полное восстановление" \
         "──────────────────────────────────────" \
-        "👤 Восстановить Пользователей" \
-        "📄 Восстановить Профили Xray" \
-        "📋 Восстановить Шаблоны Xray JSON" \
-        "🌐 Восстановить Ноды и Хосты" \
-        "💰 Восстановить Данные биллинга" \
-        "👥 Восстановить Внутренние сквады" \
-        "🌍 Восстановить Внешние сквады" \
-        "⚙️ Восстановить Настройки" \
+        "👤  Восстановить Пользователей" \
+        "📄  Восстановить Профили Xray" \
+        "📋  Восстановить Шаблоны Xray JSON" \
+        "🌐  Восстановить Ноды и Хосты" \
+        "💰  Восстановить Данные биллинга" \
+        "👥  Восстановить Внутренние сквады" \
+        "🌍  Восстановить Внешние сквады" \
+        "⚙️   Восстановить Настройки" \
         "──────────────────────────────────────" \
-        "❌ Отмена"
+        "❌  Отмена"
     local restore_choice=$?
 
     if [ $restore_choice -eq 255 ] || [ $restore_choice -ge 10 ]; then
@@ -929,10 +929,10 @@ _rw_configure_autobackup() {
     # Частота
     echo
     show_arrow_menu "Частота бекапа" \
-        "⏱️ Каждый час" \
-        "📅 Каждый день (00:00 МСК)" \
-        "📆 Каждую неделю (Вс 00:00 МСК)" \
-        "🗓️ Каждый месяц (1-е число, 00:00 МСК)"
+        "⏱️   Каждый час" \
+        "📅  Каждый день (00:00 МСК)" \
+        "📆  Каждую неделю (Вс 00:00 МСК)" \
+        "🗓️   Каждый месяц (1-е число, 00:00 МСК)"
     local freq_choice=$?
 
     local frequency=""
@@ -1009,18 +1009,18 @@ manage_database() {
         local menu_items=()
         local db_actions=()
 
-        menu_items+=("💾 Сохранить базу данных");     db_actions+=("backup")
-        menu_items+=("📥 Загрузить базу данных");     db_actions+=("restore")
+        menu_items+=("💾  Сохранить базу данных");     db_actions+=("backup")
+        menu_items+=("📥  Загрузить базу данных");     db_actions+=("restore")
         menu_items+=("──────────────────────────────────────"); db_actions+=("sep")
 
         if _rw_autobackup_is_active; then
-            menu_items+=("⚙️ Изменить настройки автобекапа"); db_actions+=("ab_configure")
-            menu_items+=("⛔ Остановить автобекап");           db_actions+=("ab_stop")
+            menu_items+=("⚙️   Изменить настройки автобекапа"); db_actions+=("ab_configure")
+            menu_items+=("⛔  Остановить автобекап");           db_actions+=("ab_stop")
         else
-            menu_items+=("⚙️ Включить автобекап");            db_actions+=("ab_configure")
+            menu_items+=("⚙️   Включить автобекап");            db_actions+=("ab_configure")
         fi
         menu_items+=("──────────────────────────────────────"); db_actions+=("sep")
-        menu_items+=("⬅️ Назад");                              db_actions+=("back")
+        menu_items+=("⬅️   Назад");                              db_actions+=("back")
 
         local menu_title="💾 Работа с базой данных"
         if _rw_autobackup_is_active; then

@@ -523,8 +523,8 @@ confirm_nav() {
     local _yes _no
 
     if [ "$_del" = true ]; then
-        _yes="✔️ Подтвердить"
-        _no="❌ Отменить"
+        _yes="✔️   Подтвердить"
+        _no="❌  Отменить"
     else
         _yes="${2:?}"
         _no="${3:?}"

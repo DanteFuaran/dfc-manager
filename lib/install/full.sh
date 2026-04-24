@@ -92,10 +92,10 @@ installation_full() {
         needs_certs=true
         echo
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
@@ -410,7 +410,7 @@ installation_full() {
     echo
     print_warning "При первом входе в панель произойдет создание администратора."
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
-    echo -e "${YELLOW}   время в меню \"🔓 Доступ к панели\".${NC}"
+    echo -e "${YELLOW}   время в меню \"🔓  Доступ к панели\".${NC}"
     echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     show_continue_prompt || return 1
@@ -498,10 +498,10 @@ installation_panel_with_node() {
         needs_certs=true
         echo
         show_arrow_menu "🔐 Метод получения сертификатов" \
-            "🌐 ACME HTTP-01 (Let's Encrypt)" \
-            "☁️ Cloudflare DNS-01 (wildcard)" \
+            "🌐  ACME HTTP-01 (Let's Encrypt)" \
+            "☁️   Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️ Назад"
+            "⬅️   Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in
@@ -785,7 +785,7 @@ installation_panel_with_node() {
     echo
     print_warning "При первом входе в панель произойдет создание администратора."
     echo -e "${YELLOW}   Сбросить данные администратора и куки для входа можно в любое${NC}"
-    echo -e "${YELLOW}   время в меню \"🔓 Доступ к панели\".${NC}"
+    echo -e "${YELLOW}   время в меню \"🔓  Доступ к панели\".${NC}"
     echo
     echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
     show_continue_prompt || return 1
