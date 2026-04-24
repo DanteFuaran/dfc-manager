@@ -95,6 +95,47 @@ for s in sus.get('items', []):
 PYEOF
 }
 
+# UFW: при необходимости установить; как setup_firewall — deny incoming, SSH из sshd_config,
+# 80/443 и дополнительные TCP-порты (порт агента Beszel и т.п.).
+_beszel_setup_firewall() {
+    local -a _extra_ports=("$@")
+
+    if ! command -v ufw >/dev/null 2>&1; then
+        (
+            export DEBIAN_FRONTEND=noninteractive
+            local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+            systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+            local _lw=0
+            while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock \
+                  /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend \
+                  >/dev/null 2>&1; do
+                sleep 2; _lw=$(( _lw + 2 )); [ "$_lw" -ge 120 ] && break
+            done
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq $DPKG_OPTS ufw >/dev/null 2>&1
+        ) &
+        show_spinner "Установка UFW" || true
+    fi
+    command -v ufw >/dev/null 2>&1 || return 0
+
+    ufw default deny incoming >/dev/null 2>&1 || true
+    ufw default allow outgoing >/dev/null 2>&1 || true
+    ufw_ensure_ssh_allow_with_comment >/dev/null 2>&1 || true
+    ufw allow 80/tcp >/dev/null 2>&1 || true
+    ufw allow 443/tcp >/dev/null 2>&1 || true
+
+    local _p
+    for _p in "${_extra_ports[@]}"; do
+        [ -z "$_p" ] && continue
+        [[ "$_p" =~ ^[0-9]+$ ]] || continue
+        [ "$_p" -ge 1 ] && [ "$_p" -le 65535 ] || continue
+        ufw allow "${_p}/tcp" >/dev/null 2>&1 || true
+    done
+
+    echo "y" | ufw enable >/dev/null 2>&1 || true
+    ufw reload >/dev/null 2>&1 || true
+}
+
 # Авто-установка агента на локальной машине после запуска хаба.
 _beszel_auto_install_agent() {
     local AGENT_PORT="45876"
@@ -133,8 +174,7 @@ _beszel_auto_install_agent() {
     UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
-    # 6. Запускаем агент.
-    ufw allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
+    # 6. Запускаем агент (порт агента в UFW открывает install_beszel через _beszel_setup_firewall).
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
 services:
@@ -598,11 +638,8 @@ ${REAL_IP_BLOCK}
 NGINX
 )
 
-    # ─── Открываем порты в UFW если активен ───
-    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
-        ufw allow 80/tcp >/dev/null 2>&1 || true
-        ufw allow 443/tcp >/dev/null 2>&1 || true
-    fi
+    # ─── UFW: установка при необходимости, SSH, 80/443, порт локального агента (45876) ───
+    _beszel_setup_firewall 45876
 
     # ─── Устанавливаем зависимости (докер, если не установлен) ───
     if ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
@@ -1166,15 +1203,15 @@ install_beszel_agent() {
 
         apt-get update -qq >/dev/null 2>&1
         apt-get upgrade -y -qq $DPKG_OPTS >/dev/null 2>&1
-        apt-get install -y -qq $DPKG_OPTS ca-certificates curl ufw wget >/dev/null 2>&1
+        apt-get install -y -qq $DPKG_OPTS ca-certificates curl wget >/dev/null 2>&1
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
     ) &
     show_spinner "Обновление пакетов системы"
 
-    # ─── Открываем порт в UFW ───
-    ufw allow "${BESZEL_AGENT_PORT}/tcp" >/dev/null 2>&1 || true
+    # ─── UFW: установка при необходимости, SSH, 80/443 и порт агента ───
+    _beszel_setup_firewall "${BESZEL_AGENT_PORT}"
 
     # ─── Шаг 2: Создаём файлы ───
     (
