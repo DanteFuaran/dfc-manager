@@ -114,7 +114,7 @@ _beszel_setup_firewall() {
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq $DPKG_OPTS ufw >/dev/null 2>&1
         ) &
-        show_spinner "Установка UFW" || true
+        show_spinner "Установка Firewall (ufw)" || true
     fi
     command -v ufw >/dev/null 2>&1 || return 0
 
@@ -1209,6 +1209,7 @@ install_beszel_agent() {
         fi
     ) &
     show_spinner "Обновление пакетов системы"
+    echo
 
     # ─── UFW: установка при необходимости, SSH, 80/443 и порт агента ───
     _beszel_setup_firewall "${BESZEL_AGENT_PORT}"
@@ -1257,9 +1258,7 @@ YAML
     fi
 
     echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "Агент Beszel добавлен" "$GREEN")"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "${GREEN}✅ Агент Beszel успешно установлен!${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
