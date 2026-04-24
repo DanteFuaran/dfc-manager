@@ -96,8 +96,15 @@ PYEOF
 }
 
 # UFW: при необходимости установить; как setup_firewall — deny incoming, SSH из sshd_config,
-# 80/443 и дополнительные TCP-порты (порт агента Beszel и т.п.).
+# опционально 80/443 (только хаб с nginx), плюс дополнительные TCP-порты (порт агента и т.п.).
+# Вызов: _beszel_setup_firewall 45876 — хаб (80/443 + порты).
+#         _beszel_setup_firewall --agent-node 45876 — только нода агента (без 80/443; HTTP-01 для LE — в certificates.sh).
 _beszel_setup_firewall() {
+    local _with_http=true
+    if [ "${1:-}" = "--agent-node" ]; then
+        _with_http=false
+        shift
+    fi
     local -a _extra_ports=("$@")
 
     if ! command -v ufw >/dev/null 2>&1; then
@@ -121,8 +128,10 @@ _beszel_setup_firewall() {
     ufw default deny incoming >/dev/null 2>&1 || true
     ufw default allow outgoing >/dev/null 2>&1 || true
     ufw_ensure_ssh_allow_with_comment >/dev/null 2>&1 || true
-    ufw allow 80/tcp >/dev/null 2>&1 || true
-    ufw allow 443/tcp >/dev/null 2>&1 || true
+    if [ "$_with_http" = true ]; then
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+        ufw allow 443/tcp >/dev/null 2>&1 || true
+    fi
 
     local _p
     for _p in "${_extra_ports[@]}"; do
@@ -174,7 +183,7 @@ _beszel_auto_install_agent() {
     UNIVERSAL_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
     [ -z "$UNIVERSAL_TOKEN" ] && return 1
 
-    # 6. Запускаем агент (порт агента в UFW открывает install_beszel через _beszel_setup_firewall).
+    # 6. Запускаем агент (порт агента в UFW открывает install_beszel через _beszel_setup_firewall; 80/443 только у хаба).
     mkdir -p "${DIR_BESZEL_AGENT}"
     cat > "${DIR_BESZEL_AGENT}docker-compose.yml" <<YAML
 services:
@@ -1211,8 +1220,8 @@ install_beszel_agent() {
     show_spinner "Обновление пакетов системы"
     echo
 
-    # ─── UFW: установка при необходимости, SSH, 80/443 и порт агента ───
-    _beszel_setup_firewall "${BESZEL_AGENT_PORT}"
+    # ─── UFW: SSH и порт агента (без постоянного 80/443 — нода ходит к хабу исходящим) ───
+    _beszel_setup_firewall --agent-node "${BESZEL_AGENT_PORT}"
 
     # ─── Шаг 2: Создаём файлы ───
     (
