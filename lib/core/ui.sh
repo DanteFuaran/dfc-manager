@@ -196,7 +196,9 @@ show_arrow_menu() {
     local _hdr="${MENU_TITLE_COLOR:-$BLUE}"
     local _title_pad1="" _title_line1="$title" _title_pad2="" _title_line2=""
     local _title_two_line=false
-    if [[ "$title" == *\\* ]]; then
+    # Только при явной последовательности \n (два символа), иначе ANSI (\033) попадает
+    # в *\\* и заголовок дублируется.
+    if [[ "$title" == *\\n* ]]; then
         _title_two_line=true
         local _t1="${title%%\\n*}" _t2="${title#*\\n}"
         local _tc1; _tc1=$(printf '%b' "$_t1" | sed 's/\x1b\[[0-9;]*m//g')
