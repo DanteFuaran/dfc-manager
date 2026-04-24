@@ -258,9 +258,8 @@ get_cert_acme() {
     _tmp_log=$(mktemp)
     _exit_file="${_tmp_log}.exit"
 
-    # Открываем порт 80 ДО запуска certbot
-    ufw allow 80/tcp >/dev/null 2>&1 || true
-    ufw reload >/dev/null 2>&1 || true
+    # Временно открываем 80 для HTTP-01 (правило с меткой — снимается ниже и в post-hook renew)
+    ufw_allow_http01_temp
     iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
     sleep 2
 
@@ -281,9 +280,7 @@ get_cert_acme() {
     ) &
     show_spinner "Получение сертификата для $dnorm"
 
-    # Закрываем порт 80 ПОСЛЕ завершения certbot
-    ufw delete allow 80/tcp >/dev/null 2>&1 || true
-    ufw reload >/dev/null 2>&1 || true
+    ufw_revert_http01_temp
     iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
 
     local _exit_code
@@ -316,14 +313,20 @@ get_cert_acme() {
     rm -f "$_tmp_log" "$_exit_file"
 
     local _deploy_hook='for d in /opt/nginx/ssl/*/; do dn=$(basename "$d"); src="/etc/letsencrypt/live/$dn"; [ -f "$src/fullchain.pem" ] && cp -fL "$src/fullchain.pem" "$d/fullchain.pem" && cp -fL "$src/privkey.pem" "$d/privkey.pem"; done; cd /opt/nginx 2>/dev/null && docker compose restart nginx 2>/dev/null'
-    local _pre_hook='ufw allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true; sleep 2'
-    local _post_hook='ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true'
+    local _hook_path="${DIR_SCRIPT%/}/lib/extra/ufw_certbot_http01_hook.sh"
+    local _pre_hook="bash ${_hook_path} pre"
+    local _post_hook="bash ${_hook_path} post"
     local cron_rule="0 3 * * * certbot renew --quiet --pre-hook '${_pre_hook}' --post-hook '${_post_hook}' --deploy-hook '${_deploy_hook}' 2>/dev/null"
     local existing_cron
     existing_cron=$(crontab -l 2>/dev/null)
     if echo "$existing_cron" | grep -q "certbot renew"; then
-        # Если cron уже есть, но без pre-hook (например от Cloudflare) — обновляем его
-        if ! echo "$existing_cron" | grep -q "pre-hook"; then
+        if echo "$existing_cron" | grep -q "ufw_certbot_http01_hook.sh"; then
+            :
+        elif ! echo "$existing_cron" | grep -q "pre-hook"; then
+            # Был renew без pre-hook (например Cloudflare) — ставим строку с HTTP-01 hooks
+            echo "$existing_cron" | grep -v "certbot renew" | { cat; echo "$cron_rule"; } | crontab -
+        else
+            # Старый inline pre/post (ufw allow/delete 80) — заменяем на вызов hook-скрипта
             echo "$existing_cron" | grep -v "certbot renew" | { cat; echo "$cron_rule"; } | crontab -
         fi
     else

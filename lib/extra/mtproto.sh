@@ -40,10 +40,17 @@ _mt_consume_escape_seq() {
 _mt_read_input() {
     local _var="$1" _prompt="$2" _default="${3:-}"
     local _typed="" _ch _orig_stty _rc=0
+    local _p="$_prompt"
+    while [[ "${_p: -1:1}" == " " ]]; do _p="${_p% }"; done
     _orig_stty=$(stty -g 2>/dev/null || echo "")
     stty -icanon -echo isig min 1 time 0 2>/dev/null || true
     tput cnorm 2>/dev/null || true
-    printf "\033[1;34m\xe2\x9e\x9c\033[0m  \033[1;33m%b\033[0m " "$_prompt"
+    # Как reading_inline: двоеточие у промпта — серым; подсказки внутри %b остаются своим цветом
+    if [[ "${_p: -1:1}" == ":" ]]; then
+        printf "${BLUE}➜${NC}  ${YELLOW}%b${DARKGRAY}:${NC} " "${_p%:}"
+    else
+        printf "${BLUE}➜${NC}  ${YELLOW}%b${NC} " "$_p"
+    fi
     while IFS= read -rsn1 -t 0 _ch 2>/dev/null; do :; done
     while true; do
         _ch=""

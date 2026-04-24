@@ -62,10 +62,9 @@ obtain_cert_for_domain() {
         ) &
         show_spinner "Остановка nginx"
 
-        (
-            ufw allow 80/tcp >/dev/null 2>&1
-        ) &
-        show_spinner "Открытие порта 80"
+        ufw_allow_http01_temp
+        iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+        sleep 2
 
         (
             certbot certonly --standalone \
@@ -76,11 +75,8 @@ obtain_cert_for_domain() {
         ) &
         show_spinner "Получение SSL-сертификата для $new_domain"
 
-        (
-            ufw delete allow 80/tcp >/dev/null 2>&1
-            ufw reload >/dev/null 2>&1
-        ) &
-        show_spinner "Закрытие порта 80"
+        ufw_revert_http01_temp
+        iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
 
         _cert_dom="$new_domain"
     fi
@@ -104,9 +100,9 @@ obtain_cert_for_domain() {
     local _deploy_hook='cd /opt/nginx 2>/dev/null && docker compose restart nginx 2>/dev/null'
     local cron_rule
     if [ "$cert_method" != "1" ]; then
-        # ACME (standalone) — нужно открывать/закрывать порт 80
-        local _pre_hook='ufw allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true; sleep 2'
-        local _post_hook='ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true'
+        local _hook_path="${DIR_SCRIPT%/}/lib/extra/ufw_certbot_http01_hook.sh"
+        local _pre_hook="bash ${_hook_path} pre"
+        local _post_hook="bash ${_hook_path} post"
         cron_rule="0 3 * * * certbot renew --quiet --pre-hook '${_pre_hook}' --post-hook '${_post_hook}' --deploy-hook '${_deploy_hook}' 2>/dev/null"
     else
         # Cloudflare DNS-01 — порт 80 не нужен

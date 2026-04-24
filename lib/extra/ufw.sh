@@ -330,6 +330,41 @@ ufw_delete_all_rules_except_ssh() {
     return 0
 }
 
+# Временное правило UFW для certbot HTTP-01 (удаляется ufw_revert_http01_temp).
+# С комментарием dfc-certbot-http01 — чтобы «ufw delete allow 80» не трогало чужие правила 80.
+ufw_allow_http01_temp() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    rm -f /tmp/.dfc_certbot_plain80
+    if ufw allow 80/tcp comment 'dfc-certbot-http01' >/dev/null 2>&1; then
+        :
+    else
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+        touch /tmp/.dfc_certbot_plain80
+    fi
+    ufw reload >/dev/null 2>&1 || true
+}
+
+ufw_revert_http01_temp() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    local _line _n _nums=()
+    while IFS= read -r _line; do
+        echo "$_line" | grep -qF 'dfc-certbot-http01' || continue
+        echo "$_line" | grep -Eq '80(/tcp|[[:space:]]+TCP)([[:space:]]|$)' || continue
+        echo "$_line" | grep -qi 'ALLOW' || continue
+        _n=$(echo "$_line" | grep -oP '^\[\s*\K\d+(?=\])' 2>/dev/null) || _n=''
+        [ -n "$_n" ] && _nums+=("$_n")
+    done < <(ufw status numbered 2>/dev/null | grep '^\[' || true)
+    local i
+    for ((i=${#_nums[@]}-1; i>=0; i--)); do
+        echo "y" | ufw delete "${_nums[$i]}" >/dev/null 2>&1 || true
+    done
+    if [ -f /tmp/.dfc_certbot_plain80 ]; then
+        ufw delete allow 80/tcp >/dev/null 2>&1 || true
+        rm -f /tmp/.dfc_certbot_plain80
+    fi
+    ufw reload >/dev/null 2>&1 || true
+}
+
 # Удаляет все правила UFW, которые содержат указанный порт (и опционально протокол).
 # Безопасно для сценариев удаления компонентов: правила удаляются по номеру в обратном порядке,
 # чтобы нумерация не "съезжала".

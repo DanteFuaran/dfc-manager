@@ -1120,7 +1120,7 @@ uninstall_beszel() {
 install_beszel_agent() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}    🖥️  Подключение агента Beszel${NC}"
+    echo -e "$(center "🖥️  Подключение агента Beszel" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if is_beszel_agent_installed; then
@@ -1145,7 +1145,7 @@ install_beszel_agent() {
     while true; do
         case $_step in
             1) # URL
-                _mt_read_input BESZEL_HUB_URL "Домен панели Beszel ${DARKGRAY}(например monitor.example.com)${YELLOW}:" ""
+                _mt_read_input BESZEL_HUB_URL "Домен панели Beszel ${DARKGRAY}(например monitor.example.com):" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$BESZEL_HUB_URL" ]; then
                         _bza_erase   # стереть пустую строку, повторить
@@ -1156,7 +1156,7 @@ install_beszel_agent() {
                     return 1   # Esc на 1-м шаге — выход
                 fi ;;
             2) # Порт
-                _mt_read_input BESZEL_AGENT_PORT "Порт агента ${DARKGRAY}(по умолчанию 45876)${NC}:" "45876"
+                _mt_read_input BESZEL_AGENT_PORT "Порт агента ${DARKGRAY}(по умолчанию 45876):" "45876"
                 if [ $? -eq 0 ]; then
                     [ -z "$BESZEL_AGENT_PORT" ] && BESZEL_AGENT_PORT="45876"
                     (( _step++ ))
@@ -1164,7 +1164,7 @@ install_beszel_agent() {
                     _bza_erase; (( _step-- ))
                 fi ;;
             3) # Ключ
-                _mt_read_input BESZEL_KEY "Ключ (публичный ключ из панели):" ""
+                _mt_read_input BESZEL_KEY "Ключ ${DARKGRAY}(публичный ключ из панели):" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$BESZEL_KEY" ]; then
                         _bza_erase
@@ -1175,7 +1175,7 @@ install_beszel_agent() {
                     _bza_erase; (( _step-- ))
                 fi ;;
             4) # Токен
-                _mt_read_input BESZEL_TOKEN "Токен (токен из панели):" ""
+                _mt_read_input BESZEL_TOKEN "Токен ${DARKGRAY}(токен из панели):" ""
                 if [ $? -eq 0 ]; then
                     if [ -z "$BESZEL_TOKEN" ]; then
                         _bza_erase
@@ -1257,7 +1257,9 @@ YAML
     fi
 
     echo
-    print_success "Агент Beszel добавлен"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "$(center "Агент Beszel добавлен" "$GREEN")"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0
