@@ -12,10 +12,10 @@ main_menu() {
 
     while true; do
         tput civis 2>/dev/null || true
-        local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION"
+        local menu_title="🛠️ DFC Manager v$SCRIPT_VERSION"
 
         local -a items=() actions=()
-        local _rw_label="📦  Remnawave - Панель  " _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "
+        local _rw_label="📦 Remnawave - Панель  " _bz_label="📊 Beszel - Мониторинг " _mt_label="📡 MTProto - TG Прокси "
         { is_panel_installed || is_node_installed || is_subpage_remote_installed; } \
             && _rw_label="${_rw_label} ${GREEN}(установлено)${NC}" \
             || _rw_label="${_rw_label} ${DARKGRAY}(не установлено)${NC}"
@@ -29,13 +29,13 @@ main_menu() {
         items+=("$_bz_label");                     actions+=("beszel")
         items+=("$_mt_label");                      actions+=("mtproto")
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("🧩  Дополнительные программы");   actions+=("extra")
-        items+=("🧪  Тестирование сервера");         actions+=("testing")
-        items+=("⚙️   Оптимизация сервера");          actions+=("optimization")
+        items+=("🧩 Дополнительные программы");   actions+=("extra")
+        items+=("🧪 Тестирование сервера");         actions+=("testing")
+        items+=("⚙️ Оптимизация сервера");          actions+=("optimization")
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("🗑️   Удаление компонентов");          actions+=("delete_all")
+        items+=("🗑️ Удаление компонентов");          actions+=("delete_all")
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("❌  Выход");                         actions+=("exit")
+        items+=("❌ Выход");                         actions+=("exit")
 
         MENU_ESC_LABEL="Выход"
         show_arrow_menu "$menu_title" "${items[@]}"
@@ -68,20 +68,20 @@ main_menu() {
 
                     local rw_title="📦 Remnawave (Сервис)${install_status}"
                     local -a rw_items=() rw_actions=()
-                    rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
+                    rw_items+=("📦 Установить компоненты");  rw_actions+=("install")
                     rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     if [ "$is_installed" = true ]; then
-                        rw_items+=("▶️   Запустить сервисы");       rw_actions+=("start")
-                        rw_items+=("⏹️   Остановить сервисы");      rw_actions+=("stop")
-                        rw_items+=("📋  Просмотр логов");          rw_actions+=("logs")
+                        rw_items+=("▶️ Запустить сервисы");       rw_actions+=("start")
+                        rw_items+=("⏹️ Остановить сервисы");      rw_actions+=("stop")
+                        rw_items+=("📋 Просмотр логов");          rw_actions+=("logs")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
-                        rw_items+=("💾  Управление базой данных"); rw_actions+=("database")
-                        rw_items+=("🔓  Настройки");               rw_actions+=("access")
+                        rw_items+=("💾 Управление базой данных"); rw_actions+=("database")
+                        rw_items+=("🔓 Настройки");               rw_actions+=("access")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
-                        rw_items+=("🔄  Обновить панель/ноду");    rw_actions+=("update_components")
+                        rw_items+=("🔄 Обновить панель/ноду");    rw_actions+=("update_components")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     fi
-                    rw_items+=("⬅️   Назад"); rw_actions+=("back")
+                    rw_items+=("⬅️ Назад"); rw_actions+=("back")
 
                     show_arrow_menu "$rw_title" "${rw_items[@]}"
                     local rw_choice=$?
@@ -94,23 +94,23 @@ main_menu() {
                                 tput civis 2>/dev/null || true
                                 local -a inst_items=() inst_actions=()
                                 if ! is_panel_installed; then
-                                    inst_items+=("🖥️   Установить Панель Remnawave"); inst_actions+=("panel_wizard")
+                                    inst_items+=("🖥️ Установить Панель Remnawave"); inst_actions+=("panel_wizard")
                                 else
-                                    inst_items+=("➕  Подключить ноду к панели"); inst_actions+=("add_node")
+                                    inst_items+=("➕ Подключить ноду к панели"); inst_actions+=("add_node")
                                 fi
                                 if ! is_subpage_remote_installed || ! is_node_installed; then
                                     inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
                                 fi
                                 if ! is_subpage_remote_installed; then
-                                    inst_items+=("📄  Установить Страницу подписки"); inst_actions+=("subpage")
+                                    inst_items+=("📄 Установить Страницу подписки"); inst_actions+=("subpage")
                                 fi
                                 if ! is_node_installed; then
-                                    inst_items+=("🌐  Установить Ноду");               inst_actions+=("node")
+                                    inst_items+=("🌐 Установить Ноду");               inst_actions+=("node")
                                 fi
                                 inst_items+=("──────────────────────────────────────"); inst_actions+=("sep")
-                                inst_items+=("⬅️   Назад"); inst_actions+=("back")
+                                inst_items+=("⬅️ Назад"); inst_actions+=("back")
 
-                                show_arrow_menu "📦  Выберите тип установки" "${inst_items[@]}"
+                                show_arrow_menu "📦 Выберите тип установки" "${inst_items[@]}"
                                 local install_choice=$?
                                 [[ $install_choice -eq 255 ]] && break
                                 local inst_action="${inst_actions[$install_choice]:-back}"
@@ -118,21 +118,21 @@ main_menu() {
                                     panel_wizard)
                                         while true; do
                                             tput civis 2>/dev/null || true
-                                            show_arrow_menu "📄  Установка страницы подписки" \
-                                                "✔️   Установить на этот сервер (рекомендуется)" \
-                                                "❌  Установлю на отдельный сервер" \
+                                            show_arrow_menu "📄 Установка страницы подписки" \
+                                                "✔️ Установить на этот сервер (рекомендуется)" \
+                                                "❌ Установлю на отдельный сервер" \
                                                 "──────────────────────────────────────" \
-                                                "⬅️   Назад"
+                                                "⬅️ Назад"
                                             local sub_choice=$?
                                             [[ $sub_choice -eq 255 || $sub_choice -eq 3 ]] && break
                                             local with_subpage=true
                                             [[ $sub_choice -eq 1 ]] && with_subpage=false
 
-                                            show_arrow_menu "🌐  Установка ноды" \
-                                                "✔️   Установлю на отдельный сервер (рекомендуется)" \
-                                                "❌  Установить на этот сервер" \
+                                            show_arrow_menu "🌐 Установка ноды" \
+                                                "✔️ Установлю на отдельный сервер (рекомендуется)" \
+                                                "❌ Установить на этот сервер" \
                                                 "──────────────────────────────────────" \
-                                                "⬅️   Назад"
+                                                "⬅️ Назад"
                                             local node_choice=$?
                                             [[ $node_choice -eq 255 || $node_choice -eq 3 ]] && continue
                                             local with_node=false

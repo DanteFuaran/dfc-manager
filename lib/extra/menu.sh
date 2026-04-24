@@ -11,12 +11,12 @@ manage_extra_settings() {
         ip link show warp 2>/dev/null | grep -q "warp" && _warp_st="${GREEN}(установлен)${NC}" || _warp_st="${DARKGRAY}(не установлен)${NC}"
         command -v fail2ban-client >/dev/null 2>&1 && _f2b_st="${GREEN}(установлен)${NC}" || _f2b_st="${DARKGRAY}(не установлен)${NC}"
 
-        show_arrow_menu "🧩  Дополнительные программы" \
+        show_arrow_menu "🧩 Дополнительные программы" \
             "🔥 UFW - Firewall      ${_ufw_st}" \
-            "🌐  WARP - Cloudflare   ${_warp_st}" \
-            "🛡️   Fail2ban - Defence  ${_f2b_st}" \
+            "🌐 WARP - Cloudflare   ${_warp_st}" \
+            "🛡️ Fail2ban - Defence  ${_f2b_st}" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 
@@ -47,13 +47,13 @@ manage_server_testing() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
-        show_arrow_menu "🧪  Тестирование сервера" \
-            "⚡  Тест скорости сети" \
-            "🌍  Доступность популярных сервисов" \
-            "🔒  Региональные ограничения" \
-            "📍  Геолокация IP" \
+        show_arrow_menu "🧪 Тестирование сервера" \
+            "⚡ Тест скорости сети" \
+            "🌍 Доступность популярных сервисов" \
+            "🔒 Региональные ограничения" \
+            "📍 Геолокация IP" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 
@@ -531,11 +531,11 @@ manage_server_optimization() {
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
 
-        show_arrow_menu "⚙️  Оптимизация сервера" \
-            "💾  SWAP" \
-            "🚀  BBR" \
+        show_arrow_menu "⚙️ Оптимизация сервера" \
+            "💾 SWAP" \
+            "🚀 BBR" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 

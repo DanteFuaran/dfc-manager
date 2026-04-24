@@ -38,7 +38,7 @@ installation_node() {
         [[ $_choice -eq 0 ]] && return 1
 
         # Enter — подтверждение переустановки
-        if ! confirm_nav --delete "⚠️  Переустановка ноды"; then
+        if ! confirm_nav --delete "⚠️ Переустановка ноды"; then
             return 0
         fi
 
@@ -536,11 +536,11 @@ installation_node_local() {
 
         if [ "$CERT_METHOD" = "1" ]; then
             if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
-                show_arrow_menu "🔐  Метод получения сертификата" \
-                    "🌐  ACME HTTP-01 (Let's Encrypt)" \
-                    "☁️   Cloudflare DNS-01 (wildcard)" \
+                show_arrow_menu "🔐 Метод получения сертификата" \
+                    "🌐 ACME HTTP-01 (Let's Encrypt)" \
+                    "☁️ Cloudflare DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
-                    "⬅️   Назад"
+                    "⬅️ Назад"
                 local cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
@@ -821,11 +821,11 @@ installation_node_remote() {
     if check_if_certificates_needed domains_to_check; then
         needs_certs=true
         echo
-        show_arrow_menu "🔐  Метод получения сертификатов" \
-            "🌐  ACME HTTP-01 (Let's Encrypt)" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
+        show_arrow_menu "🔐 Метод получения сертификатов" \
+            "🌐 ACME HTTP-01 (Let's Encrypt)" \
+            "☁️ Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
 
@@ -1094,11 +1094,11 @@ installation_node_with_existing_subpage() {
     if check_if_certificates_needed domains_to_check; then
         needs_certs=true
         echo
-        show_arrow_menu "🔐  Метод получения сертификатов" \
-            "🌐  ACME HTTP-01 (Let's Encrypt)" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
+        show_arrow_menu "🔐 Метод получения сертификатов" \
+            "🌐 ACME HTTP-01 (Let's Encrypt)" \
+            "☁️ Cloudflare DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return
         case $cert_choice in
@@ -1258,7 +1258,7 @@ installation_node_with_existing_subpage() {
     if [ "$health_ok" = true ]; then
         echo -e "$(center "Нода успешно подключена!")"
     else
-        echo -e "$(center "⚠️  Нода установлена, но не подключилась к панели" "$YELLOW")"
+        echo -e "$(center "⚠️ Нода установлена, но не подключилась к панели" "$YELLOW")"
     fi
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"

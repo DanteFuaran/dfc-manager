@@ -29,36 +29,36 @@ manage_warp() {
 
     # Только панель (без ноды) — только пункты конфигурации
     if [ "$has_panel" = true ] && [ "$has_node" = false ]; then
-        items+=("➕  Добавить WARP в конфигурацию ноды");  actions+=("add_config")
-        items+=("➖  Удалить WARP из конфигурации ноды");  actions+=("del_config")
+        items+=("➕ Добавить WARP в конфигурацию ноды");  actions+=("add_config")
+        items+=("➖ Удалить WARP из конфигурации ноды");  actions+=("del_config")
         items+=("──────────────────────────────────────");  actions+=("sep")
-        items+=("⬅️   Назад");                               actions+=("back")
+        items+=("⬅️ Назад");                               actions+=("back")
 
     # Только нода (без панели) — только установка/удаление WARP
     elif [ "$has_node" = true ] && [ "$has_panel" = false ]; then
         if [ "$warp_installed" = false ]; then
-            items+=("📥  Установить WARP");  actions+=("install")
+            items+=("📥 Установить WARP");  actions+=("install")
         else
-            items+=("🗑️   Удалить WARP");    actions+=("uninstall")
+            items+=("🗑️ Удалить WARP");    actions+=("uninstall")
         fi
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("⬅️   Назад");                              actions+=("back")
+        items+=("⬅️ Назад");                              actions+=("back")
 
     # Оба компонента — все пункты
     else
         if [ "$warp_installed" = false ]; then
-            items+=("📥  Установить WARP");  actions+=("install")
+            items+=("📥 Установить WARP");  actions+=("install")
         else
-            items+=("🗑️   Удалить WARP");    actions+=("uninstall")
+            items+=("🗑️ Удалить WARP");    actions+=("uninstall")
         fi
         items+=("──────────────────────────────────────");  actions+=("sep")
-        items+=("➕  Добавить WARP в конфигурацию ноды");  actions+=("add_config")
-        items+=("➖  Удалить WARP из конфигурации ноды");  actions+=("del_config")
+        items+=("➕ Добавить WARP в конфигурацию ноды");  actions+=("add_config")
+        items+=("➖ Удалить WARP из конфигурации ноды");  actions+=("del_config")
         items+=("──────────────────────────────────────");  actions+=("sep")
-        items+=("⬅️   Назад");                               actions+=("back")
+        items+=("⬅️ Назад");                               actions+=("back")
     fi
 
-    show_arrow_menu "🌐  WARP" "${items[@]}"
+    show_arrow_menu "🌐 WARP" "${items[@]}"
     local choice=$?
     local action="${actions[$choice]:-back}"
 
@@ -280,7 +280,7 @@ uninstall_warp_native() {
         return 0
     fi
 
-    if ! confirm_nav --delete "🗑️  Удаление WARP"; then
+    if ! confirm_nav --delete "🗑️ Удаление WARP"; then
         print_error "Операция отменена"
         sleep 2
         return 0
@@ -385,16 +385,16 @@ add_warp_to_config() {
     local menu_items=()
     while IFS=' ' read -r name uuid; do
         [ -z "$name" ] && continue
-        menu_items+=("📄  $name")
+        menu_items+=("📄 $name")
         config_map[$i]="$uuid"
         config_name_map[$i]="$name"
         ((i++))
     done <<< "$configs"
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("⬅️   Назад")
+    menu_items+=("⬅️ Назад")
 
-    show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
+    show_arrow_menu "📄 Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?
 
     # Проверка - выбран ли разделитель или "Назад"
@@ -681,15 +681,15 @@ remove_warp_from_config() {
     local menu_items=()
     while IFS=' ' read -r name uuid; do
         [ -z "$name" ] && continue
-        menu_items+=("📄  $name")
+        menu_items+=("📄 $name")
         config_map[$i]="$uuid"
         ((i++))
     done <<< "$configs"
 
     menu_items+=("──────────────────────────────────────")
-    menu_items+=("⬅️   Назад")
+    menu_items+=("⬅️ Назад")
 
-    show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
+    show_arrow_menu "📄 Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?
 
     # Проверка - выбран ли разделитель или "Назад"
@@ -738,7 +738,7 @@ remove_warp_from_config() {
     fi
 
     if [ -n "$_port_to_close" ]; then
-        show_arrow_menu "🛡️  Закрытие порта WARP" \
+        show_arrow_menu "🛡️ Закрытие порта WARP" \
             "Закрыть порт от WARP (${_port_to_close})" \
             "Не закрывать порт"
         [ $? -eq 0 ] && _should_close_port=true

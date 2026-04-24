@@ -9,9 +9,9 @@ manage_ufw() {
 
         if [ "$ufw_installed" -eq 0 ]; then
             show_arrow_menu "🔥 Firewall (UFW)" \
-                "🛡️   Установить Firewall (UFW)" \
+                "🛡️ Установить Firewall (UFW)" \
                 "──────────────────────────────────────" \
-                "⬅️   Назад"
+                "⬅️ Назад"
             local choice=$?
             [[ $choice -eq 255 ]] && return 0
 
@@ -36,14 +36,14 @@ manage_ufw() {
             [ "$choice" -ge 1 ] && return 0
         else
             show_arrow_menu "🔥 Firewall (UFW)" \
-                "📋  Показать открытые порты" \
-                "➕  Открыть порт" \
-                "➖  Удалить правило" \
-                "🧹  Удалить все правила" \
+                "📋 Показать открытые порты" \
+                "➕ Открыть порт" \
+                "➖ Удалить правило" \
+                "🧹 Удалить все правила" \
                 "──────────────────────────────────────" \
-                "🗑️   Удаление Firewall (ufw)" \
+                "🗑️ Удаление Firewall (ufw)" \
                 "──────────────────────────────────────" \
-                "⬅️   Назад"
+                "⬅️ Назад"
             local choice=$?
             [[ $choice -eq 255 ]] && return 0
         fi
@@ -184,9 +184,9 @@ manage_ufw() {
                         menu_items+=("$r")
                     done
                     menu_items+=("──────────────────────────────────────")
-                    menu_items+=("⬅️   Назад")
+                    menu_items+=("⬅️ Назад")
 
-                    show_arrow_menu "➖  Удалить правило" "${menu_items[@]}"
+                    show_arrow_menu "➖ Удалить правило" "${menu_items[@]}"
                     local del_choice=$?
 
                     local total_rules=${#rules[@]}
@@ -197,7 +197,7 @@ manage_ufw() {
 
                     # Запрашиваем подтверждение — не покидаем подменю ни при каком ответе
                     echo
-                    if ! confirm_nav --delete "➖  Удалить правило UFW"; then
+                    if ! confirm_nav --delete "➖ Удалить правило UFW"; then
                         continue
                     fi
 
@@ -214,7 +214,7 @@ manage_ufw() {
                 if [ "$rule_count" -eq 0 ]; then
                     clear
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
-                    echo -e "$(center "🗑️  Удалить все правила UFW" "$BLUE")"
+                    echo -e "$(center "🗑️ Удалить все правила UFW" "$BLUE")"
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     echo
                     print_warning "Нет правил для удаления"
@@ -223,12 +223,12 @@ manage_ufw() {
                     show_continue_prompt || return 1
                     continue
                 fi
-                if ! confirm_nav --delete "🗑️  Удалить все правила UFW"; then
+                if ! confirm_nav --delete "🗑️ Удалить все правила UFW"; then
                     continue
                 fi
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
-                echo -e "$(center "🗑️  Удалить все правила UFW" "$BLUE")"
+                echo -e "$(center "🗑️ Удалить все правила UFW" "$BLUE")"
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 echo
                 (

@@ -53,7 +53,7 @@ restore_nginx_config() {
         fi
     fi
 
-    if ! confirm_nav --delete "⚠️  Экстренное восстановление Nginx"; then
+    if ! confirm_nav --delete "⚠️ Экстренное восстановление Nginx"; then
         return
     fi
 
@@ -160,11 +160,11 @@ manage_panel_access() {
         # Формируем лейбл для переключателя
         local _toggle_label
         if [ "$_current_port" = "8443" ]; then
-            _toggle_label="🔒  Переключить панель на 443"
+            _toggle_label="🔒 Переключить панель на 443"
         elif [ "$_current_port" = "443" ]; then
-            _toggle_label="🔓  Переключить панель на 8443"
+            _toggle_label="🔓 Переключить панель на 8443"
         else
-            _toggle_label="🔓  Переключить панель на 8443"
+            _toggle_label="🔓 Переключить панель на 8443"
         fi
 
         # Показываем cookie-ссылку
@@ -172,18 +172,18 @@ manage_panel_access() {
         get_cookie_from_nginx 2>/dev/null
         _panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf 2>/dev/null | head -1)
 
-        show_arrow_menu "🔓  Доступ к панели" \
-            "🔐  Сбросить суперадмина" \
-            "🌐  Сменить домены" \
-            "🍪  Сменить cookie доступа" \
-            "🎨  Сменить сайт-заглушку" \
-            "🤖  Сменить домен телеграм бота" \
+        show_arrow_menu "🔓 Доступ к панели" \
+            "🔐 Сбросить суперадмина" \
+            "🌐 Сменить домены" \
+            "🍪 Сменить cookie доступа" \
+            "🎨 Сменить сайт-заглушку" \
+            "🤖 Сменить домен телеграм бота" \
             "──────────────────────────────────────" \
-            "🔗  Показать данные панели" \
+            "🔗 Показать данные панели" \
             "──────────────────────────────────────" \
             "$_toggle_label" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return
 

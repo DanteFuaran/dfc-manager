@@ -35,10 +35,10 @@ manage_bbr() {
 
     if [ "$current_cc" = "bbr" ]; then
         # BBR включён — показываем только "Выключить"
-        show_arrow_menu "🚀  Настройка BBR" \
-            "❌  Выключить BBR" \
+        show_arrow_menu "🚀 Настройка BBR" \
+            "❌ Выключить BBR" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         case $choice in
             0)
@@ -93,10 +93,10 @@ manage_bbr() {
         esac
     else
         # BBR выключен — показываем только "Включить"
-        show_arrow_menu "🚀  Настройка BBR" \
-            "✅  Включить BBR" \
+        show_arrow_menu "🚀 Настройка BBR" \
+            "✅ Включить BBR" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         case $choice in
             0)

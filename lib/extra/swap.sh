@@ -42,11 +42,11 @@ manage_swap() {
         swapon --show 2>/dev/null
         echo
 
-        show_arrow_menu "💾  Управление SWAP" \
-            "💾  Пересоздать SWAP (${swap_size_gb} GB)" \
-            "🗑️   Удалить SWAP" \
+        show_arrow_menu "💾 Управление SWAP" \
+            "💾 Пересоздать SWAP (${swap_size_gb} GB)" \
+            "🗑️ Удалить SWAP" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 
@@ -64,7 +64,7 @@ manage_swap() {
             1)
                 # Только удаляем
                 echo
-                if ! confirm_nav --delete "🗑️  Удаление SWAP"; then
+                if ! confirm_nav --delete "🗑️ Удаление SWAP"; then
                     print_error "Операция отменена"
                     sleep 2
                     return 0
@@ -91,10 +91,10 @@ manage_swap() {
         print_warning "SWAP не настроен на сервере"
         echo
 
-        show_arrow_menu "💾  Управление SWAP" \
-            "💾  Создать SWAP (${swap_size_gb} GB)" \
+        show_arrow_menu "💾 Управление SWAP" \
+            "💾 Создать SWAP (${swap_size_gb} GB)" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 

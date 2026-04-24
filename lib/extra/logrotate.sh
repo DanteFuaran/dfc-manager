@@ -33,11 +33,11 @@ manage_logrotate() {
     echo -e "  ${WHITE}max-file${NC}: ${YELLOW}${docker_max_file}${NC}"
     echo
 
-    show_arrow_menu "📝  Logrotate" \
-        "📝  Настроить ротацию системных логов" \
-        "🐳  Настроить ротацию Docker логов" \
+    show_arrow_menu "📝 Logrotate" \
+        "📝 Настроить ротацию системных логов" \
+        "🐳 Настроить ротацию Docker логов" \
         "──────────────────────────────────────" \
-        "⬅️   Назад"
+        "⬅️ Назад"
     local choice=$?
     [[ $choice -eq 255 ]] && return 0
 
@@ -53,7 +53,7 @@ manage_logrotate() {
             echo -e "${DARKGRAY}Как часто делать ротацию логов:${NC}"
             echo
 
-            show_arrow_menu "⏱️  Частота ротации" \
+            show_arrow_menu "⏱️ Частота ротации" \
                 "  1 час" \
                 "  2 часа" \
                 "  3 часа" \
@@ -114,7 +114,7 @@ CRON_EOF
             echo -e "${DARKGRAY}Максимальный размер одного лог-файла:${NC}"
             echo
 
-            show_arrow_menu "📦  Размер лога" \
+            show_arrow_menu "📦 Размер лога" \
                 " 10m" \
                 " 20m" \
                 " 50m" \

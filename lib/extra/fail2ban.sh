@@ -32,12 +32,12 @@ manage_fail2ban() {
         done
         echo
 
-        show_arrow_menu "🛡️  Fail2ban" \
-            "⚙️   Настройки" \
-            "🔄  Перезапустить Fail2ban" \
-            "🗑️   Удалить Fail2ban" \
+        show_arrow_menu "🛡️ Fail2ban" \
+            "⚙️ Настройки" \
+            "🔄 Перезапустить Fail2ban" \
+            "🗑️ Удалить Fail2ban" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 
@@ -126,7 +126,7 @@ JAIL_EOF
                 ;;
             2)
                 echo
-                if ! confirm_nav --delete "🗑️  Удаление Fail2ban"; then
+                if ! confirm_nav --delete "🗑️ Удаление Fail2ban"; then
                     print_error "Операция отменена"
                     sleep 2
                     return 0
@@ -154,10 +154,10 @@ JAIL_EOF
         echo -e "${DARKGRAY}блокируя IP-адреса после нескольких неудачных попыток входа.${NC}"
         echo
 
-        show_arrow_menu "🛡️  Fail2ban" \
-            "📥  Установить Fail2ban" \
+        show_arrow_menu "🛡️ Fail2ban" \
+            "📥 Установить Fail2ban" \
             "──────────────────────────────────────" \
-            "⬅️   Назад"
+            "⬅️ Назад"
         local choice=$?
         [[ $choice -eq 255 ]] && return 0
 

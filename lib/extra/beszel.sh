@@ -329,22 +329,22 @@ manage_beszel() {
         local -a actions=()
 
         if ! is_beszel_installed; then
-            items+=("📊  Установить панель Beszel"); actions+=("install_hub")
+            items+=("📊 Установить панель Beszel"); actions+=("install_hub")
         else
-            items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
+            items+=("🌐 Изменить домен Beszel");    actions+=("change_domain")
         fi
 
         if ! is_beszel_agent_installed; then
-            items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
+            items+=("🖥️ Подключить агент (ноду)"); actions+=("install_agent")
         elif ! is_beszel_installed; then
             # Агент есть, хаба нет — меняем адрес хаба у агента
-            items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
+            items+=("🔗 Изменить адрес хаба агента"); actions+=("change_agent_hub")
         fi
 
         items+=("──────────────────────────────────────"); actions+=("sep")
-        items+=("⬅️   Назад");                             actions+=("back")
+        items+=("⬅️ Назад");                             actions+=("back")
 
-        show_arrow_menu "📊  Beszel" "${items[@]}"
+        show_arrow_menu "📊 Beszel" "${items[@]}"
         local choice=$?
         local action="${actions[$choice]:-back}"
 
@@ -505,10 +505,10 @@ install_beszel() {
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
         show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
-            "🌐  ACME (Let's Encrypt HTTP-01)" \
-            "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🌐 ACME (Let's Encrypt HTTP-01)" \
+            "☁️ Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
-            "❌  Отмена"
+            "❌ Отмена"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return 0
 
@@ -850,10 +850,10 @@ change_domain_beszel() {
         CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     else
         show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
-            "🌐  ACME (Let's Encrypt HTTP-01)" \
-            "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🌐 ACME (Let's Encrypt HTTP-01)" \
+            "☁️ Cloudflare (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
-            "❌  Отмена"
+            "❌ Отмена"
         local cert_choice=$?
         [[ $cert_choice -eq 255 ]] && return 0
 
@@ -1073,7 +1073,7 @@ uninstall_beszel() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        if ! confirm_nav --delete "🗑️  Удаление Beszel"; then
+        if ! confirm_nav --delete "🗑️ Удаление Beszel"; then
             return
         fi
         echo
@@ -1129,7 +1129,7 @@ uninstall_beszel() {
 install_beszel_agent() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "🖥️  Подключение агента Beszel" "$BLUE")"
+    echo -e "$(center "🖥️ Подключение агента Beszel" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     if is_beszel_agent_installed; then
@@ -1278,7 +1278,7 @@ uninstall_beszel_agent() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        if ! confirm_nav --delete "🗑️  Удаление агента Beszel"; then
+        if ! confirm_nav --delete "🗑️ Удаление агента Beszel"; then
             return
         fi
         echo

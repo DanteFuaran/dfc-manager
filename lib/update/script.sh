@@ -5,7 +5,7 @@
 # ─── Удаление отдельных компонентов Remnawave ───────────────────────────────
 
 _delete_component_panel() {
-    if ! confirm_nav --delete "🗑️  Удаление панели Remnawave"; then
+    if ! confirm_nav --delete "🗑️ Удаление панели Remnawave"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -38,7 +38,7 @@ _delete_component_panel() {
 }
 
 _delete_component_node() {
-    if ! confirm_nav --delete "🗑️  Удаление ноды Remnawave"; then
+    if ! confirm_nav --delete "🗑️ Удаление ноды Remnawave"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -121,7 +121,7 @@ _delete_component_node() {
 }
 
 _delete_component_subpage() {
-    if ! confirm_nav --delete "🗑️  Удаление страницы подписки"; then
+    if ! confirm_nav --delete "🗑️ Удаление страницы подписки"; then
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
@@ -235,22 +235,22 @@ manage_delete_components() {
         local -a del_items=() del_actions=()
 
         is_panel_installed && {
-            del_items+=("🖥️   Remnawave (Панель)"); del_actions+=("panel")
+            del_items+=("🖥️ Remnawave (Панель)"); del_actions+=("panel")
         }
         [ -f "/opt/remnanode/docker-compose.yml" ] && {
-            del_items+=("🌐  Remnawave (Нода)"); del_actions+=("node")
+            del_items+=("🌐 Remnawave (Нода)"); del_actions+=("node")
         }
         ([ -f "/opt/remnasubpage/docker-compose.yml" ] || [ -f "/opt/subscribe-page/docker-compose.yml" ]) && {
-            del_items+=("📄  Remnawave (Страница подписки)"); del_actions+=("subpage")
+            del_items+=("📄 Remnawave (Страница подписки)"); del_actions+=("subpage")
         }
         [ -f "/opt/beszel/docker-compose.yml" ] && {
-            del_items+=("📊  Beszel (Мониторинг)"); del_actions+=("beszel")
+            del_items+=("📊 Beszel (Мониторинг)"); del_actions+=("beszel")
         }
         [ -f "/opt/beszel-agent/docker-compose.yml" ] && {
-            del_items+=("📊  Beszel (Агент)"); del_actions+=("beszel_agent")
+            del_items+=("📊 Beszel (Агент)"); del_actions+=("beszel_agent")
         }
         _mt_installed && {
-            del_items+=("📡  MTProto (Прокси)"); del_actions+=("mtproto")
+            del_items+=("📡 MTProto (Прокси)"); del_actions+=("mtproto")
         }
 
         # Ничего не осталось — показываем экран с сообщением
@@ -269,12 +269,12 @@ manage_delete_components() {
 
         del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         if [ ${#del_actions[@]} -gt 1 ]; then
-            del_items+=("🗑️   Удалить всё"); del_actions+=("delete_all")
+            del_items+=("🗑️ Удалить всё"); del_actions+=("delete_all")
             del_items+=("──────────────────────────────────────"); del_actions+=("sep")
         fi
-        del_items+=("⬅️   Назад"); del_actions+=("back")
+        del_items+=("⬅️ Назад"); del_actions+=("back")
 
-        show_arrow_menu "🗑️  Удаление компонентов" "${del_items[@]}"
+        show_arrow_menu "🗑️ Удаление компонентов" "${del_items[@]}"
         local del_choice=$?
         [[ $del_choice -eq 255 ]] && return
         local del_action="${del_actions[$del_choice]:-sep}"
@@ -287,7 +287,7 @@ manage_delete_components() {
             beszel_agent) uninstall_beszel_agent ;;
             mtproto)      _mt_do_uninstall || true ;;
             delete_all)
-                if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
+                if ! confirm_nav --delete "🗑️ Удаление всех компонентов"; then
                     continue
                 fi
                 (
@@ -619,7 +619,7 @@ remove_script_all() {
 }
 
 remove_script() {
-    if ! confirm_nav --delete "🗑️  Удаление скрипта"; then
+    if ! confirm_nav --delete "🗑️ Удаление скрипта"; then
         return
     fi
 

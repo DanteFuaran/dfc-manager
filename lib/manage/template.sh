@@ -27,10 +27,10 @@ manage_random_template() {
     fi
     
     # Спрашиваем как применить шаблон
-    show_arrow_menu "🎨  Выберите способ" \
-        "🎲  Случайный шаблон" \
-        "📋  Выбрать из списка" \
-        "⬅️   Назад"
+    show_arrow_menu "🎨 Выберите способ" \
+        "🎲 Случайный шаблон" \
+        "📋 Выбрать из списка" \
+        "⬅️ Назад"
     local choice=$?
     [[ $choice -eq 255 ]] && return
 
@@ -44,29 +44,29 @@ manage_random_template() {
             randomhtml
             ;;
         1)
-            show_arrow_menu "🎨  Выберите шаблон" \
-                "🏢  NexCore - Корпоративный портал" \
-                "💻  DevForge - Технологический хаб" \
-                "☁️   Nimbus - Облачные сервисы" \
-                "💳  PayVault - Финтех платформа" \
-                "📚  LearnHub - Образовательная платформа" \
-                "🎬  StreamBox - Медиа портал" \
-                "🛒  ShopWave - E-commerce" \
-                "🎮  NeonArena - Игровой портал" \
-                "👥  ConnectMe - Социальная сеть" \
-                "📊  DataPulse - Аналитический центр" \
+            show_arrow_menu "🎨 Выберите шаблон" \
+                "🏢 NexCore - Корпоративный портал" \
+                "💻 DevForge - Технологический хаб" \
+                "☁️ Nimbus - Облачные сервисы" \
+                "💳 PayVault - Финтех платформа" \
+                "📚 LearnHub - Образовательная платформа" \
+                "🎬 StreamBox - Медиа портал" \
+                "🛒 ShopWave - E-commerce" \
+                "🎮 NeonArena - Игровой портал" \
+                "👥 ConnectMe - Социальная сеть" \
+                "📊 DataPulse - Аналитический центр" \
                 "₿  CryptoNex - Крипто биржа" \
-                "✈️   WanderWorld - Туристическое агентство" \
-                "💪  IronPulse - Фитнес платформа" \
-                "📰  ВестникПРО - Новостной портал" \
-                "🎵  SoundWave - Музыкальный сервис" \
-                "🏠  HomeNest - Недвижимость" \
-                "🍕  FastBite - Доставка еды" \
-                "🚗  AutoElite - Автомобильный портал" \
-                "🎨  Prisma Studio - Дизайн студия" \
-                "💼  Vertex Advisory - Консалтинг центр" \
+                "✈️ WanderWorld - Туристическое агентство" \
+                "💪 IronPulse - Фитнес платформа" \
+                "📰 ВестникПРО - Новостной портал" \
+                "🎵 SoundWave - Музыкальный сервис" \
+                "🏠 HomeNest - Недвижимость" \
+                "🍕 FastBite - Доставка еды" \
+                "🚗 AutoElite - Автомобильный портал" \
+                "🎨 Prisma Studio - Дизайн студия" \
+                "💼 Vertex Advisory - Консалтинг центр" \
                 "──────────────────────────────────────" \
-                "⬅️   Назад"
+                "⬅️ Назад"
             local template_choice=$?
             [[ $template_choice -eq 255 ]] && return
 

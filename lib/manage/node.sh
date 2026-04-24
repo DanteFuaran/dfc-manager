@@ -18,7 +18,7 @@ remove_node_from_panel() {
         return 1
     fi
 
-    if ! confirm_nav --delete "🗑️  Удаление ноды с сервера панели"; then
+    if ! confirm_nav --delete "🗑️ Удаление ноды с сервера панели"; then
         return
     fi
 
