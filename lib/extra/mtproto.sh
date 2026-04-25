@@ -352,7 +352,7 @@ _mt_nginx_add_domain() {
     local _connect_marker="# BEGIN_MT_CONNECT_${_domain}"
 
     # Режим nginx для /connect:
-    # - MTPROTO_STREAM: 443 у stream → MT только unix + proxy_protocol (как после adapt_mt_block).
+    # - MTPROTO_STREAM: 443 у stream → MT только unix socket.
     # - Панель/нода без stream, но с unix+443 (Remnawave): тот же приём, что у server{} панели —
     #   unix И listen 443, без real_ip (иначе браузер на 443 без PROXY → SSL/SNI сбой).
     # - Иначе только прямой listen 443.
@@ -375,11 +375,9 @@ print(c)
 
     local _listen_lines _real_ip_lines=""
     if [ "$_mt_stream_mode" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
-        _real_ip_lines="    real_ip_header proxy_protocol;
-    set_real_ip_from unix:;"
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl;"
     elif [ "$_mt_coexist_unix" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     listen [::]:443 ssl;"
     else
@@ -2127,7 +2125,7 @@ _mt_nginx_stream_write() {
     # Удаляем старый stream-блок если есть, затем строим правильный.
     # Архитектура stream-блока:
     #   443 (TCP) → ssl_preread SNI
-    #     ├─ известный HTTPS-домен → 127.0.0.1:8444 → unix socket → nginx http (proxy_protocol)
+    #     ├─ известный HTTPS-домен → 127.0.0.1:8444 → unix socket → nginx http
     #     └─ всё остальное (FakeTLS/google.com) → 127.0.0.1:PROXY_PORT → docker-proxy → MTProto
     #
     # ВАЖНО: MTProto не поддерживает proxy_protocol — перенаправляем напрямую, без обёртки.
@@ -2147,7 +2145,7 @@ for entry in http_domains:
     for d in entry.split():
         if d != '_' and '.' in d:
             domain_set.add(d)
-# Each known HTTPS domain → http gate (8444) which adds proxy_protocol and passes to nginx unix socket
+# Each known HTTPS domain → http gate (8444) → nginx unix socket.
 map_entries = '\n'.join(f'        {d}   127.0.0.1:8444;' for d in sorted(domain_set))
 # Build stream block.
 # default → directly to docker-proxy on PROXY_PORT, no proxy_protocol (MTProto doesn't support it).
@@ -2165,11 +2163,10 @@ stream {{
         proxy_pass $mt_upstream;
     }}
 
-    # HTTP gate: добавляет proxy_protocol header → nginx http unix socket (real IP сохраняется)
+    # HTTP gate: прокидывает TLS поток в nginx http unix socket.
     server {{
         listen 127.0.0.1:8444;
         proxy_pass unix:/dev/shm/nginx.sock;
-        proxy_protocol on;
     }}
 }}
 # END_MTPROTO_STREAM"""
@@ -2189,7 +2186,7 @@ def adapt_mt_block_to_stream(m):
     # Insert unix socket listen + real_ip after server_name line
     block = re.sub(
         r'(server_name [^;]+;)',
-        r'\1\n    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;',
+        r'\1\n    listen unix:/dev/shm/nginx.sock ssl;',
         block, count=1
     )
     # Clean up extra blank lines

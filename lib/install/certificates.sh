@@ -80,7 +80,7 @@ handle_certificates() {
 
         # Проверяем наличие сертификата
         if [ -d "/etc/letsencrypt/live/$domain" ] || [ -d "/etc/letsencrypt/live/$base_domain" ]; then
-            print_success "Сертификат для $domain уже существует"
+            print_cert_exists "$domain"
             continue
         fi
 

@@ -350,7 +350,7 @@ create_config_profile() {
                     realitySettings: {
                         dest: "/dev/shm/nginx.sock",
                         show: false,
-                        xver: 1,
+                        xver: 0,
                         spiderX: "",
                         shortIds: [$short_id],
                         privateKey: $private_key,
@@ -371,7 +371,7 @@ create_config_profile() {
                     realitySettings: {
                         dest: "/dev/shm/nginx.sock",
                         show: false,
-                        xver: 1,
+                        xver: 0,
                         spiderX: "",
                         shortIds: [$warp_short_id],
                         privateKey: $private_key,

@@ -6,8 +6,9 @@ print_action()  { :; }
 print_error()   { printf "${RED}✖  %b${NC}\n" "$1"; }
 # Как у show_spinner: зелёная галочка с колонки 0, текст сообщения обычным цветом
 print_success() { printf "${GREEN}\u2705${NC}\033[0m %b\n" "$1"; }
+print_final_success() { printf "${GREEN}✅ %b${NC}\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
-print_cert_exists() { printf "${GREEN}✅${NC}\033[0m Сертификат для %s уже существует\n\n" "$1"; }
+print_cert_exists() { printf "${GREEN}✅ Сертификат для %s уже существует${NC}\n" "$1"; }
 
 # Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
 # Использование: center "текст" "$COLOR"
@@ -30,6 +31,30 @@ _flush_stdin() {
     true
 }
 
+_spinner_lock_input() {
+    _SPINNER_STTY=""
+    _SPINNER_TTY=false
+    if [ -t 0 ]; then
+        _SPINNER_TTY=true
+        _SPINNER_STTY=$(stty -g 2>/dev/null || echo "")
+        stty -echo -icanon min 0 time 0 2>/dev/null || true
+        _flush_stdin
+    fi
+    tput civis 2>/dev/null || true
+}
+
+_spinner_unlock_input() {
+    _flush_stdin
+    if [ "${_SPINNER_TTY:-false}" = true ]; then
+        if [ -n "${_SPINNER_STTY:-}" ]; then
+            stty "$_SPINNER_STTY" 2>/dev/null || stty sane 2>/dev/null || true
+        else
+            stty sane 2>/dev/null || true
+        fi
+    fi
+    tput cnorm 2>/dev/null || true
+}
+
 # ═══════════════════════════════════════════════
 # СПИННЕРЫ
 # ═══════════════════════════════════════════════
@@ -40,13 +65,15 @@ show_spinner_prepare() {
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 msg="$1"
-    tput civis 2>/dev/null || true
+    _spinner_lock_input
     while kill -0 $pid 2>/dev/null; do
+        _flush_stdin
         printf "\r\033[K${BLUE}%s${NC}\033[0m  ${BLUE}%s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
         sleep $delay
     done
     wait $pid 2>/dev/null || true
+    _spinner_unlock_input
     printf "\r\033[K"
 }
 
@@ -70,8 +97,9 @@ show_spinner() {
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 msg="${1:?}" done_msg="${2:-$1}"
-    tput civis 2>/dev/null || true
+    _spinner_lock_input
     while kill -0 $pid 2>/dev/null; do
+        _flush_stdin
         if [ "$_step_nc" = true ]; then
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         else
@@ -88,12 +116,12 @@ show_spinner() {
         elif [ "$_step_nc" = true ]; then
             printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
         else
-            printf "\r\033[K${GREEN}\u2705 %s${NC}\n" "$done_msg"
+            printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
         fi
     else
         printf "\r\033[K${RED}\u2716 %s${NC}\n" "$done_msg"
     fi
-    tput cnorm 2>/dev/null || true
+    _spinner_unlock_input
     return $exit_code
 }
 
@@ -105,10 +133,11 @@ show_spinner_timer() {
     local i=0
     local delay=0.08
     local elapsed=0
-    tput civis 2>/dev/null || true
+    _spinner_lock_input
     while [ $elapsed -lt $seconds ]; do
         local remaining=$((seconds - elapsed))
         for ((j=0; j<12; j++)); do
+            _flush_stdin
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
             sleep $delay
             i=$(( (i+1) % 10 ))
@@ -116,7 +145,7 @@ show_spinner_timer() {
         elapsed=$((elapsed + 1))
     done
     printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
-    tput cnorm 2>/dev/null || true
+    _spinner_unlock_input
 }
 
 show_spinner_until_ready() {
@@ -146,10 +175,11 @@ show_spinner_until_ready() {
     ) &
     local _checker_pid=$!
 
-    tput civis 2>/dev/null || true
+    _spinner_lock_input
     printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
 
     while kill -0 $_checker_pid 2>/dev/null; do
+        _flush_stdin
         i=$(( (i + 1) % 10 ))
         sleep $delay
         printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
@@ -162,11 +192,11 @@ show_spinner_until_ready() {
 
     if [ "$_result" = "ok" ]; then
         printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$msg"
-        tput cnorm 2>/dev/null || true
+        _spinner_unlock_input
         return 0
     fi
     printf "\r\033[K${YELLOW}⚠️${NC}\033[0m  %s (таймаут)\n" "$msg"
-    tput cnorm 2>/dev/null || true
+    _spinner_unlock_input
     return 1
 }
 
@@ -566,7 +596,7 @@ confirm_nav() {
         MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Выбор  ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     else
         MENU_TITLE_COLOR="${BLUE}"
-        MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация    ${BLUE}Enter${DARKGRAY}: Подтвердить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+        MENU_KEY_HINT="${DARKGRAY}${BLUE}↑↓${DARKGRAY}: Навигация  ${BLUE}Enter${DARKGRAY}: Подтвердить  ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     fi
     MENU_ESC_LABEL="Отмена"
     if [ -n "${CONFIRM_WARN_LINE:-}" ] && [ "$_del" != true ]; then

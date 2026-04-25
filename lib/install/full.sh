@@ -278,19 +278,19 @@ installation_full() {
         randomhtml
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
+        print_warning "Установка частично завершена"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${WHITE}Панель:${NC}       https://$PANEL_DOMAIN"
         echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
         echo -e "${WHITE}SelfSteal:${NC}    https://$SELFSTEAL_DOMAIN"
         echo
-        echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
-        echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
+        echo -e "${YELLOW}👤 Логин:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
+        echo -e "${YELLOW}🔑 Пароль:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
         print_warning "Нода не настроена автоматически. Настройте вручную."
         echo
-        print_warning "ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!"
+        print_warning "Обязательно скопируйте и сохраните эти данные!"
         echo
         show_continue_prompt || return 1
         return
@@ -668,11 +668,11 @@ installation_panel_with_node() {
         print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        echo -e "${YELLOW}🔗 ССЫЛКА ВХОДА В ПАНЕЛЬ:${NC}"
+        echo -e "${YELLOW}🔗 Ссылка входа в панель:${NC}"
         echo -e "${WHITE}https://${PANEL_DOMAIN}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
         echo
-        echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
-        echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
+        echo -e "${YELLOW}👤 Логин:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
+        echo -e "${YELLOW}🔑 Пароль:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
         print_warning "Нода не настроена автоматически. Настройте вручную."
         echo

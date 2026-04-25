@@ -258,18 +258,18 @@ installation_panel() {
         clear
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        print_warning "УСТАНОВКА ЧАСТИЧНО ЗАВЕРШЕНА"
+        print_warning "Установка частично завершена"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        echo -e "${YELLOW}🔗 ССЫЛКА ВХОДА В ПАНЕЛЬ:${NC}"
+        echo -e "${YELLOW}🔗 Ссылка входа в панель:${NC}"
         echo -e "${WHITE}https://${PANEL_DOMAIN}/auth/login?${COOKIE_NAME}=${COOKIE_VALUE}${NC}"
         echo
-        echo -e "${YELLOW}👤 ЛОГИН:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
-        echo -e "${YELLOW}🔑 ПАРОЛЬ:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
+        echo -e "${YELLOW}👤 Логин:${NC}    ${WHITE}$SUPERADMIN_USERNAME${NC}"
+        echo -e "${YELLOW}🔑 Пароль:${NC}   ${WHITE}$SUPERADMIN_PASSWORD${NC}"
         echo
         print_warning "API токен не создан автоматически. Создайте вручную."
         echo
-        print_warning "ОБЯЗАТЕЛЬНО СКОПИРУЙТЕ И СОХРАНИТЕ ЭТИ ДАННЫЕ!"
+        print_warning "Обязательно скопируйте и сохраните эти данные!"
         echo
         show_continue_prompt || return 1
         return

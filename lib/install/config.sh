@@ -645,8 +645,8 @@ ssl_session_tickets off;
 
 server {
     server_name $panel_domain;
-    # REALITY dest uses TLS and xver=1 sends PROXY protocol to nginx.
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY dest uses TLS on the internal unix socket.
+    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     http2 on;
 
@@ -702,7 +702,7 @@ server {
 # BEGIN_SUB_BLOCK
 server {
     server_name $sub_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     http2 on;
 
@@ -744,7 +744,7 @@ server {
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     http2 on;
 
@@ -828,7 +828,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock ssl default_server;
     listen 443 ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -1048,15 +1048,12 @@ ssl_session_tickets off;
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-
-    real_ip_header   proxy_protocol;
-    set_real_ip_from unix:;
 
     root /var/www/html;
     index index.html;
@@ -1137,7 +1134,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
@@ -1685,7 +1682,7 @@ ssl_session_tickets off;
 
 server {
     server_name $panel_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     http2 on;
 
@@ -1740,7 +1737,7 @@ server {
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     listen 443 ssl;
     http2 on;
 
@@ -1815,7 +1812,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock ssl default_server;
     listen 443 ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -2025,15 +2022,12 @@ ssl_session_tickets off;
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/$node_cert/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
-
-    real_ip_header   proxy_protocol;
-    set_real_ip_from unix:;
 
     root /var/www/html;
     index index.html;
@@ -2106,15 +2100,12 @@ server {
 # BEGIN_SUB_BLOCK
 server {
     server_name $sub_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock ssl;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/$sub_cert/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
-
-    real_ip_header   proxy_protocol;
-    set_real_ip_from unix:;
 
     access_log /dev/stdout combined if=\$loggable;
 
@@ -2131,8 +2122,8 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header X-Real-IP \$proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For \$proxy_protocol_addr;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
@@ -2149,7 +2140,7 @@ server {
 # END_SUB_BLOCK
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
