@@ -279,7 +279,7 @@ installation_node_connect() {
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q "$SELFSTEAL_DOMAIN" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _is_local_node=true
     fi
-    print_warning "Сертификат (Секретный ключ) для установки ноды"
+    print_warning "Сертификат ноды из панели remnawave для установки на удалённом сервере"
     echo
     echo -e "${BLUE}──────────────────────────────────────${NC}"
     echo
@@ -798,7 +798,7 @@ installation_node_remote() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${BLUE}       📦 Установка только ноды${NC}"
+    echo -e "$(center "📦 Установка только ноды" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${NODE_INSTALL_DIR}" && cd "${NODE_INSTALL_DIR}"
@@ -814,7 +814,7 @@ installation_node_remote() {
     prompt_ip_with_retry "IP адрес сервера панели:" PANEL_IP || { [ "$is_fresh_install" = true ] && rm -rf "${NODE_INSTALL_DIR}" 2>/dev/null; return; }
 
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (Секретный ключ) из панели и нажмите Enter дважды:${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат ноды из панели remnawave и нажмите Enter дважды:${NC}"
     local CERTIFICATE=""
     while IFS= read -r line; do
         if [ -z "$line" ] && [ -n "$CERTIFICATE" ]; then
@@ -861,6 +861,7 @@ installation_node_remote() {
         echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
+    echo
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
@@ -960,51 +961,45 @@ EOL
         ufw allow 443/tcp >/dev/null 2>&1
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
-    ) &
-    show_spinner --step "Настройка файрвола" || true
-
-    randomhtml
-    echo
-
-    # ─── Согласование с MTProto: если MT Proto установлен, его nginx /connect блок
-    # мог занимать 443 напрямую. Перезапускаем nginx с новым конфигом (где /connect
-    # переключён на unix-сокет), чтобы освободить 443 до старта xray на ноде.
-    # generate_nginx_conf_node уже записал новый nginx.conf выше (с unix-сокетом),
-    # плюс nginx_restore_server_blocks адаптировал MT_CONNECT блоки под сокет.
-    (
         _mt_ensure_stream_mode >/dev/null 2>&1 || true
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner --step "Проверка совместимости MTProto" || true
+    show_spinner --step "Подготовка служб" || true
 
-    # Если MTProto stream-блок есть в nginx.conf — запускаем nginx ПЕРВЫМ,
-    # чтобы он занял 443 через stream, а Xray использовал только 8443
+    # Шаблон selfsteal (apply_template печатает строку «Установка шаблона: …»)
+    randomhtml
+
+    # MTProto stream: nginx должен занять 443 до старта Xray на ноде
     local _mt_stream_present=false
     if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _mt_stream_present=true
-        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner --step "Запуск nginx" || true
-        sleep 1
     fi
 
     (
-        cd "${NODE_INSTALL_DIR}"
-        docker compose up -d >/dev/null 2>&1
+        if [ "$_mt_stream_present" = true ]; then
+            cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
+            sleep 1
+        else
+            true
+        fi
     ) &
-    if ! show_spinner --step "Запуск контейнеров"; then
+    show_spinner --step "Настройка компонентов" || true
+
+    (
+        cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1 || exit 1
+        if [ "$_mt_stream_present" != true ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
+            cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
+        fi
+        sleep 2
+    ) &
+    if ! show_spinner --step "Запуск ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
     fi
 
-    if ! $_mt_stream_present; then
-        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner --step "Запуск nginx" || true
-    fi
-
-    show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья: nginx должен создать unix-сокет
@@ -1026,7 +1021,7 @@ EOL
 
     if [ "$health_ok" = true ]; then
         echo
-        echo -e "${GREEN}✅ Нода успешно подключена${NC}"
+        print_success "Нода успешно подключена!"
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1088,7 +1083,7 @@ installation_node_with_existing_subpage() {
     done
 
     echo
-    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат (Секретный ключ) из панели и нажмите Enter дважды:${NC}"
+    echo -e "${BLUE}➜${NC}  ${YELLOW}Вставьте сертификат ноды из панели remnawave и нажмите Enter дважды:${NC}"
     local CERTIFICATE=""
     while IFS= read -r line; do
         if [ -z "$line" ] && [ -n "$CERTIFICATE" ]; then
@@ -1134,6 +1129,7 @@ installation_node_with_existing_subpage() {
         echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
+    echo
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages

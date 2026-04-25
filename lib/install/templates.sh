@@ -37,8 +37,6 @@ apply_template() {
     fi
     
     IFS='|' read -r id name <<< "$template_data"
-    
-    echo ""
 
     # Создаём директорию если не существует
     mkdir -p /var/www/html/

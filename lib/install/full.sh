@@ -124,6 +124,7 @@ installation_full() {
             print_cert_exists "$domain"
         done
     fi
+    echo
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
@@ -533,6 +534,7 @@ installation_panel_with_node() {
             print_cert_exists "$domain"
         done
     fi
+    echo
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
