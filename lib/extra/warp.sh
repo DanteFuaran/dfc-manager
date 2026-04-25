@@ -507,7 +507,7 @@ add_warp_to_config() {
             security: "reality",
             realitySettings: {
                 show: false,
-                xver: 0,
+                xver: 1,
                 dest: "/dev/shm/nginx.sock",
                 spiderX: "",
                 shortIds: [$short_id],

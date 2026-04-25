@@ -2,73 +2,50 @@
 # УПРАВЛЕНИЕ СЕРВИСАМИ
 # ═══════════════════════════════════════════════
 
+remnawave_services_running() {
+    local _names
+    _names=$(docker ps --format '{{.Names}}' 2>/dev/null)
+    echo "$_names" | grep -Eq '^(remnawave|remnanode|remnawave-subscription-page|remnasubpage|remnawave-nginx)$'
+}
+
 manage_start() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
 
-    # Запускаем remnawave (панель + нода + subscription-page в одном compose)
-    (
-        cd "$rw_path"
-        docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Запуск remnawave"
+    (cd "$rw_path" && docker compose up -d >/dev/null 2>&1) || true
 
-    # Запускаем отдельную ноду (если установлена на том же сервере)
     if [ -f "/opt/remnanode/docker-compose.yml" ]; then
-        (cd /opt/remnanode && docker compose up -d >/dev/null 2>&1) &
-        show_spinner "Запуск remnanode" || true
+        (cd /opt/remnanode && docker compose up -d >/dev/null 2>&1) || true
     fi
 
-    # Запускаем subscription-page (если установлена отдельно)
     for _sp in /opt/subscribe-page /opt/remnasubpage; do
         if [ -f "${_sp}/docker-compose.yml" ] && [ "$_sp" != "$rw_path" ]; then
-            (cd "$_sp" && docker compose up -d >/dev/null 2>&1) &
-            show_spinner "Запуск subscription-page" || true
+            (cd "$_sp" && docker compose up -d >/dev/null 2>&1) || true
             break
         fi
     done
 
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
-
-    print_success "Сервисы запущены"
-    echo
-    show_continue_prompt || return 1
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) || true
 }
 
 manage_stop() {
     local rw_path
     rw_path=$(detect_remnawave_path) || return
 
-    # Останавливаем nginx первым
-    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1) &
-    show_spinner "Остановка nginx" || true
+    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1) || true
 
-    # Останавливаем отдельную ноду (если есть)
     if [ -f "/opt/remnanode/docker-compose.yml" ]; then
-        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) &
-        show_spinner "Остановка remnanode" || true
+        (cd /opt/remnanode && docker compose down >/dev/null 2>&1) || true
     fi
 
-    # Останавливаем отдельный subscription-page (если есть)
     for _sp in /opt/subscribe-page /opt/remnasubpage; do
         if [ -f "${_sp}/docker-compose.yml" ] && [ "$_sp" != "$rw_path" ]; then
-            (cd "$_sp" && docker compose down >/dev/null 2>&1) &
-            show_spinner "Остановка subscription-page" || true
+            (cd "$_sp" && docker compose down >/dev/null 2>&1) || true
             break
         fi
     done
 
-    # Останавливаем remnawave
-    (
-        cd "$rw_path"
-        docker compose down >/dev/null 2>&1
-    ) &
-    show_spinner "Остановка remnawave"
-
-    print_success "Сервисы остановлены"
-    echo
-    show_continue_prompt || return 1
+    (cd "$rw_path" && docker compose down >/dev/null 2>&1) || true
 }
 
 manage_update() {

@@ -201,13 +201,12 @@ installation_full() {
     show_spinner "Подготовка файлов" || true
 
     (
-        setup_firewall
+        setup_firewall >/dev/null 2>&1 || true
         ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Настройка файрвола" || true
+    ) >/dev/null 2>&1 &
 
     (
         # Удаляем старый том БД если остался от предыдущей установки
@@ -219,7 +218,7 @@ installation_full() {
     show_spinner "Подготовка сервисов" || true
 
     (nginx_reload) &
-    show_spinner "Запуск Nginx" || true
+    show_spinner "Запуск сервисов" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -296,7 +295,10 @@ installation_full() {
         return
     fi
 
-    # 2. Получение публичного ключа → SECRET_KEY для ноды
+    # 2. Подготовка DFC-шаблона подписки
+    ensure_dfc_subscription_template "$domain_url" "$token" >/dev/null 2>&1 || true
+
+    # 3. Получение публичного ключа → SECRET_KEY для ноды
     print_action "Получение публичного ключа панели..."
     get_public_key "$domain_url" "$token" "$node_dir"
 
@@ -308,7 +310,7 @@ installation_full() {
         return
     fi
 
-    # 3. Генерация ключей x25519 (REALITY)
+    # 4. Генерация ключей x25519 (REALITY)
     print_action "Генерация REALITY ключей..."
     local private_key
     private_key=$(generate_xray_keys "$domain_url" "$token")
@@ -320,11 +322,11 @@ installation_full() {
         return
     fi
 
-    # 4. Удаление дефолтного config profile
+    # 5. Удаление дефолтного config profile
     print_action "Удаление дефолтного конфиг-профиля..."
     delete_config_profile "$domain_url" "$token"
 
-    # 5. Создание config profile с VLESS REALITY
+    # 6. Создание config profile с VLESS REALITY
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result
     config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name" "$NODE_INBOUND_PORT")
@@ -340,17 +342,17 @@ installation_full() {
         return
     fi
 
-    # 6. Создание ноды
+    # 7. Создание ноды
     if ! create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT"; then
         print_error "Не удалось создать ноду"
     fi
 
-    # 7. Создание хоста
+    # 8. Создание хоста
     if ! create_host "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$entity_name" "$SELFSTEAL_DOMAIN" "$NODE_INBOUND_PORT"; then
         print_error "Не удалось зарегистрировать хост"
     fi
 
-    # 8. Получение и обновление сквадов
+    # 9. Получение и обновление сквадов
     local squad_uuids
     squad_uuids=$(get_default_squad "$domain_url" "$token")
 
@@ -361,15 +363,15 @@ installation_full() {
         done <<< "$squad_uuids"
     fi
 
-    # 9. Создание API токена для subscription-page
+    # 10. Создание API токена для subscription-page
     create_api_token "$domain_url" "$token" "${DIR_PANEL}" >/dev/null 2>&1
 
-    print_success "Обновление конфигураций"
+    print_success "Подготовка конфигураций"
 
-    # 10. Шаблон selfsteal
+    # 11. Шаблон selfsteal
     randomhtml
 
-    # 11. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
+    # 12. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
     echo
     (
         cd /opt/remnawave
@@ -388,7 +390,7 @@ installation_full() {
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
     show_spinner "Запуск сервисов" || true
 
-    # 12. Сброс суперадмина — при первом входе пользователь задаст свои данные
+    # 13. Сброс суперадмина — при первом входе пользователь задаст свои данные
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 
     # Удаляем trap при успешном завершении
@@ -597,13 +599,12 @@ installation_panel_with_node() {
     show_spinner "Подготовка файлов" || true
 
     (
-        setup_firewall
+        setup_firewall >/dev/null 2>&1 || true
         ufw allow from "${network_subnet}" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         [ -n "$server_public_ip" ] && ufw allow from "$server_public_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Настройка файрвола" || true
+    ) >/dev/null 2>&1 &
 
     (
         docker volume rm remnawave-db-data 2>/dev/null || true
@@ -614,7 +615,7 @@ installation_panel_with_node() {
     show_spinner "Подготовка сервисов" || true
 
     (nginx_reload) &
-    show_spinner "Запуск Nginx" || true
+    show_spinner "Запуск сервисов" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -682,6 +683,8 @@ installation_panel_with_node() {
         return
     fi
 
+    ensure_dfc_subscription_template "$domain_url" "$token" >/dev/null 2>&1 || true
+
     print_action "Получение публичного ключа панели..."
     get_public_key "$domain_url" "$token" "$node_dir"
 
@@ -741,7 +744,7 @@ installation_panel_with_node() {
 
     create_api_token "$domain_url" "$token" "$target_dir" >/dev/null 2>&1
 
-    print_success "Обновление конфигураций"
+    print_success "Подготовка конфигураций"
 
     randomhtml
 

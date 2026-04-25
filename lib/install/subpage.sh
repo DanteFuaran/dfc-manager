@@ -2,6 +2,18 @@
 # УСТАНОВКА: ТОЛЬКО СТРАНИЦА ПОДПИСКИ
 # ═══════════════════════════════════════════════
 
+print_subpage_connected_screen() {
+    clear
+    tput civis 2>/dev/null || true
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "$(center "🎉 Страница подписки подключена!" "$GREEN")"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "$(center "✅ Страница подписки успешно подключена!" "$GREEN")"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+}
+
 installation_subpage() {
     # Гарантируем валидную рабочую директорию перед началом
     cd /opt 2>/dev/null || cd / 2>/dev/null
@@ -312,18 +324,10 @@ _installation_subpage_on_panel() {
     (
         cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "     ${GREEN}🎉 Страница подписки подключена!${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
-    echo -e "${WHITE}Панель:${NC}       https://$panel_domain"
-    echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    print_subpage_connected_screen
     show_continue_prompt || return 1
 }
 
@@ -573,7 +577,8 @@ EOL
     (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
     show_spinner "Запуск nginx" || true
 
-    show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    (true) &
+    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
@@ -586,19 +591,7 @@ EOL
     fi
 
     if [ "$health_ok" = true ]; then
-        clear
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "     ${GREEN}🎉 Страница подписки подключена!${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo -e "${WHITE}Подписка:${NC}     https://$SUB_DOMAIN"
-        echo -e "${WHITE}Панель:${NC}       $PANEL_URL"
-        echo
-        echo -e "${BLUE}──────────────────────────────────────${NC}"
-        echo
-        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        print_subpage_connected_screen
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -809,7 +802,8 @@ _installation_subpage_standalone() {
     fi
 
     echo
-    show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
+    (true) &
+    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
@@ -827,20 +821,7 @@ _installation_subpage_standalone() {
     fi
 
     if [ "$health_ok" = true ]; then
-        clear
-        tput civis 2>/dev/null
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e " ${GREEN}🎉 Страница подписки подключена!${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo
-        echo -e "${WHITE}Подписка:${NC}  https://$SUB_DOMAIN"
-        echo -e "${WHITE}Панель:${NC}    $PANEL_URL"
-        echo
-        echo -e "${BLUE}──────────────────────────────────────${NC}"
-        echo
-        echo -e "${YELLOW}📋 Команды запуска меню управления:${NC} ${GREEN}rw${NC}, или ${GREEN}dfc${NC}"
-        echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        print_subpage_connected_screen
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"

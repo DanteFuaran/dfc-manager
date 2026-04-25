@@ -317,32 +317,23 @@ create_config_profile() {
     local inbound_tag="${6:-Steal}"
     local inbound_port="${7:-443}"
 
-    local short_id warp_short_id warp_port
+    local short_id
     short_id=$(openssl rand -hex 8)
-    warp_short_id=$(openssl rand -hex 8)
-    warp_port=$((inbound_port + 5000))
 
     local request_body
     request_body=$(jq -n --arg name "$name" --arg domain "$domain" \
-        --arg private_key "$private_key" --arg short_id "$short_id" --arg warp_short_id "$warp_short_id" \
-        --arg direct_tag "$inbound_tag (vless)" --arg warp_tag "$inbound_tag (vless-warp)" \
-        --argjson inbound_port "$inbound_port" --argjson warp_port "$warp_port" '{
+        --arg private_key "$private_key" --arg short_id "$short_id" \
+        --arg direct_tag "$inbound_tag (vless)" \
+        --argjson inbound_port "$inbound_port" '{
         name: $name,
         config: {
             log: { loglevel: "warning" },
-            dns: {
-                queryStrategy: "UseIPv4",
-                servers: [
-                    { address: "https://1.1.1.1/dns-query" },
-                    { address: "https://dns.quad9.net/dns-query" }
-                ]
-            },
             inbounds: [
             {
                 tag: $direct_tag,
                 port: $inbound_port,
                 protocol: "vless",
-                settings: { clients: [], decryption: "none", flow: "xtls-rprx-vision" },
+                settings: { clients: [], decryption: "none" },
                 sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
                 streamSettings: {
                     network: "tcp",
@@ -350,30 +341,9 @@ create_config_profile() {
                     realitySettings: {
                         dest: "/dev/shm/nginx.sock",
                         show: false,
-                        xver: 0,
+                        xver: 1,
                         spiderX: "",
                         shortIds: [$short_id],
-                        privateKey: $private_key,
-                        fingerprint: "chrome",
-                        serverNames: [$domain]
-                    }
-                }
-            },
-            {
-                tag: $warp_tag,
-                port: $warp_port,
-                protocol: "vless",
-                settings: { clients: [], decryption: "none", flow: "xtls-rprx-vision" },
-                sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
-                streamSettings: {
-                    network: "tcp",
-                    security: "reality",
-                    realitySettings: {
-                        dest: "/dev/shm/nginx.sock",
-                        show: false,
-                        xver: 0,
-                        spiderX: "",
-                        shortIds: [$warp_short_id],
                         privateKey: $private_key,
                         fingerprint: "chrome",
                         serverNames: [$domain]
@@ -382,15 +352,7 @@ create_config_profile() {
             }],
             outbounds: [
                 { tag: "DIRECT", protocol: "freedom" },
-                { tag: "BLOCK", protocol: "blackhole" },
-                {
-                    tag: "warp-out",
-                    protocol: "freedom",
-                    settings: { domainStrategy: "UseIP" },
-                    streamSettings: {
-                        sockopt: { interface: "warp", tcpFastOpen: true }
-                    }
-                }
+                { tag: "BLOCK", protocol: "blackhole" }
             ],
             routing: {
                 domainStrategy: "AsIs",
@@ -398,7 +360,6 @@ create_config_profile() {
                     { ip: ["geoip:private"], type: "field", outboundTag: "BLOCK" },
                     { type: "field", domain: ["geosite:private"], outboundTag: "BLOCK" },
                     { type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK" },
-                    { type: "field", inboundTag: [$warp_tag], outboundTag: "warp-out" },
                     { type: "field", inboundTag: [$direct_tag], outboundTag: "DIRECT" }
                 ]
             }
@@ -420,6 +381,90 @@ create_config_profile() {
     fi
 
     echo "$config_uuid $inbound_uuid"
+}
+
+ensure_dfc_subscription_template() {
+    local domain_url=$1
+    local token=$2
+
+    local template_json
+    template_json=$(jq -n '{
+        dns: {
+            servers: [
+                { address: "https://1.1.1.1/dns-query" },
+                { address: "https://dns.quad9.net/dns-query" }
+            ],
+            queryStrategy: "UseIPv4"
+        },
+        routing: {
+            rules: [
+                { ip: ["geoip:private"], type: "field", outboundTag: "block" },
+                { type: "field", domain: ["geosite:private"], outboundTag: "block" },
+                { type: "field", protocol: ["bittorrent"], outboundTag: "direct" },
+                { ip: ["geoip:ru"], type: "field", outboundTag: "direct" },
+                { type: "field", domain: ["geosite:category-ru"], outboundTag: "direct" },
+                { type: "field", network: "tcp,udp", outboundTag: "proxy" }
+            ],
+            domainMatcher: "hybrid",
+            domainStrategy: "IPIfNonMatch"
+        },
+        inbounds: [
+            {
+                tag: "socks",
+                port: 10808,
+                listen: "127.0.0.1",
+                protocol: "socks",
+                settings: { udp: true, auth: "noauth" },
+                sniffing: {
+                    enabled: true,
+                    routeOnly: false,
+                    destOverride: ["http", "tls", "quic"]
+                }
+            },
+            {
+                tag: "http",
+                port: 10809,
+                listen: "127.0.0.1",
+                protocol: "http",
+                settings: { allowTransparent: false },
+                sniffing: {
+                    enabled: true,
+                    routeOnly: false,
+                    destOverride: ["http", "tls", "quic"]
+                }
+            }
+        ],
+        outbounds: [
+            { tag: "direct", protocol: "freedom" },
+            { tag: "block", protocol: "blackhole" }
+        ],
+        remnawave: {
+            addVirtualHostAsOutbound: true
+        }
+    }')
+
+    local response template_uuid
+    response=$(make_api_request "GET" "$domain_url/api/subscription-templates" "$token")
+    template_uuid=$(echo "$response" | jq -r '.response.templates[]? | select(.name == "DFC" and .templateType == "XRAY_JSON") | .uuid' 2>/dev/null | head -1)
+
+    if [ -z "$template_uuid" ] || [ "$template_uuid" = "null" ]; then
+        local create_body create_response
+        create_body=$(jq -n '{name: "DFC", templateType: "XRAY_JSON"}')
+        create_response=$(make_api_request "POST" "$domain_url/api/subscription-templates" "$token" "$create_body")
+        template_uuid=$(echo "$create_response" | jq -r '.response.uuid // empty' 2>/dev/null)
+    fi
+
+    if [ -z "$template_uuid" ] || [ "$template_uuid" = "null" ]; then
+        return 1
+    fi
+
+    local update_body
+    update_body=$(jq -n --arg uuid "$template_uuid" --arg name "DFC" --argjson template_json "$template_json" '{
+        uuid: $uuid,
+        name: $name,
+        templateJson: $template_json
+    }')
+    make_api_request "PATCH" "$domain_url/api/subscription-templates" "$token" "$update_body" >/dev/null
 }
 
 delete_config_profile() {

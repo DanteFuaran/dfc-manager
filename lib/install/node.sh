@@ -218,6 +218,8 @@ installation_node_connect() {
     fi
     print_success "Ключи сгенерированы"
 
+    ensure_dfc_subscription_template "$domain_url" "$token" >/dev/null 2>&1 || true
+
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
     if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
@@ -684,6 +686,7 @@ installation_node_local() {
         if grep -q 'PUBLIC KEY FROM REMNAWAVE-PANEL' "$node_dir/docker-compose.yml" 2>/dev/null; then
             exit 1
         fi
+        ensure_dfc_subscription_template "$domain_url" "$token" || true
         pk=$(generate_xray_keys "$domain_url" "$token") || exit 1
         [ -z "$pk" ] && exit 1
         echo "$pk" > "$_tmp_pk"

@@ -275,6 +275,8 @@ installation_panel() {
         return
     fi
 
+    ensure_dfc_subscription_template "$domain_url" "$token" >/dev/null 2>&1 || true
+
     # 2. Создание API токена для subscription-page
     print_action "Создание API токена для страницы подписки..."
     create_api_token "$domain_url" "$token" "$target_dir"

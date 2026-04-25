@@ -260,15 +260,19 @@ print(c)
                 cp -fL "/etc/letsencrypt/live/${_si}/privkey.pem" "/opt/nginx/ssl/${_si}/privkey.pem"
             fi
             local _html_path="/var/www/html/mtproto-connect.html"
-            # Режим listen: stream → только unix+PP; coexistent Remnawave (unix+443) → unix+443 без real_ip;
+            # Режим listen: stream → только unix+PP; coexistent Remnawave (unix+443) → unix+PP + 443;
             # иначе прямой 443.
             local _fb_listen _fb_real_ip=""
             if [ "$_has_stream_block" = true ]; then
-                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl;"
+                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+                _fb_real_ip="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
             elif [ "$_uses_socket" = true ]; then
-                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl;
+                _fb_listen="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     listen 443 ssl;
     listen [::]:443 ssl;"
+                _fb_real_ip="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
             else
                 _fb_listen="    listen 443 ssl;
     listen [::]:443 ssl;"
@@ -313,20 +317,31 @@ ${_fb_real_ip}
                 | sed -E '/^\s*listen\s+(\[::\]:)?443\s+ssl/d')
             if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
                 content=$(printf '%s\n' "$content" | sed \
-                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl;')
+                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;')
+            else
+                content=$(printf '%s\n' "$content" | sed \
+                    's|listen unix:/dev/shm/nginx.sock ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+            fi
+            if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/listen unix:\/dev\/shm\/nginx.sock ssl proxy_protocol;/a\    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;')
             fi
         elif [ "$_uses_socket" = true ]; then
-            # Как у server{} панели: unix + 443; без real_ip (браузер на 443 без PROXY).
-            content=$(printf '%s\n' "$content" \
-                | sed -e '/real_ip_header proxy_protocol/d' \
-                      -e '/set_real_ip_from unix:/d')
+            # Как у server{} панели: unix+PROXY для Xray, обычный 443 для браузеров.
             if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
                 content=$(printf '%s\n' "$content" | sed \
-                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl;')
+                    '/server_name /a\    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;')
+            else
+                content=$(printf '%s\n' "$content" | sed \
+                    's|listen unix:/dev/shm/nginx.sock ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+            fi
+            if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
+                content=$(printf '%s\n' "$content" | sed \
+                    '/listen unix:\/dev\/shm\/nginx.sock ssl proxy_protocol;/a\    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;')
             fi
             if ! printf '%s' "$content" | grep -qE '^\s*listen\s+443\s+ssl'; then
                 content=$(printf '%s\n' "$content" | sed \
-                    '/listen unix:\/dev\/shm\/nginx.sock ssl;/a\    listen 443 ssl;\n    listen [::]:443 ssl;')
+                    '/listen unix:\/dev\/shm\/nginx.sock ssl proxy_protocol;/a\    listen 443 ssl;\n    listen [::]:443 ssl;')
             fi
         else
             # Прямой режим: только listen 443.
@@ -442,11 +457,18 @@ nginx_restore_server_blocks() {
                 if $has_port_443; then
                     # Панель + нода: сохраняем listen 443 ssl; наряду с unix socket
                     content=$(printf '%s\n' "$content" | sed \
-                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl;\n    listen 443 ssl;|')
+                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;\n    listen 443 ssl;|')
                 else
                     # Standalone нода: порт 443 для xray — заменяем на unix socket
                     content=$(printf '%s\n' "$content" | sed \
-                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl;|')
+                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;|')
+                fi
+            else
+                content=$(printf '%s\n' "$content" | sed \
+                    's|listen unix:/dev/shm/nginx.sock ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;|')
+                if ! printf '%s' "$content" | grep -q 'real_ip_header proxy_protocol'; then
+                    content=$(printf '%s\n' "$content" | sed \
+                        '/listen unix:\/dev\/shm\/nginx.sock ssl proxy_protocol;/a\    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;')
                 fi
             fi
             # Standalone нода: убираем оставшиеся listen 443 ssl; (если были рядом с socket)

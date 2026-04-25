@@ -12,7 +12,7 @@ main_menu() {
 
     while true; do
         tput civis 2>/dev/null || true
-        local menu_title="🛠️ DFC Manager v$SCRIPT_VERSION"
+        local menu_title="🛠️  DFC Manager v$SCRIPT_VERSION"
 
         local -a items=() actions=()
         local _rw_label="📦  Remnawave - Панель  " _bz_label="📊  Beszel - Мониторинг " _mt_label="📡  MTProto - TG Прокси "
@@ -71,8 +71,12 @@ main_menu() {
                     rw_items+=("📦  Установить компоненты");  rw_actions+=("install")
                     rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                     if [ "$is_installed" = true ]; then
-                        rw_items+=("▶️   Запустить сервисы");       rw_actions+=("start")
-                        rw_items+=("⏹️   Остановить сервисы");      rw_actions+=("stop")
+                        local _service_action_idx=${#rw_items[@]}
+                        if remnawave_services_running; then
+                            rw_items+=("⏹️   Остановить сервисы");      rw_actions+=("stop")
+                        else
+                            rw_items+=("▶️   Запустить сервисы");       rw_actions+=("start")
+                        fi
                         rw_items+=("📋  Просмотр логов");          rw_actions+=("logs")
                         rw_items+=("──────────────────────────────────────"); rw_actions+=("sep")
                         rw_items+=("💾  Управление базой данных"); rw_actions+=("database")
@@ -157,8 +161,8 @@ main_menu() {
                                 esac
                             done ;;
                         reinstall)         manage_reinstall ;;
-                        start)             manage_start ;;
-                        stop)              manage_stop ;;
+                        start)             manage_start; MENU_INITIAL_IDX=$_service_action_idx ;;
+                        stop)              manage_stop; MENU_INITIAL_IDX=$_service_action_idx ;;
                         logs)              manage_logs ;;
                         database)          manage_database ;;
                         access)            manage_panel_access ;;

@@ -375,11 +375,15 @@ print(c)
 
     local _listen_lines _real_ip_lines=""
     if [ "$_mt_stream_mode" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl;"
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        _real_ip_lines="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
     elif [ "$_mt_coexist_unix" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl;
+        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     listen 443 ssl;
     listen [::]:443 ssl;"
+        _real_ip_lines="    real_ip_header proxy_protocol;
+    set_real_ip_from unix:;"
     else
         _listen_lines="    listen 443 ssl;
     listen [::]:443 ssl;"
@@ -409,7 +413,7 @@ print(c)
             if ! grep -A30 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -qE '^\s*listen\s+443\s+ssl'; then
                 _block_stale=true
             fi
-            if grep -A35 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q 'real_ip_header proxy_protocol'; then
+            if ! grep -A35 "$_connect_marker" "$_nginx_conf" 2>/dev/null | grep -q 'real_ip_header proxy_protocol'; then
                 _block_stale=true
             fi
         else
@@ -2181,12 +2185,10 @@ def adapt_mt_block_to_stream(m):
     block = re.sub(r'\s*#mt# listen [^\n]+\n', '\n', block)
     block = re.sub(r'\s*listen [^\n]*443[^\n]*\n', '\n', block)
     block = re.sub(r'\s*listen unix:[^\n]+\n', '\n', block)
-    block = re.sub(r'\s*real_ip_header proxy_protocol;\n', '\n', block)
-    block = re.sub(r'\s*set_real_ip_from unix:;\n', '\n', block)
     # Insert unix socket listen + real_ip after server_name line
     block = re.sub(
         r'(server_name [^;]+;)',
-        r'\1\n    listen unix:/dev/shm/nginx.sock ssl;',
+        r'\1\n    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;',
         block, count=1
     )
     # Clean up extra blank lines

@@ -260,6 +260,8 @@ add_node_to_panel() {
     fi
     print_success "Ключи сгенерированы"
 
+    ensure_dfc_subscription_template "$domain_url" "$token" >/dev/null 2>&1 || true
+
     print_action "Создание конфиг-профиля ($entity_name)..."
     local config_result config_profile_uuid inbound_uuid
     if ! config_result=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name"); then
