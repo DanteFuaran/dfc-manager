@@ -98,10 +98,11 @@ installation_panel() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         cert_choice=$?
-        if [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]]; then
+        if [[ $cert_choice -eq 255 || $cert_choice -eq 3 || $cert_choice -eq 4 ]]; then
             [ "$with_subpage" = true ] && rm -rf "${DIR_SUB}" 2>/dev/null || true
             continue
         fi
@@ -109,6 +110,7 @@ installation_panel() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
+            2) CERT_METHOD=3 ;;
         esac
 
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -120,6 +122,8 @@ installation_panel() {
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || { _abort_fresh_panel_install; return; }
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || { _abort_fresh_panel_install; return; }
         fi
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")

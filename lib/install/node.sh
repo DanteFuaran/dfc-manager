@@ -539,15 +539,21 @@ installation_node_local() {
                 show_arrow_menu "🔐 Метод получения сертификата" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
                     "☁️   Cloudflare DNS-01 (wildcard)" \
+                    "🔷  Gcore DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
                 local cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
                     1) CERT_METHOD=1 ;;
+                    2) CERT_METHOD=3 ;;
                     *) return ;;
                 esac
-                setup_cloudflare_credentials || return
+                if [ "$CERT_METHOD" -eq 1 ]; then
+                    setup_cloudflare_credentials || return
+                elif [ "$CERT_METHOD" -eq 3 ]; then
+                    setup_gcore_credentials || return
+                fi
             fi
         fi
 
@@ -637,7 +643,7 @@ installation_node_local() {
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
     ) &
-    show_spinner "Подготовка файлов" || true
+    show_spinner --step "Подготовка файлов" || true
 
     echo
 
@@ -789,7 +795,7 @@ installation_node_remote() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       📦 Установка только ноды${NC}"
+    echo -e "${BLUE}       📦 Установка только ноды${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
 
     mkdir -p "${NODE_INSTALL_DIR}" && cd "${NODE_INSTALL_DIR}"
@@ -824,6 +830,7 @@ installation_node_remote() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
@@ -832,7 +839,8 @@ installation_node_remote() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2|3) return ;;
+            2) CERT_METHOD=3 ;;
+            3|4) return ;;
         esac
 
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -841,6 +849,8 @@ installation_node_remote() {
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || return
         fi
 
     else
@@ -940,7 +950,7 @@ services:
 EOL
         generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN"
     ) &
-    show_spinner "Подготовка файлов" || true
+    show_spinner --step "Подготовка файлов" || true
 
     (
         ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
@@ -948,7 +958,7 @@ EOL
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
-    show_spinner "Настройка файрвола" || true
+    show_spinner --step "Настройка файрвола" || true
 
     randomhtml
     echo
@@ -964,7 +974,7 @@ EOL
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner "Проверка совместимости MTProto" || true
+    show_spinner --step "Проверка совместимости MTProto" || true
 
     # Если MTProto stream-блок есть в nginx.conf — запускаем nginx ПЕРВЫМ,
     # чтобы он занял 443 через stream, а Xray использовал только 8443
@@ -972,7 +982,7 @@ EOL
     if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _mt_stream_present=true
         (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner "Запуск nginx" || true
+        show_spinner --step "Запуск nginx" || true
         sleep 1
     fi
 
@@ -980,7 +990,7 @@ EOL
         cd "${NODE_INSTALL_DIR}"
         docker compose up -d >/dev/null 2>&1
     ) &
-    if ! show_spinner "Запуск контейнеров"; then
+    if ! show_spinner --step "Запуск контейнеров"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
@@ -988,7 +998,7 @@ EOL
 
     if ! $_mt_stream_present; then
         (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner "Запуск nginx" || true
+        show_spinner --step "Запуск nginx" || true
     fi
 
     show_spinner_timer 5 "Ожидание запуска ноды" "Запуск ноды"
@@ -1013,7 +1023,7 @@ EOL
 
     if [ "$health_ok" = true ]; then
         echo
-        print_success "Нода успешно подключена"
+        echo -e "${GREEN}✅ Нода успешно подключена${NC}"
     else
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1097,6 +1107,7 @@ installation_node_with_existing_subpage() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
@@ -1104,13 +1115,16 @@ installation_node_with_existing_subpage() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2|3) return ;;
+            2) CERT_METHOD=3 ;;
+            3|4) return ;;
         esac
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || return
         fi
     else
         CERT_METHOD=$(detect_cert_method "$SELFSTEAL_DOMAIN")
@@ -1186,7 +1200,7 @@ installation_node_with_existing_subpage() {
             "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" \
             "$NODE_INSTALL_DIR"
     ) &
-    show_spinner "Подготовка файлов" || true
+    show_spinner --step "Подготовка файлов" || true
 
     # Настройка файрвола
     (
@@ -1195,7 +1209,7 @@ installation_node_with_existing_subpage() {
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
     ) &
-    show_spinner "Настройка файрвола" || true
+    show_spinner --step "Настройка файрвола" || true
 
     randomhtml
     echo
@@ -1208,7 +1222,7 @@ installation_node_with_existing_subpage() {
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner "Проверка совместимости MTProto" || true
+    show_spinner --step "Проверка совместимости MTProto" || true
 
     # Запуск контейнеров
     (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
@@ -1219,12 +1233,12 @@ installation_node_with_existing_subpage() {
     if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _mt_stream_present2=true
         (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner "Запуск nginx" || true
+        show_spinner --step "Запуск nginx" || true
         sleep 1
     fi
 
     (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Подключение ноды"; then
+    if ! show_spinner --step "Подключение ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return

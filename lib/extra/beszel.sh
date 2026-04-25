@@ -507,6 +507,7 @@ install_beszel() {
         show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🔷  Gcore (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
             "❌  Отмена"
         local cert_choice=$?
@@ -553,6 +554,35 @@ install_beszel() {
                 fi
                 echo
                 if ! get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL"; then
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    show_continue_prompt || return 0
+                    return 0
+                fi
+                echo
+                _le_found=$(le_live_basename "$base_domain" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$base_domain" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+                ;;
+            2) # Gcore
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
+                if [ -z "$BESZEL_EMAIL" ]; then
+                    print_error "Email не может быть пустым"
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
+                fi
+                if [ ! -f "/etc/letsencrypt/gcore.ini" ]; then
+                    setup_gcore_credentials || return 1
+                fi
+                echo
+                if ! get_cert_gcore "$base_domain" "$BESZEL_EMAIL"; then
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     show_continue_prompt || return 0
@@ -852,6 +882,7 @@ change_domain_beszel() {
         show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
+            "🔷  Gcore (DNS-01 Wildcard)" \
             "──────────────────────────────────────" \
             "❌  Отмена"
         local cert_choice=$?
@@ -896,6 +927,34 @@ change_domain_beszel() {
                     setup_cloudflare_credentials || return 1
                 fi
                 if ! get_cert_cloudflare "$base_domain" "$BESZEL_EMAIL"; then
+                    echo
+                    echo -e "${BLUE}══════════════════════════════════════${NC}"
+                    show_continue_prompt || return 0
+                    return 0
+                fi
+                echo
+                _le_found=$(le_live_basename "$base_domain" 2>/dev/null) || _le_found=""
+                if [ -n "$_le_found" ]; then
+                    CERT_DOMAIN="$_le_found"
+                else
+                    CERT_DOMAIN=$(printf '%s' "$base_domain" | tr '[:upper:]' '[:lower:]')
+                fi
+                CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+                CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+                ;;
+            2)
+                reading_inline "Email для Let's Encrypt:" BESZEL_EMAIL
+                [[ $? -eq 2 ]] && return 1
+                if [ -z "$BESZEL_EMAIL" ]; then
+                    print_error "Email не может быть пустым"
+                    echo
+                    show_continue_prompt || return 0
+                    return 0
+                fi
+                if [ ! -f "/etc/letsencrypt/gcore.ini" ]; then
+                    setup_gcore_credentials || return 1
+                fi
+                if ! get_cert_gcore "$base_domain" "$BESZEL_EMAIL"; then
                     echo
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     show_continue_prompt || return 0

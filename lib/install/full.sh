@@ -94,6 +94,7 @@ installation_full() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
@@ -102,8 +103,9 @@ installation_full() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
+            2) CERT_METHOD=3 ;;
+            3) : ;;
+            4) return ;;
         esac
 
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -112,6 +114,8 @@ installation_full() {
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || return
         fi
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")
@@ -500,6 +504,7 @@ installation_panel_with_node() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         local cert_choice=$?
@@ -507,14 +512,17 @@ installation_panel_with_node() {
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
-            2) : ;;
-            3) return ;;
+            2) CERT_METHOD=3 ;;
+            3) : ;;
+            4) return ;;
         esac
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
         echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || return
         fi
     else
         CERT_METHOD=$(detect_cert_method "$PANEL_DOMAIN")

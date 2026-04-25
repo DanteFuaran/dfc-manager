@@ -7,7 +7,7 @@ print_error()   { printf "${RED}✖  %b${NC}\n" "$1"; }
 # Как у show_spinner: зелёная галочка с колонки 0, текст сообщения обычным цветом
 print_success() { printf "${GREEN}\u2705${NC}\033[0m %b\n" "$1"; }
 print_warning() { printf "${YELLOW}⚠️  %b${NC}\n" "$1"; }
-print_cert_exists() { printf "${GREEN}✅ Сертификат для %s уже существует${NC}\n\n" "$1"; }
+print_cert_exists() { printf "${GREEN}✅${NC}\033[0m Сертификат для %s уже существует\n\n" "$1"; }
 
 # Центрирует текст в 38-символьную ширину для боксов ══════════════════════════════════════
 # Использование: center "текст" "$COLOR"

@@ -145,19 +145,25 @@ _installation_subpage_on_panel() {
     if check_if_certificates_needed domains_to_check; then
 
         if [ "$CERT_METHOD" = "1" ]; then
-            if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
+            if [ ! -f "/etc/letsencrypt/cloudflare.ini" ] && [ ! -f "/etc/letsencrypt/gcore.ini" ]; then
                 show_arrow_menu "🔐 Метод получения сертификата" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
+                    "☁️   Cloudflare DNS-01 (wildcard)" \
+                    "🔷  Gcore DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
                 cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
                     1) CERT_METHOD=1 ;;
+                    2) CERT_METHOD=3 ;;
                     *) continue ;;
                 esac
-                setup_cloudflare_credentials || return
+                if [ "$CERT_METHOD" -eq 1 ]; then
+                    setup_cloudflare_credentials || return
+                elif [ "$CERT_METHOD" -eq 3 ]; then
+                    setup_gcore_credentials || return
+                fi
             fi
         fi
 
@@ -439,19 +445,25 @@ _installation_subpage_on_node() {
     if check_if_certificates_needed domains_to_check; then
         echo
         if [ "$CERT_METHOD" = "1" ]; then
-            if [ ! -f "/etc/letsencrypt/cloudflare.ini" ]; then
+            if [ ! -f "/etc/letsencrypt/cloudflare.ini" ] && [ ! -f "/etc/letsencrypt/gcore.ini" ]; then
                 show_arrow_menu "🔐 Метод получения сертификата" \
                     "🌐  ACME HTTP-01 (Let's Encrypt)" \
-            "☁️   Cloudflare DNS-01 (wildcard)" \
+                    "☁️   Cloudflare DNS-01 (wildcard)" \
+                    "🔷  Gcore DNS-01 (wildcard)" \
                     "──────────────────────────────────────" \
                     "⬅️   Назад"
                 cert_choice=$?
                 case $cert_choice in
                     0) CERT_METHOD=2 ;;
                     1) CERT_METHOD=1 ;;
+                    2) CERT_METHOD=3 ;;
                     *) continue ;;
                 esac
-                setup_cloudflare_credentials || return
+                if [ "$CERT_METHOD" -eq 1 ]; then
+                    setup_cloudflare_credentials || return
+                elif [ "$CERT_METHOD" -eq 3 ]; then
+                    setup_gcore_credentials || return
+                fi
             fi
         fi
 
@@ -705,14 +717,16 @@ _installation_subpage_standalone() {
         show_arrow_menu "🔐 Метод получения сертификатов" \
             "🌐  ACME HTTP-01 (Let's Encrypt)" \
             "☁️   Cloudflare DNS-01 (wildcard)" \
+            "🔷  Gcore DNS-01 (wildcard)" \
             "──────────────────────────────────────" \
             "⬅️   Назад"
         cert_choice=$?
-        [[ $cert_choice -eq 255 || $cert_choice -eq 3 ]] && continue
+        [[ $cert_choice -eq 255 || $cert_choice -eq 3 || $cert_choice -eq 4 ]] && continue
 
         case $cert_choice in
             0) CERT_METHOD=2 ;;
             1) CERT_METHOD=1 ;;
+            2) CERT_METHOD=3 ;;
         esac
 
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
@@ -721,6 +735,8 @@ _installation_subpage_standalone() {
 
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
+        elif [ "$CERT_METHOD" -eq 3 ]; then
+            setup_gcore_credentials || return
         fi
     else
         CERT_METHOD=$(detect_cert_method "$SUB_DOMAIN")

@@ -9,7 +9,8 @@ _delete_component_panel() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap '' INT TERM
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${RED}🗑️  Удаление панели Remnawave${NC}"
@@ -42,7 +43,8 @@ _delete_component_node() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap '' INT TERM
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -125,7 +127,8 @@ _delete_component_subpage() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap '' INT TERM
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${RED}🗑️  Удаление страницы подписки${NC}"
@@ -290,6 +293,7 @@ manage_delete_components() {
                 if ! confirm_nav --delete "🗑️  Удаление всех компонентов"; then
                     continue
                 fi
+                trap '' INT TERM
                 (
                 export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then
@@ -339,6 +343,7 @@ manage_delete_components() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
                 tput cnorm 2>/dev/null || true
+                trap - INT TERM
                 show_continue_prompt || true
                 return
                 ;;

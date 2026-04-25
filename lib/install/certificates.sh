@@ -18,8 +18,10 @@ _parse_cert_error() {
         echo "Домен не прошёл проверку — убедитесь что DNS указывает на этот сервер"
     elif echo "$raw" | grep -qiE "invalid domain|not a FQDN|malformed"; then
         echo "Некорректное доменное имя"
-    elif echo "$raw" | grep -qiE "cloudflare.*error|API Token|dns_cloudflare"; then
+    el    if echo "$raw" | grep -qiE "cloudflare.*error|API Token|dns_cloudflare"; then
         echo "Ошибка Cloudflare API — проверьте токен и права доступа"
+    elif echo "$raw" | grep -qiE "gcore.*error|dns_gcore|apitoken.*gcore"; then
+        echo "Ошибка Gcore API — проверьте токен"
     else
         local detail
         detail=$(grep -iE "Detail:|Error:|FAILED|Problem|certbot: error" "$log_file" 2>/dev/null \
@@ -90,6 +92,10 @@ handle_certificates() {
             2)
                 # ACME HTTP-01
                 get_cert_acme "$domain" "$email" || return 1
+                ;;
+            3)
+                # Gcore DNS-01 (wildcard)
+                get_cert_gcore "$base_domain" "$email" || return 1
                 ;;
             *)
                 print_error "Неизвестный метод сертификации"
@@ -171,6 +177,28 @@ _ensure_system_deps() {
 
 # Для обратной совместимости: вызывает _ensure_system_deps
 _ensure_certbot() { _ensure_system_deps; }
+
+# Устанавливает плагин certbot-dns-gcore через pip3 если ещё не установлен
+_ensure_gcore_plugin() {
+    if python3 -c "import certbot_dns_gcore" >/dev/null 2>&1; then
+        return 0
+    fi
+    (
+        export DEBIAN_FRONTEND=noninteractive
+        local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+        # Устанавливаем pip3 если отсутствует
+        if ! command -v pip3 >/dev/null 2>&1; then
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq $DPKG_OPTS python3-pip >/dev/null 2>&1
+        fi
+        pip3 install --quiet certbot-dns-gcore >/dev/null 2>&1
+    ) &
+    show_spinner --step "Установка плагина Gcore DNS"
+    if ! python3 -c "import certbot_dns_gcore" >/dev/null 2>&1; then
+        print_error "Не удалось установить certbot-dns-gcore. Установите вручную: pip3 install certbot-dns-gcore"
+        return 1
+    fi
+}
 
 get_cert_cloudflare() {
     local domain="$1"
@@ -445,4 +473,106 @@ dns_cloudflare_api_key = $CF_TOKEN
 EOF
     fi
     chmod 600 /etc/letsencrypt/cloudflare.ini
+}
+
+setup_gcore_credentials() {
+    reading "Введите Gcore API Token:" GC_TOKEN || return 1
+
+    # Проверяем что токен валиден через Gcore API
+    local check_resp check_ok
+    check_resp=$(curl -sS --connect-timeout 10 --max-time 30 \
+        -X GET "https://api.gcore.com/dns/v2/zones?limit=1" \
+        -H "Authorization: APIKey $GC_TOKEN" \
+        -H "Content-Type: application/json" 2>/dev/null)
+    check_ok=$(echo "$check_resp" | grep -c '"id"' 2>/dev/null || true)
+
+    # Gcore возвращает JSON со списком зон — успех если нет "error"
+    if echo "$check_resp" | grep -qiE '"error"|"status":4[0-9]{2}|Unauthorized|Forbidden'; then
+        print_error "Gcore API Token невалиден или нет прав доступа к DNS зонам"
+        echo -e "   ${DARKGRAY}Убедитесь что токен имеет доступ к DNS в личном кабинете Gcore${NC}"
+        echo
+        show_continue_prompt
+        return 1
+    fi
+
+    print_success "Gcore API Token подтверждён"
+
+    mkdir -p /etc/letsencrypt
+    cat > /etc/letsencrypt/gcore.ini <<EOF
+dns_gcore_apitoken = $GC_TOKEN
+EOF
+    chmod 600 /etc/letsencrypt/gcore.ini
+}
+
+get_cert_gcore() {
+    local domain="$1"
+    local email="$2"
+    local dnorm
+    dnorm=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')
+
+    _ensure_certbot || return 1
+    _ensure_gcore_plugin || return 1
+
+    if [ ! -f "/etc/letsencrypt/gcore.ini" ]; then
+        print_error "Файл /etc/letsencrypt/gcore.ini не найден"
+        return 1
+    fi
+
+    local _tmp_log _exit_file
+    _tmp_log=$(mktemp)
+    _exit_file="${_tmp_log}.exit"
+
+    (
+        set +e
+        certbot certonly --authenticator dns-gcore \
+            --dns-gcore-credentials /etc/letsencrypt/gcore.ini \
+            --dns-gcore-propagation-seconds 80 \
+            -d "$dnorm" -d "*.$dnorm" \
+            --email "$email" --agree-tos --non-interactive \
+            --key-type ecdsa > "$_tmp_log" 2>&1
+        _ec=$?
+        if [ "$_ec" -ne 0 ] && [ -f "$_tmp_log" ] && le_live_basename "$dnorm" >/dev/null 2>&1; then
+            if grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+                _ec=0
+            fi
+        fi
+        echo "$_ec" > "$_exit_file"
+    ) &
+    show_spinner --step "Получение wildcard сертификата для *.$dnorm (Gcore)"
+
+    local _exit_code
+    _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
+    local _lebn
+    _lebn=$(le_live_basename "$dnorm" 2>/dev/null) || _lebn=""
+    if [ "$_exit_code" -ne 0 ] && [ -n "$_lebn" ] && [ -f "$_tmp_log" ] && \
+        grep -qiE 'Certificate not yet due for renewal|not yet due for renewal; no action taken' "$_tmp_log" 2>/dev/null; then
+        _exit_code=0
+    fi
+    if [ "$_exit_code" -ne 0 ] || [ -z "$_lebn" ]; then
+        local _cert_reason _raw_log
+        _cert_reason=$(_parse_cert_error "$_tmp_log")
+        _raw_log=$(grep -vE '^[[:space:]]*$' "$_tmp_log" 2>/dev/null | tail -35)
+        rm -f "$_tmp_log" "$_exit_file"
+        echo
+        print_error "Не удалось получить сертификат для $dnorm"
+        echo -e "   ${DARKGRAY}Причина: ${_cert_reason}${NC}"
+        local _raw_lines
+        _raw_lines=$(echo "$_raw_log" | wc -l)
+        if [ -n "$_raw_log" ] && [ "$_raw_lines" -gt 1 ]; then
+            echo
+            echo -e "${DARKGRAY}── Вывод certbot ───────────────────────${NC}"
+            echo "$_raw_log"
+            echo -e "${DARKGRAY}────────────────────────────────────────${NC}"
+        fi
+        return 1
+    fi
+
+    rm -f "$_tmp_log" "$_exit_file"
+
+    # Добавляем cron для обновления (Gcore DNS-01 не требует открытия портов)
+    local _deploy_hook='for d in /opt/nginx/ssl/*/; do dn=$(basename "$d"); src="/etc/letsencrypt/live/$dn"; [ -f "$src/fullchain.pem" ] && cp -fL "$src/fullchain.pem" "$d/fullchain.pem" && cp -fL "$src/privkey.pem" "$d/privkey.pem"; done; cd /opt/nginx 2>/dev/null && docker compose restart nginx 2>/dev/null'
+    local cron_rule="0 3 * * * certbot renew --quiet --deploy-hook '${_deploy_hook}' 2>/dev/null"
+    if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+        (crontab -l 2>/dev/null; echo "$cron_rule") | crontab -
+    fi
 }
