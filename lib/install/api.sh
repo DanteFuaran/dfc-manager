@@ -452,6 +452,9 @@ ensure_dfc_subscription_template() {
         create_body=$(jq -n '{name: "DFC", templateType: "XRAY_JSON"}')
         create_response=$(make_api_request "POST" "$domain_url/api/subscription-templates" "$token" "$create_body")
         template_uuid=$(echo "$create_response" | jq -r '.response.uuid // empty' 2>/dev/null)
+    else
+        # Пользовательский DFC-шаблон уже есть — не заменяем его при установке.
+        return 0
     fi
 
     if [ -z "$template_uuid" ] || [ "$template_uuid" = "null" ]; then

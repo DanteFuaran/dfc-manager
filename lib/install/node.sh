@@ -930,6 +930,8 @@ services:
     container_name: remnanode
     hostname: remnanode
     restart: always
+    cap_add:
+      - NET_ADMIN
     ulimits:
       nofile:
         soft: 1048576
@@ -962,14 +964,14 @@ EOL
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
         _mt_ensure_stream_mode >/dev/null 2>&1 || true
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
-            cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
-        fi
+        cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
     ) &
     show_spinner --step "Подготовка служб" || true
 
     # Шаблон selfsteal (apply_template печатает строку «Установка шаблона: …»)
+    echo
     randomhtml
+    echo
 
     # MTProto stream: nginx должен занять 443 до старта Xray на ноде
     local _mt_stream_present=false
@@ -989,7 +991,7 @@ EOL
 
     (
         cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1 || exit 1
-        if [ "$_mt_stream_present" != true ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
+        if [ "$_mt_stream_present" != true ]; then
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
         sleep 2
@@ -1004,14 +1006,18 @@ EOL
 
     # Проверка здоровья: nginx должен создать unix-сокет
     local health_ok=true
+    local health_reasons=""
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
         health_ok=false
+        health_reasons+="контейнер remnawave-nginx не запущен\n"
     elif [ ! -S /dev/shm/nginx.sock ]; then
         health_ok=false
+        health_reasons+="unix-сокет /dev/shm/nginx.sock не создан\n"
     fi
 
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
         health_ok=false
+        health_reasons+="контейнер remnanode не запущен\n"
     fi
 
     # Удаляем trap при успешном завершении
@@ -1023,10 +1029,13 @@ EOL
         echo
         print_success "Нода успешно подключена!"
     else
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "$(center "⚠️  Нода установлена с предупреждениями" "$YELLOW")"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${YELLOW}   ⚠️  Нода установлена с предупреждениями${NC}"
-        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "${YELLOW}Причина:${NC}"
+        printf "%b" "$health_reasons" | sed 's/^/  /'
         echo
         echo -e "${YELLOW}Диагностика:${NC}"
         echo -e "${WHITE}  docker logs remnawave-nginx${NC}"

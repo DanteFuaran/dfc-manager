@@ -54,7 +54,7 @@ apply_template() {
         echo "$(date '+%Y-%m-%d %H:%M:%S')" > /var/www/.template_changed
         tput cnorm 2>/dev/null || true
         # ✅ — зелёная, текст — NC, название шаблона — зелёное
-        echo -e "${GREEN}✅${NC} Установка шаблона: ${GREEN}${name}${NC}"
+        echo -e "${GREEN}✅${NC} Установка шаблона - ${GREEN}${name}${NC}"
     else
         echo -e "${RED}✖${NC} Ошибка загрузки шаблона. Проверьте интернет-соединение."
         # Создаём заглушку на случай ошибки

@@ -335,6 +335,33 @@ uninstall_warp_native() {
     show_continue_prompt || return 1
 }
 
+warp_retry_prompt() {
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Повторить     ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
+
+    tput civis 2>/dev/null || true
+    local key
+    while true; do
+        read -s -n 1 key
+        if [[ "$key" == $'\x1b' ]]; then
+            tput cnorm 2>/dev/null || true
+            echo
+            return 1
+        elif [[ "$key" == "" ]]; then
+            tput cnorm 2>/dev/null || true
+            # Текущая строка + рамка + пустая строка + ошибка + предыдущий prompt.
+            tput el 2>/dev/null
+            local l
+            for ((l=0; l<4; l++)); do
+                tput cuu1 2>/dev/null
+                tput el 2>/dev/null
+            done
+            return 0
+        fi
+    done
+}
+
 add_warp_to_config() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -533,14 +560,17 @@ add_warp_to_config() {
         if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
             if ss -tuln 2>/dev/null | grep -qE ":${warp_port}[^0-9]"; then
                 print_error "Порт ${warp_port} уже занят (например, nginx). Выберите другой порт."
+                warp_retry_prompt || return 0
             else
                 break
             fi
         else
             print_error "Введите корректный порт (1024–65535)"
+            warp_retry_prompt || return 0
         fi
     done
 
+    echo
     # Генерируем новые ключи для WARP-инбаунда
     print_action "Генерация REALITY ключей для WARP-инбаунда..."
     local warp_private_key
