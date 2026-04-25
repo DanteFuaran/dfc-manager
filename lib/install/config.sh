@@ -645,7 +645,8 @@ ssl_session_tickets off;
 
 server {
     server_name $panel_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # unix socket is internal IPC (no TLS here); TLS terminates on 443
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     http2 on;
 
@@ -701,7 +702,7 @@ server {
 # BEGIN_SUB_BLOCK
 server {
     server_name $sub_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     http2 on;
 
@@ -743,7 +744,7 @@ server {
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     http2 on;
 
@@ -827,7 +828,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock proxy_protocol default_server;
     listen 443 ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -1047,7 +1048,7 @@ ssl_session_tickets off;
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
@@ -1136,7 +1137,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock proxy_protocol default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
@@ -1684,7 +1685,7 @@ ssl_session_tickets off;
 
 server {
     server_name $panel_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     http2 on;
 
@@ -1739,7 +1740,7 @@ server {
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     http2 on;
 
@@ -1814,7 +1815,7 @@ server {
 }
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock proxy_protocol default_server;
     listen 443 ssl default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
@@ -2024,7 +2025,7 @@ ssl_session_tickets off;
 
 server {
     server_name $selfsteal_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$node_cert/fullchain.pem";
@@ -2105,7 +2106,7 @@ server {
 # BEGIN_SUB_BLOCK
 server {
     server_name $sub_domain;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    listen unix:/dev/shm/nginx.sock proxy_protocol;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$sub_cert/fullchain.pem";
@@ -2148,7 +2149,7 @@ server {
 # END_SUB_BLOCK
 
 server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    listen unix:/dev/shm/nginx.sock proxy_protocol default_server;
     server_name _;
     add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;

@@ -375,11 +375,11 @@ print(c)
 
     local _listen_lines _real_ip_lines=""
     if [ "$_mt_stream_mode" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        _listen_lines="    listen unix:/dev/shm/nginx.sock proxy_protocol;"
         _real_ip_lines="    real_ip_header proxy_protocol;
     set_real_ip_from unix:;"
     elif [ "$_mt_coexist_unix" = true ]; then
-        _listen_lines="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+        _listen_lines="    listen unix:/dev/shm/nginx.sock proxy_protocol;
     listen 443 ssl;
     listen [::]:443 ssl;"
     else
@@ -2189,7 +2189,7 @@ def adapt_mt_block_to_stream(m):
     # Insert unix socket listen + real_ip after server_name line
     block = re.sub(
         r'(server_name [^;]+;)',
-        r'\1\n    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;',
+        r'\1\n    listen unix:/dev/shm/nginx.sock proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;',
         block, count=1
     )
     # Clean up extra blank lines
