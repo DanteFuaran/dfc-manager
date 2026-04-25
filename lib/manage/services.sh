@@ -74,7 +74,7 @@ manage_stop() {
 manage_update() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}        🔄 ОБНОВЛЕНИЕ КОМПОНЕНТОВ${NC}"
+    echo -e "${BLUE}        🔄 Обновление компонентов${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -94,7 +94,7 @@ manage_update() {
         cd "$rw_path"
         docker compose pull > "$pull_tmp" 2>&1
     ) &
-    show_spinner "Скачивание обновлений"
+    show_spinner --step "Скачивание обновлений"
 
     pull_count=$(grep -cE 'Pull complete|Downloaded newer|Pulled' "$pull_tmp" 2>/dev/null || true)
     pull_count="${pull_count:-0}"
@@ -113,18 +113,18 @@ manage_update() {
         cd "$rw_path"
         docker compose up -d >/dev/null 2>&1
     ) &
-    show_spinner "Перезапуск сервисов"
+    show_spinner --step "Перезапуск сервисов"
 
     (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск nginx" || true
+    show_spinner --step "Перезапуск nginx" || true
 
     (
         docker image prune -af >/dev/null 2>&1
     ) &
-    show_spinner "Очистка старых образов"
+    show_spinner --step "Очистка старых образов"
 
     echo
-    print_success "Обновление завершено"
+    echo -e "${GREEN}✅ Обновление успешно завершено!${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
