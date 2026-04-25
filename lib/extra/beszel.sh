@@ -499,7 +499,7 @@ install_beszel() {
                 -out "${SELF_SIGNED_DIR}/fullchain.pem" \
                 -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
         ) &
-        show_spinner "Генерация самоподписанного сертификата"
+        show_spinner --step "Генерация самоподписанного сертификата"
         CERT_DOMAIN="$BESZEL_DOMAIN"
         CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
@@ -666,7 +666,7 @@ NGINX
             apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         ) &
-        if ! show_spinner "Обновление пакетов системы"; then
+        if ! show_spinner --step "Обновление пакетов системы"; then
             print_error "Docker не удалось установить"
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1281,7 +1281,6 @@ uninstall_beszel_agent() {
         if ! confirm_nav --delete "🗑️  Удаление агента Beszel"; then
             return
         fi
-        echo
     fi
 
     local AGENT_PORT_STORED
@@ -1291,7 +1290,7 @@ uninstall_beszel_agent() {
         cd "${DIR_BESZEL_AGENT}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
     ) &
-    show_spinner "Удаление агента Beszel"
+    show_spinner --step "Удаление агента Beszel"
 
     if [ -n "$AGENT_PORT_STORED" ]; then
         ufw delete allow "${AGENT_PORT_STORED}/tcp" >/dev/null 2>&1 || true
@@ -1301,7 +1300,7 @@ uninstall_beszel_agent() {
 
     [ "$_force" = true ] && return 0
 
-    print_success "Агент Beszel удалён"
+    echo -e "${GREEN}✅ Агент Beszel был успешно удалён!${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 0

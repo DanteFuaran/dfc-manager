@@ -54,7 +54,7 @@ obtain_cert_for_domain() {
                 --agree-tos $_email_flag --non-interactive \
                 --key-type ecdsa >/dev/null 2>&1
         ) &
-        show_spinner "Получение wildcard сертификата для *.$_cert_dom"
+        show_spinner --step "Получение wildcard сертификата для *.$_cert_dom"
     else
         (
             cd "$panel_dir"
@@ -73,7 +73,7 @@ obtain_cert_for_domain() {
                 --http-01-port 80 \
                 --key-type ecdsa >/dev/null 2>&1
         ) &
-        show_spinner "Получение SSL-сертификата для $new_domain"
+        show_spinner --step "Получение SSL-сертификата для $new_domain"
 
         ufw_revert_http01_temp
         iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -795,7 +795,7 @@ change_node_domain() {
 }
 
 manage_domains() {
-    show_arrow_menu "🌐 Редактирование доменов" \
+    show_arrow_menu "🌐  Редактирование доменов" \
         "🌐  Сменить домен панели" \
         "🌐  Сменить домен страницы подписки" \
         "🌐  Сменить домен ноды" \

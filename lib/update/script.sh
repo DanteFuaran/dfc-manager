@@ -559,7 +559,7 @@ remove_script_all() {
             cd /opt/beszel-agent 2>/dev/null
             docker compose down -v --rmi all >/dev/null 2>&1 || true
         ) &
-        show_spinner "Удаление агента Beszel"
+        show_spinner --step "Удаление агента Beszel"
         [ -n "$AGENT_PORT" ] && ufw delete allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
         rm -rf /opt/beszel-agent
     fi

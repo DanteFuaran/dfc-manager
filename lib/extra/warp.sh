@@ -17,7 +17,7 @@ manage_warp() {
     if [ "$has_panel" = false ] && [ "$has_node" = false ]; then
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${GREEN}   🌐 WARP${NC}"
+        echo -e "${BLUE}   🌐 WARP${NC}"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}На сервере нет приложений требующих WARP${NC}"
@@ -58,7 +58,7 @@ manage_warp() {
         items+=("⬅️   Назад");                               actions+=("back")
     fi
 
-    show_arrow_menu "🌐 WARP" "${items[@]}"
+    show_arrow_menu "🌐  WARP" "${items[@]}"
     local choice=$?
     local action="${actions[$choice]:-back}"
 
@@ -91,7 +91,7 @@ install_warp_native() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}           📥 УСТАНОВКА WARP${NC}"
+    echo -e "${BLUE}        📥 Установка WARP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -123,12 +123,14 @@ install_warp_native() {
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}           📥 УСТАНОВКА WARP${NC}"
+    echo -e "${BLUE}        📥 Установка WARP${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     local _warp_log
     _warp_log=$(mktemp /tmp/warp_install.XXXXXX)
+
+    local _warp_install_failed=false
 
     (
         # 1. Установка WireGuard
@@ -199,23 +201,29 @@ install_warp_native() {
         mkdir -p /etc/wireguard
         mv "$conf" /etc/wireguard/warp.conf 2>&1
 
-        # 9. Запускаем и включаем автозапуск
-        echo "=== systemctl start wg-quick@warp ==="
-        systemctl start wg-quick@warp 2>&1
-        systemctl enable wg-quick@warp 2>&1
-
     ) > "$_warp_log" 2>&1 &
-    show_spinner "Установка WARP"
+    if ! show_spinner --step "Установка WARP"; then
+        _warp_install_failed=true
+    else
+        (
+            echo "=== systemctl start wg-quick@warp ==="
+            systemctl start wg-quick@warp 2>&1
+            systemctl enable wg-quick@warp 2>&1
+        ) >> "$_warp_log" 2>&1 &
+        if ! show_spinner --step "Создание WARP интерфейса"; then
+            _warp_install_failed=true
+        fi
+    fi
 
     # Проверяем результат
-    if ip link show warp 2>/dev/null | grep -q "warp"; then
+    if [ "$_warp_install_failed" = false ] && ip link show warp 2>/dev/null | grep -q "warp"; then
         rm -f "$_warp_log"
         if command -v ufw >/dev/null 2>&1; then
             ufw allow "${warp_install_port}/tcp" >/dev/null 2>&1 || true
             echo "${warp_install_port}" > /etc/wireguard/.warp_port
         fi
-        print_success "Создание WARP интерфейса"
-        print_success "WARP успешно установлен"
+        echo
+        echo -e "${GREEN}✅ WARP успешно установлен!${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         show_continue_prompt || return 1
@@ -280,7 +288,7 @@ uninstall_warp_native() {
         return 0
     fi
 
-    if ! confirm_nav --delete "🗑️ Удаление WARP"; then
+    if ! confirm_nav --delete "🗑️  Удаление WARP"; then
         print_error "Операция отменена"
         sleep 2
         return 0
@@ -394,7 +402,7 @@ add_warp_to_config() {
     menu_items+=("──────────────────────────────────────")
     menu_items+=("⬅️   Назад")
 
-    show_arrow_menu "📄 Выберите конфигурацию" "${menu_items[@]}"
+    show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?
 
     # Проверка - выбран ли разделитель или "Назад"
@@ -689,7 +697,7 @@ remove_warp_from_config() {
     menu_items+=("──────────────────────────────────────")
     menu_items+=("⬅️   Назад")
 
-    show_arrow_menu "📄 Выберите конфигурацию" "${menu_items[@]}"
+    show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
     local choice=$?
 
     # Проверка - выбран ли разделитель или "Назад"
@@ -738,7 +746,7 @@ remove_warp_from_config() {
     fi
 
     if [ -n "$_port_to_close" ]; then
-        show_arrow_menu "🛡️ Закрытие порта WARP" \
+        show_arrow_menu "🛡️  Закрытие порта WARP" \
             "Закрыть порт от WARP (${_port_to_close})" \
             "Не закрывать порт"
         [ $? -eq 0 ] && _should_close_port=true

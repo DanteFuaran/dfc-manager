@@ -855,7 +855,7 @@ _mt_do_install() {
                 wait $! 2>/dev/null || true
                 printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
             else
-                show_spinner "Получение сертификатов" "Получение сертификатов"
+                show_spinner --step "Получение сертификатов" "Получение сертификатов"
             fi
             local _cert_rc=$?
             if [ "$_cert_rc" -eq 0 ]; then
@@ -1421,7 +1421,7 @@ _mt_do_change_config() {
             wait $! 2>/dev/null || true
             printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
         else
-            show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+            show_spinner --step "Получение SSL-сертификата..." "SSL-сертификат получен"
         fi
         local _cert_rc=$?
         if [ "$_cert_rc" -eq 0 ]; then
@@ -1572,7 +1572,7 @@ _mt_do_uninstall() {
         _mt_press_enter; return
     fi
 
-    if ! confirm_nav --delete "🗑️ Удаление MTProto"; then
+    if ! confirm_nav --delete "🗑️  Удаление MTProto"; then
         return
     fi
     echo
@@ -1723,7 +1723,7 @@ _mt_do_setup_connect() {
     local _force_flag=""
     $_cert_ok && ! $_nginx_ok && _force_flag="force"
     (_mt_issue_cert "$SERVER_IP" "$_force_flag") &
-    show_spinner "Получение SSL-сертификата..." "SSL-сертификат получен"
+    show_spinner --step "Получение SSL-сертификата..." "SSL-сертификат получен"
     local _cert_rc=$?
     if [ "$_cert_rc" -ne 0 ]; then
         echo -e "${RED}✖ Не удалось получить сертификат для ${SERVER_IP}.${NC}"

@@ -157,7 +157,7 @@ _ensure_system_deps() {
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
     ) &
-    show_spinner "Обновление пакетов системы"
+    show_spinner --step "Обновление пакетов системы"
 
     if [ "$_need_certbot" = true ] && ! command -v certbot >/dev/null 2>&1; then
         print_error "certbot не удалось установить. Установите вручную: apt install certbot"
@@ -205,7 +205,7 @@ get_cert_cloudflare() {
         fi
         echo "$_ec" > "$_exit_file"
     ) &
-    show_spinner "Получение wildcard сертификата для *.$dnorm"
+    show_spinner --step "Получение wildcard сертификата для *.$dnorm"
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
@@ -278,7 +278,7 @@ get_cert_acme() {
         fi
         echo "$_ec" > "$_exit_file"
     ) &
-    show_spinner "Получение сертификата для $dnorm"
+    show_spinner --step "Получение сертификата для $dnorm"
 
     ufw_revert_http01_temp
     iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true

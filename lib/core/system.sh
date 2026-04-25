@@ -172,7 +172,7 @@ DNSCONF
         mkdir -p "${DIR_SCRIPT}" 2>/dev/null || true
         touch "${DIR_SCRIPT}install_packages"
     ) &
-    show_spinner "Установка необходимых пакетов"
+    show_spinner --step "Установка необходимых пакетов"
     echo
     source /usr/share/bash-completion/bash_completion 2>/dev/null || true
     source /usr/share/bash-completion/completions/ufw 2>/dev/null || true
