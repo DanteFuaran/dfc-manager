@@ -317,53 +317,89 @@ create_config_profile() {
     local inbound_tag="${6:-Steal}"
     local inbound_port="${7:-443}"
 
-    local short_id
+    local short_id warp_short_id warp_port
     short_id=$(openssl rand -hex 8)
+    warp_short_id=$(openssl rand -hex 8)
+    warp_port=$((inbound_port + 5000))
 
     local request_body
     request_body=$(jq -n --arg name "$name" --arg domain "$domain" \
-        --arg private_key "$private_key" --arg short_id "$short_id" \
-        --arg inbound_tag "$inbound_tag" --argjson inbound_port "$inbound_port" '{
+        --arg private_key "$private_key" --arg short_id "$short_id" --arg warp_short_id "$warp_short_id" \
+        --arg direct_tag "$inbound_tag (vless)" --arg warp_tag "$inbound_tag (vless-warp)" \
+        --argjson inbound_port "$inbound_port" --argjson warp_port "$warp_port" '{
         name: $name,
         config: {
             log: { loglevel: "warning" },
             dns: {
                 queryStrategy: "UseIPv4",
                 servers: [
-                    { address: "https://dns.google/dns-query", skipFallback: false },
-                    { address: "https://1.1.1.1/dns-query", skipFallback: false },
-                    { address: "https://dns.quad9.net/dns-query", skipFallback: false }
+                    { address: "https://1.1.1.1/dns-query" },
+                    { address: "https://dns.quad9.net/dns-query" }
                 ]
             },
-            inbounds: [{
-                tag: $inbound_tag,
+            inbounds: [
+            {
+                tag: $direct_tag,
                 port: $inbound_port,
                 protocol: "vless",
-                settings: { clients: [], decryption: "none" },
+                settings: { clients: [], decryption: "none", flow: "xtls-rprx-vision" },
                 sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
                 streamSettings: {
                     network: "tcp",
                     security: "reality",
                     realitySettings: {
+                        dest: "/dev/shm/nginx.sock",
                         show: false,
                         xver: 1,
-                        dest: "/dev/shm/nginx.sock",
                         spiderX: "",
                         shortIds: [$short_id],
                         privateKey: $private_key,
+                        fingerprint: "chrome",
+                        serverNames: [$domain]
+                    }
+                }
+            },
+            {
+                tag: $warp_tag,
+                port: $warp_port,
+                protocol: "vless",
+                settings: { clients: [], decryption: "none", flow: "xtls-rprx-vision" },
+                sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
+                streamSettings: {
+                    network: "tcp",
+                    security: "reality",
+                    realitySettings: {
+                        dest: "/dev/shm/nginx.sock",
+                        show: false,
+                        xver: 1,
+                        spiderX: "",
+                        shortIds: [$warp_short_id],
+                        privateKey: $private_key,
+                        fingerprint: "chrome",
                         serverNames: [$domain]
                     }
                 }
             }],
             outbounds: [
                 { tag: "DIRECT", protocol: "freedom" },
-                { tag: "BLOCK", protocol: "blackhole" }
+                { tag: "BLOCK", protocol: "blackhole" },
+                {
+                    tag: "warp-out",
+                    protocol: "freedom",
+                    settings: { domainStrategy: "UseIP" },
+                    streamSettings: {
+                        sockopt: { interface: "warp", tcpFastOpen: true }
+                    }
+                }
             ],
             routing: {
                 domainStrategy: "AsIs",
                 rules: [
                     { ip: ["geoip:private"], type: "field", outboundTag: "BLOCK" },
-                    { type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK" }
+                    { type: "field", domain: ["geosite:private"], outboundTag: "BLOCK" },
+                    { type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK" },
+                    { type: "field", inboundTag: [$warp_tag], outboundTag: "warp-out" },
+                    { type: "field", inboundTag: [$direct_tag], outboundTag: "DIRECT" }
                 ]
             }
         }

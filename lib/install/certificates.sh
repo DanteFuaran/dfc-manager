@@ -18,7 +18,7 @@ _parse_cert_error() {
         echo "Домен не прошёл проверку — убедитесь что DNS указывает на этот сервер"
     elif echo "$raw" | grep -qiE "invalid domain|not a FQDN|malformed"; then
         echo "Некорректное доменное имя"
-    el    if echo "$raw" | grep -qiE "cloudflare.*error|API Token|dns_cloudflare"; then
+    elif echo "$raw" | grep -qiE "cloudflare.*error|API Token|dns_cloudflare"; then
         echo "Ошибка Cloudflare API — проверьте токен и права доступа"
     elif echo "$raw" | grep -qiE "gcore.*error|dns_gcore|apitoken.*gcore"; then
         echo "Ошибка Gcore API — проверьте токен"
