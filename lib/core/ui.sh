@@ -453,6 +453,7 @@ reading() {
 reading_inline() {
     local prompt="$1"
     local var_name="$2"
+    local default_val="${3:-}"
     local input=""
     local char
     local _rl_stty
@@ -463,6 +464,8 @@ reading_inline() {
     while [[ "${_p: -1:1}" == " " ]]; do _p="${_p% }"; done
     if [[ "$prompt" == *$'\033'* ]]; then
         echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} \033[32m"
+    elif [[ -n "$default_val" ]]; then
+        echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC}${DARKGRAY} [${default_val}]:${NC} \033[32m"
     elif [[ "${_p: -1:1}" == ":" ]]; then
         echo -en "${BLUE}➜${NC}  ${YELLOW}${_p%:}${DARKGRAY}:${NC} \033[32m"
     else
@@ -495,6 +498,9 @@ reading_inline() {
     echo -en "\033[0m"
     if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
     echo
+    if [[ -z "$input" && -n "${default_val:-}" ]]; then
+        input="$default_val"
+    fi
     printf -v "$var_name" '%s' "$input"
 }
 

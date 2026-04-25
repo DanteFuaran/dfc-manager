@@ -835,6 +835,8 @@ server {
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl default_server;
@@ -1145,6 +1147,8 @@ server {
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     server_name _;
@@ -1829,6 +1833,8 @@ server {
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl default_server;
@@ -2163,6 +2169,8 @@ server {
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     server_name _;

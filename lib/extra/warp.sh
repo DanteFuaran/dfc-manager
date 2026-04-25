@@ -17,7 +17,7 @@ manage_warp() {
     if [ "$has_panel" = false ] && [ "$has_node" = false ]; then
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "${BLUE}   🌐 WARP${NC}"
+        echo -e "$(center "🌐 Управление Cloudflare Warp" "$BLUE")"
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
         echo -e "${YELLOW}На сервере нет приложений требующих WARP${NC}"
@@ -58,7 +58,7 @@ manage_warp() {
         items+=("⬅️   Назад");                               actions+=("back")
     fi
 
-    show_arrow_menu "🌐  WARP" "${items[@]}"
+    show_arrow_menu "🌐 Управление Cloudflare Warp" "${items[@]}"
     local choice=$?
     local action="${actions[$choice]:-back}"
 
@@ -106,7 +106,7 @@ install_warp_native() {
     # Спрашиваем порт WARP-инбаунда
     local warp_install_port=""
     while true; do
-        reading_inline "Порт для WARP-инбаунда:" warp_install_port
+        reading_inline "Порт для Warp-подключения" warp_install_port "8443"
         local _rc_wp=$?
         if [[ $_rc_wp -eq 2 ]]; then return 0; fi
         if [[ "$warp_install_port" =~ ^[0-9]+$ ]] && [ "$warp_install_port" -ge 1024 ] && [ "$warp_install_port" -le 65535 ]; then
@@ -338,7 +338,7 @@ uninstall_warp_native() {
 add_warp_to_config() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
+    echo -e "$(center "➕ Добавление Warp в конфиг ноды" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
@@ -384,16 +384,13 @@ add_warp_to_config() {
         return 1
     fi
 
-    echo -e "${YELLOW}Выберите конфигурацию для добавления WARP:${NC}"
-    echo
-
     local i=1
     declare -A config_map
     declare -A config_name_map
     local menu_items=()
     while IFS=' ' read -r name uuid; do
         [ -z "$name" ] && continue
-        menu_items+=("📄  $name")
+        menu_items+=("📄 $name")
         config_map[$i]="$uuid"
         config_name_map[$i]="$name"
         ((i++))
@@ -402,7 +399,7 @@ add_warp_to_config() {
     menu_items+=("──────────────────────────────────────")
     menu_items+=("⬅️   Назад")
 
-    show_arrow_menu "📄  Выберите конфигурацию" "${menu_items[@]}"
+    show_arrow_menu "📄 Выберите ноду для модификации" "${menu_items[@]}"
     local choice=$?
 
     # Проверка - выбран ли разделитель или "Назад"
@@ -431,14 +428,6 @@ add_warp_to_config() {
         return 1
     fi
 
-    # Проверяем, есть ли уже warp-out
-    if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' >/dev/null 2>&1; then
-        print_warning "WARP уже добавлен в эту конфигурацию"
-        echo
-        show_continue_prompt || return 1
-        return 0
-    fi
-
     # Получаем данные из первого (основного) инбаунда
     local main_inbound_tag main_domain
     main_inbound_tag=$(echo "$config_json" | jq -r '.inbounds[0].tag // empty' 2>/dev/null)
@@ -451,10 +440,94 @@ add_warp_to_config() {
         return 1
     fi
 
+    # Формируем тег WARP-инбаунда в том же стиле, что и основной VLESS-инбаунд
+    local warp_inbound_tag
+    if [[ "$main_inbound_tag" == *" (vless)" ]]; then
+        warp_inbound_tag="${main_inbound_tag% (vless)} (vless-warp)"
+    else
+        warp_inbound_tag="${selected_name} (vless-warp)"
+    fi
+
+    local rule_direct rule_warp
+    rule_direct=$(jq -n --arg tag "$main_inbound_tag" '{
+        type: "field",
+        inboundTag: [$tag],
+        outboundTag: "DIRECT"
+    }')
+    rule_warp=$(jq -n --arg tag "$warp_inbound_tag" '{
+        type: "field",
+        inboundTag: [$tag],
+        outboundTag: "warp-out"
+    }')
+
+    # Если WARP уже был добавлен старой версией скрипта, нормализуем существующий конфиг.
+    if echo "$config_json" | jq -e '.outbounds[]? | select(.tag == "warp-out")' >/dev/null 2>&1; then
+        local old_warp_inbound_tag="${selected_name} - Warp"
+        local repaired_config_json
+        repaired_config_json=$(echo "$config_json" | jq \
+            --arg old_tag "$old_warp_inbound_tag" \
+            --arg main_tag "$main_inbound_tag" \
+            --arg warp_tag "$warp_inbound_tag" \
+            --argjson rd "$rule_direct" \
+            --argjson rw "$rule_warp" '
+            def normalize_warp_tag:
+                if . == $old_tag then $warp_tag else . end;
+            .inbounds |= map(if .tag == $old_tag then .tag = $warp_tag else . end)
+            | .routing.rules = (
+                (.routing.rules // [])
+                | map(if (.inboundTag? and (.inboundTag | type == "array")) then
+                    .inboundTag |= map(normalize_warp_tag)
+                  else
+                    .
+                  end)
+                | map(select(
+                    (
+                        .outboundTag == "warp-out"
+                        and ((.domain // []) | index("geosite:youtube"))
+                    ) | not
+                ))
+                | map(select(
+                    (
+                        .outboundTag == "DIRECT"
+                        and ((.inboundTag // []) | index($main_tag))
+                    ) | not
+                ))
+                | map(select(
+                    (
+                        .outboundTag == "warp-out"
+                        and ((.inboundTag // []) | index($warp_tag))
+                    ) | not
+                ))
+                + [$rw, $rd]
+            )')
+
+        if [ "$(echo "$config_json" | jq -S .)" != "$(echo "$repaired_config_json" | jq -S .)" ]; then
+            local repair_body repair_response
+            repair_body=$(jq -n --arg uuid "$selected_uuid" --argjson config "$repaired_config_json" '{
+                uuid: $uuid,
+                config: $config
+            }')
+            repair_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "$repair_body")
+            if [ -z "$repair_response" ] || ! echo "$repair_response" | jq -e '.' >/dev/null 2>&1; then
+                print_error "Не удалось исправить конфигурацию Warp"
+                echo
+                show_continue_prompt || return 1
+                return 1
+            fi
+            print_success "Конфигурация Warp исправлена"
+        else
+            print_warning "Warp уже добавлен в эту конфигурацию"
+        fi
+
+        echo
+        show_continue_prompt || return 1
+        return 0
+    fi
+
     # Запрашиваем порт для WARP-инбаунда
     local warp_port=""
     while true; do
-        reading_inline "Порт для WARP-инбаунда:" warp_port
+        reading_inline "Порт для Warp-подключения" warp_port "8443"
         local _rc_port=$?
         if [[ $_rc_port -eq 2 ]]; then return; fi
         if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
@@ -467,12 +540,6 @@ add_warp_to_config() {
             print_error "Введите корректный порт (1024–65535)"
         fi
     done
-
-    clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   ➕ ДОБАВЛЕНИЕ WARP В КОНФИГУРАЦИЮ${NC}"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo
 
     # Генерируем новые ключи для WARP-инбаунда
     print_action "Генерация REALITY ключей для WARP-инбаунда..."
@@ -488,9 +555,6 @@ add_warp_to_config() {
 
     local warp_short_id
     warp_short_id=$(openssl rand -hex 8)
-
-    # Формируем тег для WARP-инбаунда
-    local warp_inbound_tag="${selected_name} - Warp"
 
     # Добавляем второй инбаунд (порт $warp_port)
     local warp_inbound
@@ -530,28 +594,36 @@ add_warp_to_config() {
     config_json=$(echo "$config_json" | jq --argjson wo "$warp_outbound" '.outbounds += [$wo]')
 
     # Добавляем правила маршрутизации:
-    # 1. YouTube → warp-out (домены через WARP с любого инбаунда)
+    # 1. WARP-инбаунд → warp-out
     # 2. Основной инбаунд → DIRECT
-    # 3. WARP-инбаунд → warp-out
-    local rule_direct rule_warp rule_youtube
-    rule_youtube=$(jq -n '{
-        type: "field",
-        domain: ["geosite:youtube"],
-        outboundTag: "warp-out"
-    }')
-    rule_direct=$(jq -n --arg tag "$main_inbound_tag" '{
-        type: "field",
-        inboundTag: [$tag],
-        outboundTag: "DIRECT"
-    }')
-    rule_warp=$(jq -n --arg tag "$warp_inbound_tag" '{
-        type: "field",
-        inboundTag: [$tag],
-        outboundTag: "warp-out"
-    }')
-
-    config_json=$(echo "$config_json" | jq --argjson ry "$rule_youtube" --argjson rd "$rule_direct" --argjson rw "$rule_warp" \
-        '.routing.rules += [$ry, $rd, $rw]')
+    # Доменные правила вроде geosite:youtube не добавляем, чтобы порт 443 не ходил через WARP.
+    config_json=$(echo "$config_json" | jq \
+        --arg main_tag "$main_inbound_tag" \
+        --arg warp_tag "$warp_inbound_tag" \
+        --argjson rd "$rule_direct" \
+        --argjson rw "$rule_warp" '
+        .routing.rules = (
+            (.routing.rules // [])
+            | map(select(
+                (
+                    .outboundTag == "warp-out"
+                    and ((.domain // []) | index("geosite:youtube"))
+                ) | not
+            ))
+            | map(select(
+                (
+                    .outboundTag == "DIRECT"
+                    and ((.inboundTag // []) | index($main_tag))
+                ) | not
+            ))
+            | map(select(
+                (
+                    .outboundTag == "warp-out"
+                    and ((.inboundTag // []) | index($warp_tag))
+                ) | not
+            ))
+            + [$rw, $rd]
+        )')
 
     # Обновляем конфигурацию через API
     print_action "Обновление конфигурации..."
@@ -581,7 +653,7 @@ add_warp_to_config() {
     if [ -n "$warp_inbound_uuid" ] && [ "$warp_inbound_uuid" != "null" ]; then
         # Создаём хост для WARP-инбаунда
         create_host "$domain_url" "$token" "$selected_uuid" "$warp_inbound_uuid" \
-            "${selected_name} - Warp" "$main_domain" "$warp_port" >/dev/null 2>&1
+            "$warp_inbound_tag" "$main_domain" "$warp_port" >/dev/null 2>&1
 
         # Добавляем WARP-инбаунд в сквады
         print_action "Обновление сквадов..."
@@ -635,7 +707,7 @@ add_warp_to_config() {
     fi
 
     echo
-    print_success "WARP добавлен в конфигурацию"
+    print_final_success "Warp успешно добавлен!"
 
     # Открываем порт в UFW на этом сервере
     if command -v ufw >/dev/null 2>&1; then
@@ -645,7 +717,7 @@ add_warp_to_config() {
     echo "${warp_port}" > /etc/wireguard/.warp_port
 
     echo
-    print_warning "Теперь установите WARP на сервере ноды"
+    print_warning "Теперь установите Warp на сервере ноды"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     show_continue_prompt || return 1
