@@ -203,59 +203,43 @@ prompt_ip_with_retry() {
 prompt_domain_with_retry() {
     local prompt_text="$1"
     local var_name="$2"
-    local use_inline="${3:-false}"
+    local use_inline="${3:-false}" # сохранён для совместимости вызовов; ввод всегда inline --no-eol + спиннер на строке ввода (как Beszel)
     local skip_ip_check="${4:-false}"
     local forbid_ipv4="${5:-false}"
     local allow_ipv4="${6:-false}"
 
-    local first=true
     while true; do
-        if [ "$first" = true ]; then
-            if [ "$use_inline" = true ]; then
-                reading_inline "$prompt_text" "$var_name"
-                local _rc=$?
-                [ $_rc -eq 2 ] && return 1
-            else
-                reading "$prompt_text" "$var_name"
-                local _rc=$?
-                [ $_rc -ne 0 ] && return 1
-            fi
-            first=false
-        else
-            reading_inline "$prompt_text" "$var_name"
-            local _rc=$?
-            [ $_rc -eq 2 ] && return 1
-        fi
+        reading_inline --no-eol "$prompt_text" "$var_name"
+        local _rc=$?
+        [ $_rc -ne 0 ] && return 1
 
         if [ "$forbid_ipv4" = true ] && [[ "${!var_name}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo
             print_error "Укажите доменное имя (например monitor.example.com), а не IP-адрес."
             echo -e "${DARKGRAY}   Нужна DNS-запись на этот сервер и сертификат на имя хоста.${NC}"
             echo
-            first=true
             continue
         fi
 
         if [ "$allow_ipv4" = true ] && [[ "${!var_name}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo
             return 0
         fi
 
         local check_ip_flag=true
         [ "$skip_ip_check" = true ] && check_ip_flag=false
 
-        # Проверка домена — show_spinner --step как при установке Beszel (одна строка \r)
+        # Проверка домена — спиннер на той же строке, что и ввод (как install_beszel)
         local _check_out _check_rc
         local _check_out_file _check_rc_file
         _check_out_file=$(mktemp)
         _check_rc_file=$(mktemp)
         (
             check_domain "${!var_name}" "$check_ip_flag" > "$_check_out_file" 2>&1
-            chk=$?
-            printf '%s\n' "$chk" > "$_check_rc_file"
-            exit "$chk"
+            printf '%s\n' "$?" > "$_check_rc_file"
         ) </dev/null &
         local _check_pid=$!
-        show_spinner --step --pid "$_check_pid" "Проверка домена…" "Проверка домена" || true
+        dfc_domain_check_wait_inline "$_check_pid"
         _check_rc=$(cat "$_check_rc_file" 2>/dev/null)
         _check_out=$(cat "$_check_out_file" 2>/dev/null)
         rm -f "$_check_out_file" "$_check_rc_file"
@@ -270,6 +254,7 @@ prompt_domain_with_retry() {
         fi
 
         if [ "$_check_rc" = "0" ]; then
+            echo
             return 0
         fi
 

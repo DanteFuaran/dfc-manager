@@ -434,19 +434,7 @@ install_beszel() {
             check_domain "$BESZEL_DOMAIN" > "$_chk_out_f" 2>&1
             echo $? > "$_chk_rc_f"
          ) </dev/null &        local _chk_pid=$!
-        local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-        local _si=0
-        printf ' '
-        tput civis 2>/dev/null || true
-        while kill -0 $_chk_pid 2>/dev/null; do
-            printf "${GREEN}%s${NC}" "${_spin[$_si]}"
-            sleep 0.08
-            printf '\b'
-            _si=$(( (_si+1) % 10 ))
-        done
-        wait $_chk_pid 2>/dev/null
-        printf '\033[K'
-        tput civis 2>/dev/null || true
+        dfc_domain_check_wait_inline "$_chk_pid"
         local _chk_rc _chk_out
         _chk_rc=$(cat "$_chk_rc_f" 2>/dev/null)
         _chk_out=$(cat "$_chk_out_f" 2>/dev/null)

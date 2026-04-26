@@ -270,6 +270,24 @@ show_spinner() {
     return $exit_code
 }
 
+# Ожидание фоновой проверки домена: спиннер сразу после ввода (reading_inline --no-eol + пробел), как install_beszel.
+dfc_domain_check_wait_inline() {
+    local pid="${1:?}"
+    local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local _si=0
+    printf ' '
+    tput civis 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "${GREEN}%s${NC}" "${_spin[$_si]}"
+        sleep 0.08
+        printf '\b'
+        _si=$(( (_si+1) % 10 ))
+    done
+    wait "$pid" 2>/dev/null || true
+    printf '\033[K'
+    tput civis 2>/dev/null || true
+}
+
 show_spinner_timer() {
     local seconds=$1
     local msg="$2"
