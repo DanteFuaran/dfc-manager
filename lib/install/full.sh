@@ -423,6 +423,7 @@ installation_full() {
     print_success "Подготовка конфигураций"
 
     # 11. Шаблон selfsteal
+    echo
     randomhtml
 
     # 12. Перезапуск Docker Compose (с обновлённым docker-compose.yml)
@@ -792,6 +793,7 @@ installation_panel_with_node() {
 
     print_success "Подготовка конфигураций"
 
+    echo
     randomhtml
 
     echo
