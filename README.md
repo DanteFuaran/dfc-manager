@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="version"/>
-  <img src="https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
+  <img src="https://img.shields.io/badge/platform-Ubuntu%2024%20%7C%20Debian-orange?style=flat-square" alt="platform"/>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license"/>
 </p>
 
