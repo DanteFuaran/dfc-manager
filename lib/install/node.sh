@@ -28,8 +28,9 @@ installation_node() {
             if [[ "$_nk" == "" ]] || [[ "$_nk" == $'\n' ]] || [[ "$_nk" == $'\r' ]]; then
                 _choice=1; break
             elif [[ "$_nk" == $'\x1b' ]]; then
-                IFS= read -rsn1 -t 0.1 _ns 2>/dev/null || true
-                [[ -z "$_ns" ]] && { _choice=0; break; }
+                if _dfc_after_esc_is_bare; then
+                    _choice=0; break
+                fi
             fi
         done
         tput cnorm 2>/dev/null; echo
@@ -47,8 +48,7 @@ installation_node() {
             cd /opt/remnawave 2>/dev/null
             docker compose stop remnanode 2>/dev/null || true
             docker compose rm -f -v remnanode 2>/dev/null || true
-        ) &
-        show_spinner "Удаление контейнера ноды"
+         ) </dev/null &        show_spinner "Удаление контейнера ноды"
 
         # Если нода стоит отдельно (не на сервере панели) — чистим .env и compose
         if ! [ -f "${DIR_NGINX}nginx.conf" ]; then
@@ -57,8 +57,7 @@ installation_node() {
                 docker compose down -v 2>/dev/null || true
                 rm -f /opt/remnawave/docker-compose.yml
                 rm -f /opt/remnawave/.env
-            ) &
-            show_spinner "Очистка конфигурации ноды"
+             ) </dev/null &            show_spinner "Очистка конфигурации ноды"
         fi
         # Продолжаем — is_local_panel будет пересчитан ниже
     fi
@@ -139,15 +138,13 @@ installation_node_connect() {
                         _input_step=4
                         break
                     elif [[ "$_owk" == $'\x1b' ]]; then
-                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
-                        if [[ -z "$_ows" ]]; then
+                        if _dfc_after_esc_is_bare; then
                             tput cnorm 2>/dev/null; echo
                             tput rc 2>/dev/null || true
                             printf "\033[J" 2>/dev/null || true
                             SELFSTEAL_DOMAIN=""
                             break
                         fi
-                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
                     fi
                 done
                 [[ $_input_step -eq 4 ]] || continue
@@ -336,8 +333,7 @@ installation_node_local() {
             cd /opt/remnawave
             docker compose down >/dev/null 2>&1
             docker compose up -d >/dev/null 2>&1
-        ) &
-        show_spinner "Восстановление конфигурации панели"
+         ) </dev/null &        show_spinner "Восстановление конфигурации панели"
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
         tput cnorm 2>/dev/null || true
     }
@@ -370,7 +366,7 @@ installation_node_local() {
     fi
 
     if [ -z "$panel_domain" ]; then
-        print_error "Не удалось определить домен панели из nginx.conf"
+        print_error "Не удалось определить домен панели из конфигурации Nginx"
         echo
         show_continue_prompt || return 1
         return
@@ -460,8 +456,7 @@ installation_node_local() {
                         _input_step=4
                         break
                     elif [[ "$_owk" == $'\x1b' ]]; then
-                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
-                        if [[ -z "$_ows" ]]; then
+                        if _dfc_after_esc_is_bare; then
                             tput cnorm 2>/dev/null; echo
                             tput rc 2>/dev/null || true
                             printf "\033[J" 2>/dev/null || true
@@ -469,7 +464,6 @@ installation_node_local() {
                             _input_step=1
                             break
                         fi
-                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
                     fi
                 done
                 [[ $_input_step -eq 1 ]] && continue
@@ -606,8 +600,7 @@ installation_node_local() {
     (
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
-    ) &
-    show_spinner "Остановка сервисов" || true
+     ) </dev/null &    show_spinner "Остановка сервисов" || true
 
     (
         exec >/dev/null 2>&1
@@ -644,8 +637,7 @@ installation_node_local() {
         [ -n "$_node_server_ip" ] && ufw allow from "$_node_server_ip" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1 || true
-    ) &
-    show_spinner --step "Подготовка файлов" || true
+     ) </dev/null &    show_spinner --step "Подготовка файлов" || true
 
     echo
 
@@ -657,8 +649,7 @@ installation_node_local() {
         docker compose up -d >/dev/null 2>&1 || true
         cd "${DIR_NGINX}"
         docker compose up -d --force-recreate >/dev/null 2>&1 || true
-    ) &
-    if ! show_spinner "Настройка сервисов"; then
+     ) </dev/null &    if ! show_spinner "Настройка сервисов"; then
         print_error "Не удалось запустить контейнеры"
         _restore_panel_config
         echo
@@ -694,8 +685,7 @@ installation_node_local() {
         echo "$cr" > "$_tmp_cr"
         read cpu_u ci_u <<< "$cr"
         create_node "$domain_url" "$token" "$cpu_u" "$ci_u" "$SELFSTEAL_DOMAIN" "$entity_name" "$NODE_LISTEN_PORT" || exit 1
-    ) &
-    if ! show_spinner "Создание Ноды"; then
+     ) </dev/null &    if ! show_spinner "Создание Ноды"; then
         print_error "Не удалось зарегистрировать ноду. Восстановление..."
         _restore_panel_config
         rm -f "$_tmp_pk" "$_tmp_cr"
@@ -727,8 +717,7 @@ installation_node_local() {
                 update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid" || true
             done <<< "$squad_uuids"
         fi
-    ) &
-    show_spinner "Регистрация хоста" || true
+     ) </dev/null &    show_spinner "Регистрация хоста" || true
 
     # ─── Финальный перезапуск (с обновлённым SECRET_KEY) ───
     (
@@ -740,8 +729,7 @@ installation_node_local() {
         docker compose up -d >/dev/null 2>&1 || true
         cd "${DIR_NGINX}"
         docker compose restart nginx >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Подготовка панели" || true
+     ) </dev/null &    show_spinner "Подготовка панели" || true
 
     randomhtml
     echo
@@ -763,8 +751,7 @@ installation_node_local() {
             print_success "API токен создан"
             if [ "$has_local_sub" = true ]; then
                 # Перезапускаем subscription-page с новым токеном
-                (cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1) &
-                show_spinner "Перезапуск subscription-page"
+                (cd /opt/remnawave && docker compose up -d remnawave-subscription-page >/dev/null 2>&1 ) </dev/null &                show_spinner "Перезапуск subscription-page"
             fi
         else
             print_error "Не удалось создать API токен"
@@ -955,8 +942,7 @@ services:
         max-file: '5'
 EOL
         generate_nginx_conf_node "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN"
-    ) &
-    show_spinner --step "Подготовка файлов" || true
+     ) </dev/null &    show_spinner --step "Подготовка файлов" || true
 
     (
         ufw allow from "$PANEL_IP" to any port "$NODE_LISTEN_PORT" >/dev/null 2>&1
@@ -965,8 +951,7 @@ EOL
         ufw reload >/dev/null 2>&1
         _mt_ensure_stream_mode >/dev/null 2>&1 || true
         cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
-    ) &
-    show_spinner --step "Подготовка служб" || true
+     ) </dev/null &    show_spinner --step "Подготовка служб" || true
 
     # Шаблон selfsteal (apply_template печатает строку «Установка шаблона: …»)
     echo
@@ -986,8 +971,7 @@ EOL
         else
             true
         fi
-    ) &
-    show_spinner --step "Настройка компонентов" || true
+     ) </dev/null &    show_spinner --step "Настройка компонентов" || true
 
     (
         cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1 || exit 1
@@ -995,8 +979,7 @@ EOL
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
         sleep 2
-    ) &
-    if ! show_spinner --step "Запуск ноды"; then
+     ) </dev/null &    if ! show_spinner --step "Запуск ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
@@ -1004,15 +987,15 @@ EOL
 
     tput cnorm 2>/dev/null || true
 
-    # Проверка здоровья: nginx должен создать unix-сокет
+    # Проверка здоровья: Nginx должен создать unix-сокет
     local health_ok=true
     local health_reasons=""
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnawave-nginx$'; then
         health_ok=false
-        health_reasons+="контейнер remnawave-nginx не запущен\n"
+        health_reasons+="контейнер Nginx (remnawave-nginx) не запущен\n"
     elif [ ! -S /dev/shm/nginx.sock ]; then
         health_ok=false
-        health_reasons+="unix-сокет /dev/shm/nginx.sock не создан\n"
+        health_reasons+="unix-сокет /dev/shm/nginx.sock для Nginx не создан\n"
     fi
 
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^remnanode$'; then
@@ -1022,7 +1005,7 @@ EOL
 
     # Удаляем trap при успешном завершении
     if [ "$is_fresh_install" = true ]; then
-        trap - INT TERM
+        dfc_restore_interrupt_traps
     fi
 
     if [ "$health_ok" = true ]; then
@@ -1079,7 +1062,7 @@ installation_node_with_existing_subpage() {
 
     if [ -z "$PANEL_URL" ] || [ -z "$API_TOKEN" ] || [ -z "$SUB_DOMAIN" ]; then
         print_error "Не удалось извлечь данные из существующей установки страницы подписки."
-        print_error "Проверьте ${SUBPAGE_DIR}/docker-compose.yml и ${DIR_NGINX}nginx.conf"
+        print_error "Проверьте ${SUBPAGE_DIR}/docker-compose.yml и конфигурацию Nginx (${DIR_NGINX}nginx.conf)"
         show_continue_prompt || return 1
         return
     fi
@@ -1201,8 +1184,7 @@ installation_node_with_existing_subpage() {
     fi
 
     # Останавливаем существующую страницу подписки
-    (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1) &
-    show_spinner "Остановка страницы подписки" || true
+    (cd "${SUBPAGE_DIR}" && docker compose down --remove-orphans >/dev/null 2>&1 ) </dev/null &    show_spinner "Остановка страницы подписки" || true
 
     # Генерируем конфиги для ноды + страницы подписки
     (
@@ -1214,8 +1196,7 @@ installation_node_with_existing_subpage() {
             "$SELFSTEAL_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" \
             "$NODE_INSTALL_DIR"
-    ) &
-    show_spinner --step "Подготовка файлов" || true
+     ) </dev/null &    show_spinner --step "Подготовка файлов" || true
 
     # Настройка файрвола
     (
@@ -1223,8 +1204,7 @@ installation_node_with_existing_subpage() {
         ufw allow 443/tcp >/dev/null 2>&1
         ufw allow "${NODE_INBOUND_PORT}/tcp" >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
-    ) &
-    show_spinner --step "Настройка файрвола" || true
+     ) </dev/null &    show_spinner --step "Настройка файрвола" || true
 
     randomhtml
     echo
@@ -1236,24 +1216,20 @@ installation_node_with_existing_subpage() {
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
             cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 || true
         fi
-    ) &
-    show_spinner --step "Проверка совместимости MTProto" || true
+     ) </dev/null &    show_spinner --step "Проверка совместимости MTProto" || true
 
     # Запуск контейнеров
-    (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск страницы подписки" || true
+    (cd /opt/subscribe-page && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск страницы подписки" || true
 
     # Если MTProto stream-блок есть — запускаем nginx первым
     local _mt_stream_present2=false
     if grep -q "# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         _mt_stream_present2=true
-        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner --step "Запуск nginx" || true
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 ) </dev/null &        show_spinner --step "Запуск Nginx" || true
         sleep 1
     fi
 
-    (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner --step "Подключение ноды"; then
+    (cd "${NODE_INSTALL_DIR}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    if ! show_spinner --step "Подключение ноды"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
@@ -1261,8 +1237,7 @@ installation_node_with_existing_subpage() {
     echo
 
     if ! $_mt_stream_present2; then
-        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1) &
-        show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
+        (cd "${DIR_NGINX}" && docker compose up -d --force-recreate >/dev/null 2>&1 ) </dev/null &        show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
     else
         show_spinner_timer 15 "Ожидание запуска сервисов" "Запуск сервисов"
     fi

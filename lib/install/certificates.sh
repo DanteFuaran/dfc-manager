@@ -162,8 +162,7 @@ _ensure_system_deps() {
             apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
-    ) &
-    show_spinner --step "Обновление пакетов системы"
+     ) </dev/null &    show_spinner --step "Обновление пакетов системы"
 
     if [ "$_need_certbot" = true ] && ! command -v certbot >/dev/null 2>&1; then
         print_error "certbot не удалось установить. Установите вручную: apt install certbot"
@@ -192,8 +191,7 @@ _ensure_gcore_plugin() {
             apt-get install -y -qq $DPKG_OPTS python3-pip >/dev/null 2>&1
         fi
         pip3 install --quiet certbot-dns-gcore >/dev/null 2>&1
-    ) &
-    show_spinner --step "Установка плагина Gcore DNS"
+     ) </dev/null &    show_spinner --step "Установка плагина Gcore DNS"
     if ! python3 -c "import certbot_dns_gcore" >/dev/null 2>&1; then
         print_error "Не удалось установить certbot-dns-gcore. Установите вручную: pip3 install certbot-dns-gcore"
         return 1
@@ -232,8 +230,7 @@ get_cert_cloudflare() {
             fi
         fi
         echo "$_ec" > "$_exit_file"
-    ) &
-    show_spinner --step "Получение wildcard сертификата для *.$dnorm"
+     ) </dev/null &    show_spinner --step "Получение wildcard сертификата для *.$dnorm"
     echo
 
     local _exit_code
@@ -306,9 +303,7 @@ get_cert_acme() {
             fi
         fi
         echo "$_ec" > "$_exit_file"
-    ) &
-    show_spinner --step "Получение сертификата для $dnorm"
-    echo
+     ) </dev/null &    show_spinner --step "Получение сертификата для $dnorm"
 
     ufw_revert_http01_temp
     iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -539,8 +534,7 @@ get_cert_gcore() {
             fi
         fi
         echo "$_ec" > "$_exit_file"
-    ) &
-    show_spinner --step "Получение wildcard сертификата для *.$dnorm (Gcore)"
+     ) </dev/null &    show_spinner --step "Получение wildcard сертификата для *.$dnorm (Gcore)"
     echo
 
     local _exit_code

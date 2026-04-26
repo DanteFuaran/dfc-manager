@@ -179,11 +179,9 @@ installation_panel() {
             generate_nginx_conf_panel_only "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
         fi
-    ) &
-    show_spinner "Подготовка файлов" || true
+     ) </dev/null &    show_spinner "Подготовка файлов" || true
 
-    (setup_firewall) &
-    show_spinner "Настройка файрвола" || true
+    (setup_firewall ) </dev/null &    show_spinner "Настройка файрвола" || true
 
     echo
     (
@@ -192,11 +190,9 @@ installation_panel() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
-    ) &
-    show_spinner "Запуск сервисов" || true
+     ) </dev/null &    show_spinner "Запуск сервисов" || true
 
-    (nginx_reload) &
-    show_spinner "Запуск Nginx" || true
+    (nginx_reload ) </dev/null &    show_spinner "Запуск Nginx" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -288,14 +284,11 @@ installation_panel() {
             cd /opt/remnawave
             docker compose down >/dev/null 2>&1
             docker compose up -d >/dev/null 2>&1
-        ) &
-        show_spinner "Запуск контейнеров" || true
+         ) </dev/null &        show_spinner "Запуск контейнеров" || true
 
-        (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
-        show_spinner "Запуск страницы подписки" || true
+        (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &        show_spinner "Запуск страницы подписки" || true
 
-        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-        show_spinner "Перезапуск nginx" || true
+        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &        show_spinner "Перезапуск Nginx" || true
 
         echo
         # Ожидаем готовность после перезапуска

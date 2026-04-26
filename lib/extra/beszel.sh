@@ -5,6 +5,28 @@
 DIR_BESZEL="/opt/beszel/"
 DIR_BESZEL_AGENT="/opt/beszel-agent/"
 
+# После спиннера: clear, тот же заголовок что в confirm_nav --delete (красный, по центру в 38),
+# центрированное зелёное сообщение, подсказка Enter/Esc.
+# $1 — заголовок (как в confirm), $2 — строка успеха (с эмодзи ✅).
+_beszel_post_delete_success_screen() {
+    local _title="$1" _msg="$2"
+    local _tc _p _pad
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    _tc=$(printf '%b' "$_title" | sed 's/\x1b\[[0-9;]*m//g')
+    _p=$(( (38 - ${#_tc}) / 2 ))
+    [ "$_p" -lt 0 ] && _p=0
+    _pad=$(printf "%${_p}s" "")
+    printf "%s" "$_pad"
+    echo -e "${RED}${_title}${NC}"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+    echo -e "$(center "$_msg" "$GREEN")"
+    echo
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    show_continue_prompt || return 0
+}
+
 # HTTP-вызов через python3
 # Использование: _beszel_http METHOD url [body] [auth_token]
 _beszel_http() {
@@ -120,8 +142,7 @@ _beszel_setup_firewall() {
             done
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq $DPKG_OPTS ufw >/dev/null 2>&1
-        ) &
-        show_spinner --step "Установка Firewall (ufw)" || true
+         ) </dev/null &        show_spinner --step "Установка Firewall (ufw)" || true
     fi
     command -v ufw >/dev/null 2>&1 || return 0
 
@@ -331,11 +352,11 @@ manage_beszel() {
         if ! is_beszel_installed; then
             items+=("📊  Установить панель Beszel"); actions+=("install_hub")
         else
-            items+=("🌐  Изменить домен Beszel");    actions+=("change_domain")
+            items+=("🌐  Изменить домен для панели Beszel"); actions+=("change_domain")
         fi
 
         if ! is_beszel_agent_installed; then
-            items+=("🖥️   Подключить агент (ноду)"); actions+=("install_agent")
+            items+=("🖥️   Подключить ноду"); actions+=("install_agent")
         elif ! is_beszel_installed; then
             # Агент есть, хаба нет — меняем адрес хаба у агента
             items+=("🔗  Изменить адрес хаба агента"); actions+=("change_agent_hub")
@@ -344,7 +365,7 @@ manage_beszel() {
         items+=("──────────────────────────────────────"); actions+=("sep")
         items+=("⬅️   Назад");                             actions+=("back")
 
-        show_arrow_menu "📊  Beszel" "${items[@]}"
+        show_arrow_menu "📊 Мониторинг Beszel" "${items[@]}"
         local choice=$?
         local action="${actions[$choice]:-back}"
 
@@ -359,35 +380,39 @@ manage_beszel() {
 }
 
 install_beszel() {
-    # Скрываем курсор на всё время шага, чтобы спиннеры не «подвисали» визуально
-    tput civis 2>/dev/null || true
-    trap 'tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
+    # Между спиннерами курсор не показываем; перед вводом reading_inline сам делает cnorm.
+    KEEP_CURSOR_HIDDEN=1
+    trap 'KEEP_CURSOR_HIDDEN=; tput civis 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}       📊 Установка Beszel${NC}"
+    echo -e "$(center "📊 Установка панели Beszel" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     if is_beszel_installed; then
+        KEEP_CURSOR_HIDDEN=
+        trap - RETURN
         echo
-        print_success "Beszel уже установлен"
+        print_success "Панель Beszel уже установлена"
         echo
         show_continue_prompt || return 0
         return 0
     fi
 
-    # ─── Домен / IP ───
+    # ─── Домен или IP (Enter — внешний IP сервера) ───
     local BESZEL_DOMAIN
     local _server_ip
     _server_ip=$(get_server_ip 2>/dev/null)
     local _is_ip_mode=false
 
     while true; do
-        reading_inline "Домен/IP для Beszel (Enter для ${_server_ip}):" BESZEL_DOMAIN
+        reading_inline --no-eol "${YELLOW}Домен/IP для Beszel ${DARKGRAY}[Enter для ${_server_ip}]:${NC}" BESZEL_DOMAIN
         local _domain_rc=$?
 
         if [ "$_domain_rc" -eq 2 ]; then
+            KEEP_CURSOR_HIDDEN=
+            trap - RETURN
             return 0
         fi
 
@@ -397,33 +422,31 @@ install_beszel() {
             break
         fi
 
-        # IP-адрес — проверка DNS не нужна
         if [[ "$BESZEL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             _is_ip_mode=true
             break
         fi
 
-        # Проверяем домен с спиннером
         local _chk_out_f _chk_rc_f
         _chk_out_f=$(mktemp)
         _chk_rc_f=$(mktemp)
         (
             check_domain "$BESZEL_DOMAIN" > "$_chk_out_f" 2>&1
             echo $? > "$_chk_rc_f"
-        ) &
-        local _chk_pid=$!
+         ) </dev/null &        local _chk_pid=$!
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
-        echo
+        printf ' '
         tput civis 2>/dev/null || true
         while kill -0 $_chk_pid 2>/dev/null; do
-            printf "\r\033[K${GREEN}%s${NC}\033[0m" "${_spin[$_si]}"
-            _si=$(( (_si+1) % 10 ))
+            printf "${GREEN}%s${NC}" "${_spin[$_si]}"
             sleep 0.08
+            printf '\b'
+            _si=$(( (_si+1) % 10 ))
         done
-        printf "\r\033[K"
         wait $_chk_pid 2>/dev/null
-        tput cnorm 2>/dev/null || true
+        printf '\033[K'
+        tput civis 2>/dev/null || true
         local _chk_rc _chk_out
         _chk_rc=$(cat "$_chk_rc_f" 2>/dev/null)
         _chk_out=$(cat "$_chk_out_f" 2>/dev/null)
@@ -433,6 +456,7 @@ install_beszel() {
             break
         fi
 
+        echo
         local _out_lines=0
         if [ -n "$_chk_out" ]; then
             printf "%s\n" "$_chk_out"
@@ -449,11 +473,16 @@ install_beszel() {
         while true; do
             read -s -n 1 _nav_key
             if [[ "$_nav_key" == $'\x1b' ]]; then
-                tput cnorm 2>/dev/null || true
-                echo
-                return 0
+                if _dfc_after_esc_is_bare; then
+                    tput civis 2>/dev/null || true
+                    echo
+                    KEEP_CURSOR_HIDDEN=
+                    trap - RETURN
+                    return 0
+                fi
+                continue
             elif [[ "$_nav_key" == "s" || "$_nav_key" == "S" ]]; then
-                tput cnorm 2>/dev/null || true
+                tput civis 2>/dev/null || true
                 echo
                 local _skip_lines=$((_total_lines))
                 for (( _l=0; _l<_skip_lines; _l++ )); do
@@ -461,7 +490,7 @@ install_beszel() {
                 done
                 break 2
             elif [[ "$_nav_key" == "" ]]; then
-                tput cnorm 2>/dev/null || true
+                tput civis 2>/dev/null || true
                 for (( _l=0; _l<_total_lines; _l++ )); do
                     tput cuu1 2>/dev/null; tput el 2>/dev/null
                 done
@@ -469,13 +498,25 @@ install_beszel() {
             fi
         done
     done
+    if [ -n "${KEEP_CURSOR_HIDDEN:-}" ]; then
+        tput civis 2>/dev/null || true
+    fi
     echo
+    echo
+
+    if [[ ! "$BESZEL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        BESZEL_DOMAIN=$(printf '%s' "$BESZEL_DOMAIN" | tr '[:upper:]' '[:lower:]')
+    fi
 
     # ─── Сертификат ───
     local BESZEL_PORT="8090"
     local SSL_CERT SSL_KEY CERT_DOMAIN CERT_HOST_FULLCHAIN CERT_HOST_KEY
     local base_domain
-    base_domain=$(extract_domain "$BESZEL_DOMAIN")
+    if [ "$_is_ip_mode" = true ]; then
+        base_domain="$BESZEL_DOMAIN"
+    else
+        base_domain=$(extract_domain "$BESZEL_DOMAIN")
+    fi
 
     local _le_found
     _le_found=$(le_live_basename "$BESZEL_DOMAIN" 2>/dev/null) || _le_found=""
@@ -490,21 +531,34 @@ install_beszel() {
         CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
         CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
     elif [ "$_is_ip_mode" = true ]; then
-        # IP-адрес — автоматически самоподписанный сертификат
         local SELF_SIGNED_DIR
         SELF_SIGNED_DIR=$(mktemp -d)
         (
+            local _ss_cfg
+            _ss_cfg=$(mktemp)
+            {
+                echo "[req]"
+                echo "distinguished_name = req_dn"
+                echo "x509_extensions = v3_req"
+                echo "prompt = no"
+                echo
+                echo "[req_dn]"
+                echo "CN = ${BESZEL_DOMAIN}"
+                echo
+                echo "[v3_req]"
+                echo "subjectAltName = IP:${BESZEL_DOMAIN}"
+            } > "$_ss_cfg"
             openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
                 -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
                 -out "${SELF_SIGNED_DIR}/fullchain.pem" \
-                -subj "/CN=${BESZEL_DOMAIN}" >/dev/null 2>&1
-        ) &
-        show_spinner --step "Генерация самоподписанного сертификата"
+                -config "$_ss_cfg" >/dev/null 2>&1
+            rm -f "$_ss_cfg"
+         ) </dev/null &        show_spinner --step "Генерация самоподписанного сертификата"
         CERT_DOMAIN="$BESZEL_DOMAIN"
         CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
         CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
     else
-        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
+        show_arrow_menu "${BLUE}🔒  Получение SSL сертификата${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
             "🔷  Gcore (DNS-01 Wildcard)" \
@@ -530,7 +584,6 @@ install_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
-                echo
                 _le_found=$(le_live_basename "$BESZEL_DOMAIN" 2>/dev/null) || _le_found=""
                 if [ -n "$_le_found" ]; then
                     CERT_DOMAIN="$_le_found"
@@ -601,43 +654,45 @@ install_beszel() {
             *) return 0 ;;
         esac
     fi
-    # ─── SSL-пути для nginx ───
-    local NGINX_SSL_CERT NGINX_SSL_KEY
-    if [[ "$CERT_HOST_FULLCHAIN" == /etc/letsencrypt/* ]]; then
-        # Let's Encrypt — копируем в /opt/nginx/ssl/
-        nginx_copy_cert "$CERT_DOMAIN"
-        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
-        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
-    else
-        # Самоподписанный — копируем в /opt/nginx/ssl/
-        mkdir -p "${DIR_NGINX}ssl/${CERT_DOMAIN}"
-        cp -f "$CERT_HOST_FULLCHAIN" "${DIR_NGINX}ssl/${CERT_DOMAIN}/fullchain.pem"
-        cp -f "$CERT_HOST_KEY" "${DIR_NGINX}ssl/${CERT_DOMAIN}/privkey.pem"
-        NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
-        NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
-        # Удаляем временную директорию сертификата
-        rm -rf "${SELF_SIGNED_DIR:-}" 2>/dev/null || true
-    fi
+    echo
 
-    # ─── Определяем listen-режим до запуска ensure_nginx ───
-    local LISTEN_BLOCK REAL_IP_BLOCK
-    if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
-        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
-        REAL_IP_BLOCK="    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;"
-    else
-        if [ "${_is_ip_mode:-false}" = true ]; then
-            # При IP-режиме ставим default_server — браузер не шлёт SNI для IP (RFC 6066)
-            # и без default_server nginx применяет ssl_reject_handshake из catch-all блока
-            LISTEN_BLOCK="    listen 443 ssl default_server;\n    listen [::]:443 ssl default_server;"
+    # Сразу после сообщения о сертификате показываем спиннер «Подготовка файлов»,
+    # пока идут копирование сертификата в ssl/, firewall, при необходимости Docker и запись compose.
+    local _BZ_ABORT=false
+    local _bz_block_tmp _bz_prep_err
+    _bz_block_tmp=$(mktemp)
+    _bz_prep_err=$(mktemp)
+    trap 'kill $(jobs -p) 2>/dev/null || true; _BZ_ABORT=true' INT
+
+    (
+        # ─── SSL-пути для nginx ───
+        local NGINX_SSL_CERT NGINX_SSL_KEY
+        if [[ "$CERT_HOST_FULLCHAIN" == /etc/letsencrypt/* ]]; then
+            nginx_copy_cert "$CERT_DOMAIN"
+            NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+            NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+        else
+            mkdir -p "${DIR_NGINX}ssl/${CERT_DOMAIN}"
+            cp -f "$CERT_HOST_FULLCHAIN" "${DIR_NGINX}ssl/${CERT_DOMAIN}/fullchain.pem"
+            cp -f "$CERT_HOST_KEY" "${DIR_NGINX}ssl/${CERT_DOMAIN}/privkey.pem"
+            NGINX_SSL_CERT="/etc/nginx/ssl/${CERT_DOMAIN}/fullchain.pem"
+            NGINX_SSL_KEY="/etc/nginx/ssl/${CERT_DOMAIN}/privkey.pem"
+            rm -rf "${SELF_SIGNED_DIR:-}" 2>/dev/null || true
+        fi
+
+        # IP-режим при unix+443: отдельный server на 80 с server_name = IP, иначе http://IP попадает в чужой vhost.
+        local LISTEN_BLOCK REAL_IP_BLOCK
+        if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
+            REAL_IP_BLOCK="    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;"
+            LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
         else
             LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
+            REAL_IP_BLOCK=""
         fi
-        REAL_IP_BLOCK=""
-    fi
 
-    local BESZEL_HTTP_BLOCK=""
-    if [[ "$LISTEN_BLOCK" != *"unix:"* ]]; then
-        BESZEL_HTTP_BLOCK=$(cat <<NGINX
+        local BESZEL_HTTP_BLOCK=""
+        if [[ "$LISTEN_BLOCK" != *"unix:"* ]] || [ "$_is_ip_mode" = true ]; then
+            BESZEL_HTTP_BLOCK=$(cat <<NGINX
 server {
     server_name ${BESZEL_DOMAIN};
     listen 80;
@@ -646,16 +701,16 @@ server {
 }
 NGINX
 )
-    fi
+        fi
 
-    local BESZEL_BLOCK
-    BESZEL_BLOCK=$(cat <<NGINX
+        local BESZEL_BLOCK
+        BESZEL_BLOCK=$(cat <<NGINX
 ${BESZEL_HTTP_BLOCK}
 server {
     server_name ${BESZEL_DOMAIN};
 $(echo -e "$LISTEN_BLOCK")
     http2 on;
-${REAL_IP_BLOCK}
+$(echo -e "$REAL_IP_BLOCK")
 
     ssl_certificate     ${NGINX_SSL_CERT};
     ssl_certificate_key ${NGINX_SSL_KEY};
@@ -666,6 +721,7 @@ ${REAL_IP_BLOCK}
     location / {
         proxy_pass http://127.0.0.1:8090;
         proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -677,12 +733,9 @@ ${REAL_IP_BLOCK}
 NGINX
 )
 
-    # ─── UFW: установка при необходимости, SSH, 80/443, порт локального агента (45876) ───
-    _beszel_setup_firewall 45876
+        _beszel_setup_firewall 45876
 
-    # ─── Устанавливаем зависимости (докер, если не установлен) ───
-    if ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
-        (
+        if ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
             export DEBIAN_FRONTEND=noninteractive
             local DPKG_OPTS='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
             systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
@@ -695,22 +748,12 @@ NGINX
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq $DPKG_OPTS ca-certificates curl >/dev/null 2>&1
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
-        ) &
-        if ! show_spinner --step "Обновление пакетов системы"; then
-            print_error "Docker не удалось установить"
-            echo
-            echo -e "${BLUE}══════════════════════════════════════${NC}"
-            show_continue_prompt || return 0
-            return 0
+            if ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
+                printf 'docker' > "$_bz_prep_err"
+                exit 1
+            fi
         fi
-    fi
 
-    # ─── Откат при Ctrl+C ───
-    local _BZ_ABORT=false
-    trap 'kill $(jobs -p) 2>/dev/null || true; _BZ_ABORT=true' INT
-
-    # ─── Подготовка файлов (директория, docker-compose, nginx conf.d) ───
-    (
         mkdir -p "${DIR_BESZEL}"
         cat > "${DIR_BESZEL}docker-compose.yml" <<YAML
 services:
@@ -738,20 +781,53 @@ YAML
         if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
             nginx_generate_minimal_conf
         fi
-        # При IP-режиме удаляем блок ssl_reject_handshake default_server,
-        # иначе nginx не примет два default_server на одном порту
-        if [ "${_is_ip_mode:-false}" = true ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
-            sed -i '/^server {/{
-                /ssl_reject_handshake on/{
-                    N; /}/d
-                }
-            }' "${DIR_NGINX}nginx.conf" 2>/dev/null || true
-            # Убираем блок целиком с помощью perl (более надёжно для многострочного блока)
-            perl -i -0777 -pe 's/\nserver \{\n\s+listen 443 ssl default_server;\n\s+server_name _;\n\s+ssl_reject_handshake on;\n\}\n//g' "${DIR_NGINX}nginx.conf" 2>/dev/null || true
+
+        printf '%s' "$BESZEL_BLOCK" > "$_bz_block_tmp"
+     ) </dev/null &    if ! show_spinner "Подготовка файлов"; then
+        local _prep_fail
+        _prep_fail=$(cat "$_bz_prep_err" 2>/dev/null || true)
+        rm -f "$_bz_prep_err" "$_bz_block_tmp"
+        if [ "$_BZ_ABORT" = true ]; then
+            echo
+            echo -e "${YELLOW}⚠  Установка прервана — откат изменений...${NC}"
+            nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
+            rm -rf "${DIR_BESZEL}" 2>/dev/null || true
+            rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
+            (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
+            dfc_restore_interrupt_traps
+            return 0
         fi
-        nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
-    ) &
-    show_spinner "Подготовка файлов"
+        dfc_restore_interrupt_traps
+        if [ "$_prep_fail" = "docker" ]; then
+            print_error "Docker не удалось установить"
+            echo
+            echo -e "${BLUE}══════════════════════════════════════${NC}"
+            show_continue_prompt || return 0
+            return 0
+        fi
+        print_error "Не удалось подготовить файлы установки"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 0
+        return 0
+    fi
+    rm -f "$_bz_prep_err"
+
+    local BESZEL_BLOCK
+    BESZEL_BLOCK=$(cat "$_bz_block_tmp" 2>/dev/null || true)
+    rm -f "$_bz_block_tmp"
+    if [ -z "$BESZEL_BLOCK" ]; then
+        dfc_restore_interrupt_traps
+        print_error "Не удалось подготовить конфигурацию Beszel"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 0
+        return 0
+    fi
+
+    # Важно: не в подпроцессе — иначе _NGINX_EXTERNAL_BLOCKS не обновится в текущем шелле,
+    # а nginx_reload опирается на актуальный nginx.conf + кэш блоков.
+    nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
 
     if [ "$_BZ_ABORT" = true ]; then
         echo
@@ -760,7 +836,7 @@ YAML
         rm -rf "${DIR_BESZEL}" 2>/dev/null || true
         rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
         (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
-        trap - INT
+        dfc_restore_interrupt_traps
         return 0
     fi
 
@@ -769,8 +845,7 @@ YAML
     _bz_install_log=$(mktemp)
     (
         cd "${DIR_BESZEL}" && docker compose up -d > "$_bz_install_log" 2>&1
-    ) &
-    if ! show_spinner "Установка Beszel"; then
+     ) </dev/null &    if ! show_spinner "Установка панели Beszel"; then
         if [ "$_BZ_ABORT" = true ]; then
             echo
             echo -e "${YELLOW}⚠  Установка прервана — откат изменений...${NC}"
@@ -779,7 +854,7 @@ YAML
             nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
             rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
             (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
-            trap - INT
+            dfc_restore_interrupt_traps
             return 0
         fi
         echo
@@ -804,8 +879,7 @@ YAML
     # ─── Авто-установка агента на этом же сервере ───
     (
         _beszel_wait_api && _beszel_auto_install_agent
-    ) &
-    show_spinner "Подключение агента мониторинга" || true
+     ) </dev/null &    show_spinner "Подключение агента мониторинга" || true
     kill $(jobs -p) 2>/dev/null || true
 
     if [ "$_BZ_ABORT" = true ]; then
@@ -816,17 +890,19 @@ YAML
         nginx_remove_server_block "BESZEL" >/dev/null 2>&1 || true
         rm -rf "${DIR_NGINX}ssl/${CERT_DOMAIN:-}" 2>/dev/null || true
         (cd "${DIR_NGINX}" 2>/dev/null && docker compose restart nginx >/dev/null 2>&1) || true
-        trap - INT
+        dfc_restore_interrupt_traps
         return 0
     fi
 
     # Запускаем/перезапускаем nginx
-    (nginx_reload) &
-    show_spinner "Запуск Nginx"
+    (nginx_reload ) </dev/null &    show_spinner "Запуск Nginx"
+
+    KEEP_CURSOR_HIDDEN=
+    trap - RETURN
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "📊 Beszel успешно установлена!" "$GREEN")"
+    echo -e "$(center "📊 Панель Beszel успешно установлена!" "$GREEN")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
     echo -e "${YELLOW}🔗 Панель мониторинга: ${WHITE}https://${BESZEL_DOMAIN}${NC}"
@@ -836,50 +912,93 @@ YAML
     echo -e "${DARKGRAY}При первом входе создайте свою учётную запись администратора.${NC}"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    trap - INT
+    dfc_restore_interrupt_traps
     show_continue_prompt || return 0
 }
 
 # ─── Изменение домена Beszel ───
 change_domain_beszel() {
-    tput civis 2>/dev/null || true
-    trap 'tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
-
     if ! is_beszel_installed; then
         print_error "Beszel не установлен"
         return 1
     fi
 
+    KEEP_CURSOR_HIDDEN=1
+    trap 'KEEP_CURSOR_HIDDEN=; tput civis 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
+
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}     🌐  Изменить домен Beszel${NC}"
+    echo -e "$(center "🌐 Изменить домен для панели Beszel" "$BLUE")"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
 
     local NEW_DOMAIN
-    prompt_domain_with_retry "Новый домен для Beszel:" NEW_DOMAIN true || return 1
+    prompt_domain_with_retry \
+        "${YELLOW}Новый домен или IP для Beszel ${DARKGRAY}[например beszel.com]:${NC}" \
+        NEW_DOMAIN true false false true || return 1
+    if [ -n "${KEEP_CURSOR_HIDDEN:-}" ]; then
+        tput civis 2>/dev/null || true
+    fi
+    local _cd_ip=false
+    if [[ "$NEW_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        _cd_ip=true
+    else
+        NEW_DOMAIN=$(printf '%s' "$NEW_DOMAIN" | tr '[:upper:]' '[:lower:]')
+    fi
     echo
     echo
 
     # Получаем сертификат
     local CERT_DOMAIN CERT_HOST_FULLCHAIN CERT_HOST_KEY
     local base_domain
-    base_domain=$(extract_domain "$NEW_DOMAIN")
-
-    local _le_found
-    _le_found=$(le_live_basename "$NEW_DOMAIN" 2>/dev/null) || _le_found=""
-    if [ -n "$_le_found" ]; then
-        print_cert_exists "${NEW_DOMAIN}"
-        CERT_DOMAIN="$_le_found"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
-    elif _le_found=$(le_live_basename "$base_domain" 2>/dev/null) && [ -n "$_le_found" ]; then
-        print_cert_exists "${base_domain}"
-        CERT_DOMAIN="$_le_found"
-        CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
-        CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+    if [ "$_cd_ip" = true ]; then
+        base_domain="$NEW_DOMAIN"
     else
-        show_arrow_menu "${BLUE}🔒  SSL сертификат${NC}" \
+        base_domain=$(extract_domain "$NEW_DOMAIN")
+    fi
+
+    if [ "$_cd_ip" = true ]; then
+        local SELF_SIGNED_DIR
+        SELF_SIGNED_DIR=$(mktemp -d)
+        (
+            local _ss_cfg
+            _ss_cfg=$(mktemp)
+            {
+                echo "[req]"
+                echo "distinguished_name = req_dn"
+                echo "x509_extensions = v3_req"
+                echo "prompt = no"
+                echo
+                echo "[req_dn]"
+                echo "CN = ${NEW_DOMAIN}"
+                echo
+                echo "[v3_req]"
+                echo "subjectAltName = IP:${NEW_DOMAIN}"
+            } > "$_ss_cfg"
+            openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+                -keyout "${SELF_SIGNED_DIR}/privkey.pem" \
+                -out "${SELF_SIGNED_DIR}/fullchain.pem" \
+                -config "$_ss_cfg" >/dev/null 2>&1
+            rm -f "$_ss_cfg"
+         ) </dev/null &        show_spinner --step "Генерация самоподписанного сертификата"
+        CERT_DOMAIN="$NEW_DOMAIN"
+        CERT_HOST_FULLCHAIN="${SELF_SIGNED_DIR}/fullchain.pem"
+        CERT_HOST_KEY="${SELF_SIGNED_DIR}/privkey.pem"
+    else
+        local _le_found
+        _le_found=$(le_live_basename "$NEW_DOMAIN" 2>/dev/null) || _le_found=""
+        if [ -n "$_le_found" ]; then
+            print_cert_exists "${NEW_DOMAIN}"
+            CERT_DOMAIN="$_le_found"
+            CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+            CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+        elif _le_found=$(le_live_basename "$base_domain" 2>/dev/null) && [ -n "$_le_found" ]; then
+            print_cert_exists "${base_domain}"
+            CERT_DOMAIN="$_le_found"
+            CERT_HOST_FULLCHAIN="/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem"
+            CERT_HOST_KEY="/etc/letsencrypt/live/${CERT_DOMAIN}/privkey.pem"
+        else
+            show_arrow_menu "${BLUE}🔒  Получение SSL сертификата${NC}" \
             "🌐  ACME (Let's Encrypt HTTP-01)" \
             "☁️   Cloudflare (DNS-01 Wildcard)" \
             "🔷  Gcore (DNS-01 Wildcard)" \
@@ -904,7 +1023,6 @@ change_domain_beszel() {
                     show_continue_prompt || return 0
                     return 0
                 fi
-                echo
                 _le_found=$(le_live_basename "$NEW_DOMAIN" 2>/dev/null) || _le_found=""
                 if [ -n "$_le_found" ]; then
                     CERT_DOMAIN="$_le_found"
@@ -972,6 +1090,7 @@ change_domain_beszel() {
                 ;;
             *) return 0 ;;
         esac
+        fi
     fi
 
     local NGINX_SSL_CERT NGINX_SSL_KEY
@@ -990,20 +1109,34 @@ change_domain_beszel() {
 
     local LISTEN_BLOCK REAL_IP_BLOCK
     if [ -f "${DIR_NGINX}nginx.conf" ] && grep -q 'listen unix:/dev/shm/nginx.sock' "${DIR_NGINX}nginx.conf"; then
-        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
         REAL_IP_BLOCK="    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;"
+        LISTEN_BLOCK="    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    listen 443 ssl;"
     else
         LISTEN_BLOCK="    listen 443 ssl;\n    listen [::]:443 ssl;"
         REAL_IP_BLOCK=""
     fi
 
+    local BESZEL_HTTP_BLOCK=""
+    if [[ "$LISTEN_BLOCK" != *"unix:"* ]] || [ "$_cd_ip" = true ]; then
+        BESZEL_HTTP_BLOCK=$(cat <<NGINX
+server {
+    server_name ${NEW_DOMAIN};
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+NGINX
+)
+    fi
+
     local BESZEL_BLOCK
     BESZEL_BLOCK=$(cat <<NGINX
+${BESZEL_HTTP_BLOCK}
 server {
     server_name ${NEW_DOMAIN};
 $(echo -e "$LISTEN_BLOCK")
     http2 on;
-${REAL_IP_BLOCK}
+$(echo -e "$REAL_IP_BLOCK")
 
     ssl_certificate     ${NGINX_SSL_CERT};
     ssl_certificate_key ${NGINX_SSL_KEY};
@@ -1014,6 +1147,7 @@ ${REAL_IP_BLOCK}
     location / {
         proxy_pass http://127.0.0.1:8090;
         proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -1025,14 +1159,10 @@ ${REAL_IP_BLOCK}
 NGINX
 )
 
-    (
-        nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
-        nginx_cleanup_unused_certs
-    ) &
-    show_spinner "Обновление конфигурации Nginx"
+    nginx_add_server_block "BESZEL" "$BESZEL_BLOCK"
+    nginx_cleanup_unused_certs
 
-    (nginx_reload) &
-    show_spinner "Перезапуск Nginx"
+    (nginx_reload ) </dev/null &    show_spinner "Перезапуск Nginx"
 
     # Если агент использует публичный домен (не localhost) — обновляем его HUB_URL
     if is_beszel_agent_installed; then
@@ -1042,10 +1172,12 @@ NGINX
             (
                 sed -i "s|HUB_URL: \"[^\"]*\"|HUB_URL: \"https://${NEW_DOMAIN}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
                 cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
-            ) &
-            show_spinner "Обновление агента"
+             ) </dev/null &            show_spinner "Обновление агента"
         fi
     fi
+    KEEP_CURSOR_HIDDEN=
+    trap - RETURN
+
     echo
     print_success "Домен Beszel изменён"
     echo
@@ -1116,8 +1248,7 @@ change_agent_hub_url() {
         sed -i "s|KEY: \"[^\"]*\"|KEY: \"${NEW_KEY}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
         sed -i "s|TOKEN: \"[^\"]*\"|TOKEN: \"${NEW_TOKEN}\"|" "${DIR_BESZEL_AGENT}docker-compose.yml"
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d --force-recreate >/dev/null 2>&1
-    ) &
-    show_spinner "Настройки агента обновлены"
+     ) </dev/null &    show_spinner "Настройки агента обновлены"
 
     echo
     echo -e "${YELLOW}🔗 Новый адрес хаба:${NC}"
@@ -1132,31 +1263,37 @@ uninstall_beszel() {
     [[ "${1:-}" == "--force" ]] && _force=true
 
     if [ "$_force" = false ]; then
-        if ! confirm_nav --delete "🗑️  Удаление Beszel"; then
+        if ! confirm_nav --delete "🗑️  Удаление панели Beszel"; then
             return
         fi
-        echo
-        echo
     fi
+
+    KEEP_CURSOR_HIDDEN=1
+    trap 'KEEP_CURSOR_HIDDEN=; tput cnorm 2>/dev/null || true; trap - RETURN' RETURN
 
     (
         cd "${DIR_BESZEL}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление контейнеров Beszel"
+     ) </dev/null &    show_spinner "Удаление контейнеров панели Beszel"
 
-    # Удаляем server-блок beszel из nginx.conf
-    # Если был IP-режим (default_server), восстанавливаем catch-all ssl_reject_handshake
-    local _beszel_was_ip_default=false
-    if [ -f "${DIR_NGINX}nginx.conf" ] && \
-       grep -A5 '# BEGIN_BESZEL_BLOCK' "${DIR_NGINX}nginx.conf" 2>/dev/null | grep -q 'default_server'; then
-        _beszel_was_ip_default=true
+    # Удаляем server-блок beszel из nginx.conf.
+    # Если Beszel был на IPv4 или со старым default_server — восстанавливаем catch-all, если его нет
+    # (старые установки могли удалить блок ssl_reject).
+    local _beszel_restore_catchall=false
+    local _beszel_blk
+    if [ -f "${DIR_NGINX}nginx.conf" ]; then
+        _beszel_blk=$(sed -n '/# BEGIN_BESZEL_BLOCK/,/# END_BESZEL_BLOCK/p' "${DIR_NGINX}nginx.conf" 2>/dev/null || true)
+        if echo "$_beszel_blk" | grep -qE 'server_name[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
+            _beszel_restore_catchall=true
+        fi
+        if echo "$_beszel_blk" | grep -q 'default_server'; then
+            _beszel_restore_catchall=true
+        fi
     fi
 
     nginx_remove_server_block "BESZEL"
 
-    if [ "$_beszel_was_ip_default" = true ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
-        # Восстанавливаем защитный catch-all блок, который был удалён при IP-установке
+    if [ "$_beszel_restore_catchall" = true ] && [ -f "${DIR_NGINX}nginx.conf" ]; then
         if ! grep -q 'ssl_reject_handshake' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
             sed -i 's|} # ─── end http ───|server {\n    listen 443 ssl default_server;\n    server_name _;\n    ssl_reject_handshake on;\n}\n} # ─── end http ───|' "${DIR_NGINX}nginx.conf"
         fi
@@ -1167,22 +1304,19 @@ uninstall_beszel() {
 
     # Перезапускаем или удаляем nginx
     if nginx_has_users; then
-        (nginx_reload) &
-        show_spinner "Перезапуск nginx"
+        (nginx_reload ) </dev/null &        show_spinner "Перезапуск Nginx"
     else
-        (nginx_teardown) &
-        show_spinner "Удаление nginx"
+        (nginx_teardown ) </dev/null &        show_spinner "Удаление Nginx"
     fi
 
     rm -rf "${DIR_BESZEL}"
 
     [ "$_force" = true ] && return 0
 
-    echo
-    print_success "Beszel удалён"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    show_continue_prompt || return 0
+    KEEP_CURSOR_HIDDEN=
+    trap - RETURN
+
+    _beszel_post_delete_success_screen "🗑️  Удаление панели Beszel" "✅ Панель Beszel была успешно удалёна!"
 }
 
 install_beszel_agent() {
@@ -1264,6 +1398,9 @@ install_beszel_agent() {
     echo
     echo
 
+    KEEP_CURSOR_HIDDEN=1
+    trap 'KEEP_CURSOR_HIDDEN=; tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; trap - RETURN' RETURN
+
     # ─── Шаг 1: Обновление системы и установка пакетов ───
     (
         export DEBIAN_FRONTEND=noninteractive
@@ -1275,8 +1412,7 @@ install_beszel_agent() {
         if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
             dfc_install_docker_engine_official >/dev/null 2>&1 || true
         fi
-    ) &
-    show_spinner --step "Обновление пакетов системы"
+     ) </dev/null &    show_spinner --step "Обновление пакетов системы"
     echo
 
     # ─── UFW: SSH и порт агента (без постоянного 80/443 — нода ходит к хабу исходящим) ───
@@ -1310,13 +1446,13 @@ services:
 volumes:
   beszel-agent-data:
 YAML
-    ) &
-    show_spinner --step "Подготовка файлов"
+     ) </dev/null &    show_spinner --step "Подготовка файлов"
 
     (
         cd "${DIR_BESZEL_AGENT}" && docker compose up -d >/dev/null 2>&1
-    ) &
-    if ! show_spinner --step "Добавление агента Beszel"; then
+     ) </dev/null &    if ! show_spinner --step "Добавление агента Beszel"; then
+        KEEP_CURSOR_HIDDEN=
+        trap - RETURN
         echo
         print_error "Не удалось запустить агент. Проверьте логи: cd ${DIR_BESZEL_AGENT} && docker compose logs"
         echo
@@ -1324,6 +1460,9 @@ YAML
         show_continue_prompt || return 0
         return 0
     fi
+
+    KEEP_CURSOR_HIDDEN=
+    trap - RETURN
 
     echo
     echo -e "${GREEN}✅ Агент Beszel успешно установлен!${NC}"
@@ -1342,14 +1481,16 @@ uninstall_beszel_agent() {
         fi
     fi
 
+    KEEP_CURSOR_HIDDEN=1
+    trap 'KEEP_CURSOR_HIDDEN=; tput cnorm 2>/dev/null || true; trap - RETURN' RETURN
+
     local AGENT_PORT_STORED
     AGENT_PORT_STORED=$(grep 'LISTEN:' "${DIR_BESZEL_AGENT}docker-compose.yml" 2>/dev/null | awk '{print $2}' | tr -d '"')
 
     (
         cd "${DIR_BESZEL_AGENT}" 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
-    ) &
-    show_spinner --step "Удаление агента Beszel"
+     ) </dev/null &    show_spinner --step "Удаление агента Beszel"
 
     if [ -n "$AGENT_PORT_STORED" ]; then
         ufw delete allow "${AGENT_PORT_STORED}/tcp" >/dev/null 2>&1 || true
@@ -1359,8 +1500,8 @@ uninstall_beszel_agent() {
 
     [ "$_force" = true ] && return 0
 
-    echo -e "${GREEN}✅ Агент Beszel был успешно удалён!${NC}"
-    echo
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    show_continue_prompt || return 0
+    KEEP_CURSOR_HIDDEN=
+    trap - RETURN
+
+    _beszel_post_delete_success_screen "🗑️  Удаление агента Beszel" "✅ Агент Beszel был успешно удалён!"
 }

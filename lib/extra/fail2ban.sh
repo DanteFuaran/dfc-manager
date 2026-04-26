@@ -117,8 +117,7 @@ JAIL_EOF
                 echo
                 (
                     systemctl restart fail2ban >/dev/null 2>&1
-                ) &
-                show_spinner "Перезапуск Fail2ban"
+                 ) </dev/null &                show_spinner "Перезапуск Fail2ban"
                 print_success "Fail2ban перезапущен"
                 echo
                 show_continue_prompt || return 1
@@ -137,8 +136,7 @@ JAIL_EOF
                     systemctl disable fail2ban >/dev/null 2>&1
                     apt-get remove --purge -y fail2ban >/dev/null 2>&1
                     rm -rf /etc/fail2ban 2>/dev/null
-                ) &
-                show_spinner "Удаление Fail2ban"
+                 ) </dev/null &                show_spinner "Удаление Fail2ban"
                 print_success "Fail2ban удалён"
                 echo
                 show_continue_prompt || return 1
@@ -211,8 +209,7 @@ JAIL_EOF
         (
             systemctl enable fail2ban >/dev/null 2>&1
             systemctl restart fail2ban >/dev/null 2>&1
-        ) &
-        show_spinner "Запуск Fail2ban"
+         ) </dev/null &        show_spinner "Запуск Fail2ban"
 
         if systemctl is-active --quiet fail2ban 2>/dev/null; then
             echo

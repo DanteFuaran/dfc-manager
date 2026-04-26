@@ -40,8 +40,7 @@ db_backup() {
 
     (
         docker exec remnawave-db pg_dumpall -c -U postgres 2>/dev/null | gzip -9 > "$mn_dump"
-    ) &
-    show_spinner "Создание дампа базы данных"
+     ) </dev/null &    show_spinner "Создание дампа базы данных"
 
     if [ ! -s "$mn_dump" ]; then
         print_error "Не удалось создать дамп"
@@ -56,8 +55,7 @@ db_backup() {
     if docker ps --filter "name=remnasale-db" --format "{{.Names}}" 2>/dev/null | grep -q "remnasale-db"; then
         (
             docker exec remnasale-db pg_dump -U remnasale -d remnasale 2>/dev/null | gzip -9 > "$mn_bot_dump"
-        ) &
-        show_spinner "Создание дампа базы бота"
+         ) </dev/null &        show_spinner "Создание дампа базы бота"
 
         if [ ! -s "$mn_bot_dump" ]; then
             rm -f "$mn_bot_dump" 2>/dev/null
@@ -66,15 +64,13 @@ db_backup() {
 
     (
         tar -czf "$mn_dir" --exclude='*.log' --exclude='*.tmp' --exclude='.git' --exclude='backups' -C /opt remnawave 2>/dev/null || true
-    ) &
-    show_spinner "Архивирование директории"
+     ) </dev/null &    show_spinner "Архивирование директории"
 
     local mn_size
     (
         tar -czf "$mn_final" -C "$mn_tmp" "$(basename "$mn_dump")" "$(basename "$mn_dir")" 2>/dev/null
         rm -rf "$mn_tmp" 2>/dev/null || true
-    ) &
-    show_spinner "Сохранение бекапа"
+     ) </dev/null &    show_spinner "Сохранение бекапа"
 
     if [ ! -s "$mn_final" ]; then
         rm -rf "$mn_tmp" 2>/dev/null || true
@@ -109,8 +105,7 @@ db_backup() {
                     -F "document=@$mn_final" \
                     -F "caption=$mn_caption" \
                     "https://api.telegram.org/bot${mn_token}/sendDocument" > /tmp/_rw_ab_result 2>&1
-            ) &
-            show_spinner "Отправка в Telegram"
+             ) </dev/null &            show_spinner "Отправка в Telegram"
 
             local send_ok=false
             grep -q '"ok":true' /tmp/_rw_ab_result 2>/dev/null && send_ok=true
@@ -184,8 +179,7 @@ _db_partial_restore() {
     (
         docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
         docker exec remnawave-db psql -U postgres -c "CREATE DATABASE _rw_restore_tmp;" >/dev/null 2>&1
-    ) &
-    show_spinner "Подготовка временной базы"
+     ) </dev/null &    show_spinner "Подготовка временной базы"
 
     # Загружаем дамп во временную базу
     (
@@ -199,8 +193,7 @@ _db_partial_restore() {
             grep -v -E "^ALTER ROLE .* PASSWORD " | \
             sed 's/\\connect postgres/\\connect _rw_restore_tmp/g' | \
             docker exec -i remnawave-db psql -U postgres >/dev/null 2>&1
-    ) &
-    show_spinner "Загрузка бэкапа во временную базу"
+     ) </dev/null &    show_spinner "Загрузка бэкапа во временную базу"
 
     # Страховочный бэкап текущей БД
     local safety_backup="${panel_dir}/backups/pre_partial_$(date +%Y-%m-%d_%H-%M).sql.gz"
@@ -216,8 +209,7 @@ _db_partial_restore() {
         else
             docker compose stop remnawave >/dev/null 2>&1
         fi
-    ) &
-    show_spinner "Остановка панели"
+     ) </dev/null &    show_spinner "Остановка панели"
 
     # Извлекаем данные из временной БД и применяем к основной с ON CONFLICT DO NOTHING
     (
@@ -228,8 +220,7 @@ _db_partial_restore() {
                 sed '/^INSERT INTO /s/);$/) ON CONFLICT DO NOTHING;/'
             echo "SET session_replication_role = 'origin';"
         } | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
-    ) &
-    show_spinner "Восстановление данных"
+     ) </dev/null &    show_spinner "Восстановление данных"
 
     # Удаляем временную базу
     docker exec remnawave-db psql -U postgres -c "DROP DATABASE IF EXISTS _rw_restore_tmp;" >/dev/null 2>&1
@@ -244,8 +235,7 @@ _db_partial_restore() {
                 "UPDATE nodes SET active_config_profile_uuid = NULL
                  WHERE active_config_profile_uuid IS NOT NULL
                    AND active_config_profile_uuid NOT IN (SELECT uuid FROM config_profiles);" >/dev/null 2>&1
-        ) &
-        show_spinner "Очистка оборванных ссылок на профили"
+         ) </dev/null &        show_spinner "Очистка оборванных ссылок на профили"
     fi
 
     # Запускаем панель и ждём готовности API
@@ -260,13 +250,11 @@ _db_partial_restore() {
             sleep 2
             _w=$((_w + 2))
         done
-    ) &
-    show_spinner "Запуск панели"
+     ) </dev/null &    show_spinner "Запуск панели"
 
     # Перезапуск мониторинга (если установлен)
     if [ -f "${DIR_BESZEL}docker-compose.yml" ]; then
-        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1) &
-        show_spinner "Перезапуск мониторинга"
+        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1 ) </dev/null &        show_spinner "Перезапуск мониторинга"
     fi
 
     echo
@@ -508,8 +496,7 @@ db_restore() {
             else
                 tar -xzf "$selected_file" -C "$tmp_extract" 2>/dev/null
             fi
-        ) &
-        if [ "$_is_splitn" = true ]; then
+         ) </dev/null &        if [ "$_is_splitn" = true ]; then
             show_spinner "Объединение и распаковка ${#_splitn_parts[@]} частей архива"
         elif [ "$_is_split" = true ]; then
             show_spinner "Объединение и распаковка частей архива"
@@ -591,8 +578,7 @@ db_restore() {
         else
             docker compose stop remnawave >/dev/null 2>&1
         fi
-    ) &
-    show_spinner "Остановка панели"
+     ) </dev/null &    show_spinner "Остановка панели"
 
     # Сохраняем текущий API токен (чтобы не сломать удалённую sub-page при восстановлении)
     local _saved_api_token=""
@@ -612,8 +598,7 @@ db_restore() {
     # Очищаем базу данных перед восстановлением
     (
         docker exec remnawave-db psql -U postgres -d postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
-    ) &
-    show_spinner "Подготовка базы данных"
+     ) </dev/null &    show_spinner "Подготовка базы данных"
 
     # Восстанавливаем дамп
     (
@@ -622,8 +607,7 @@ db_restore() {
         else
             grep -v -E "^ALTER ROLE .* PASSWORD " "$dump_to_restore" | docker exec -i remnawave-db psql -U postgres -d postgres >/dev/null 2>&1
         fi
-    ) &
-    show_spinner "Загрузка данных из бэкапа"
+     ) </dev/null &    show_spinner "Загрузка данных из бэкапа"
 
     # Восстановление базы бота (remnasale-db), если дамп найден в архиве
     if [ -n "$bot_dump_to_restore" ] && [ -s "$bot_dump_to_restore" ]; then
@@ -631,8 +615,7 @@ db_restore() {
             (
                 docker exec remnasale-db psql -U remnasale -d remnasale -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
                 zcat "$bot_dump_to_restore" | docker exec -i remnasale-db psql -U remnasale -d remnasale >/dev/null 2>&1
-            ) &
-            show_spinner "Загрузка базы бота из бэкапа"
+             ) </dev/null &            show_spinner "Загрузка базы бота из бэкапа"
         fi
     fi
 
@@ -654,8 +637,7 @@ db_restore() {
     # Очищаем таблицу admin для перевода панели в режим регистрации
     (
         docker exec remnawave-db psql -U postgres -d postgres -c "TRUNCATE TABLE admin CASCADE;" >/dev/null 2>&1
-    ) &
-    show_spinner "Подготовка к регистрации"
+     ) </dev/null &    show_spinner "Подготовка к регистрации"
     echo
 
     # Запускаем панель и ожидаем готовность API
@@ -673,8 +655,7 @@ db_restore() {
             sleep 2
             _w=$((_w + 2))
         done
-    ) &
-    show_spinner "Запуск панели"
+     ) </dev/null &    show_spinner "Запуск панели"
 
     if [ ! -f "$_api_ready" ]; then
         rm -f "$_api_ready"
@@ -749,8 +730,7 @@ db_restore() {
                     sleep 2
                     _w=$((_w + 2))
                 done
-            ) &
-            show_spinner "Перезапуск страницы подписки"
+             ) </dev/null &            show_spinner "Перезапуск страницы подписки"
         else
             # Страницы подписки нет на этом сервере — восстанавливаем SUB_PUBLIC_DOMAIN
             if [ -n "$_saved_sub_domain" ]; then
@@ -768,8 +748,7 @@ db_restore() {
                             sleep 2
                             _w=$((_w + 2))
                         done
-                    ) &
-                    show_spinner "Обновление SUB_PUBLIC_DOMAIN"
+                     ) </dev/null &                    show_spinner "Обновление SUB_PUBLIC_DOMAIN"
                 fi
             fi
         fi
@@ -780,8 +759,7 @@ db_restore() {
 
     # Перезапуск мониторинга (если установлен)
     if [ -f "${DIR_BESZEL}docker-compose.yml" ]; then
-        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1) &
-        show_spinner "Перезапуск мониторинга"
+        (cd "${DIR_BESZEL}" && docker compose restart >/dev/null 2>&1 ) </dev/null &        show_spinner "Перезапуск мониторинга"
     fi
 
     echo

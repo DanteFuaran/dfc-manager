@@ -325,7 +325,7 @@ services:
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD', 'node', '-e', 'require("net").connect(3010,"127.0.0.1").on("connect",function(){this.destroy();process.exit(0)}).on("error",()=>process.exit(1))']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -507,7 +507,7 @@ services:
     networks:
       - remnawave-network
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD', 'node', '-e', 'require("net").connect(3010,"127.0.0.1").on("connect",function(){this.destroy();process.exit(0)}).on("error",()=>process.exit(1))']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -1885,7 +1885,7 @@ services:
     ports:
       - '127.0.0.1:3010:3010'
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD', 'node', '-e', 'require("net").connect(3010,"127.0.0.1").on("connect",function(){this.destroy();process.exit(0)}).on("error",()=>process.exit(1))']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -2263,7 +2263,7 @@ services:
     ports:
       - '127.0.0.1:3010:3010'
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD', 'node', '-e', 'require("net").connect(3010,"127.0.0.1").on("connect",function(){this.destroy();process.exit(0)}).on("error",()=>process.exit(1))']
       interval: 15s
       timeout: 5s
       retries: 3

@@ -23,7 +23,7 @@ dfc_install_docker_engine_official() {
     fi
 
     curl -fsSL --connect-timeout 20 --max-time 300 "https://get.docker.com" -o /tmp/get-docker.sh || return 1
-    DEBIAN_FRONTEND=noninteractive sh /tmp/get-docker.sh >/dev/null 2>&1 || {
+    DEBIAN_FRONTEND=noninteractive sh /tmp/get-docker.sh </dev/null >/dev/null 2>&1 || {
         rm -f /tmp/get-docker.sh
         return 1
     }

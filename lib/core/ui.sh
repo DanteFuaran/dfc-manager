@@ -26,33 +26,65 @@ center() {
 
 # Сбрасывает буферизованный ввод (например, клавиши, нажатые во время спиннеров)
 _flush_stdin() {
-    local _dummy
+    local _dummy _chunk
     while IFS= read -rsn1 -t 0 _dummy 2>/dev/null; do true; done
+    while IFS= read -r -t 0 -N 4096 _chunk 2>/dev/null && [ -n "$_chunk" ]; do true; done
     true
 }
 
-_spinner_lock_input() {
-    _SPINNER_STTY=""
-    _SPINNER_TTY=false
-    if [ -t 0 ]; then
-        _SPINNER_TTY=true
-        _SPINNER_STTY=$(stty -g 2>/dev/null || echo "")
-        stty -echo -icanon min 0 time 0 2>/dev/null || true
-        _flush_stdin
+# Docker Compose может открыть /dev/tty даже при закрытом stdin — новая сессия + без «TTY»-режима вывода.
+# Без setsid фоновый клиент при обращении к терминалу может получить SIGTTIN и остановиться (спиннер «висит»).
+_dfc_detach_run() {
+    CI=true DOCKER_PROGRESS=plain DOCKER_CLI_HINTS=false COMPOSE_ANSI=never \
+        _dfc_setsid_exec "$@"
+}
+
+# Выполнить команду в отдельной сессии (setsid или эквивалент через python3).
+_dfc_setsid_exec() {
+    if command -v setsid >/dev/null 2>&1; then
+        exec setsid "$@"
+    elif command -v python3 >/dev/null 2>&1; then
+        exec python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+    else
+        exec "$@"
     fi
+}
+
+# Только визуал: не трогаем stty и не съедаем ввод с клавиатуры (кроме обработки Ctrl+C через trap INT).
+_spinner_lock_input() {
     tput civis 2>/dev/null || true
 }
 
-_spinner_unlock_input() {
-    _flush_stdin
-    if [ "${_SPINNER_TTY:-false}" = true ]; then
-        if [ -n "${_SPINNER_STTY:-}" ]; then
-            stty "$_SPINNER_STTY" 2>/dev/null || stty sane 2>/dev/null || true
-        else
-            stty sane 2>/dev/null || true
-        fi
+# Фон остановлен по SIGTTIN/SIGTTOU: родитель может быть в S, а остановлен — любой процесс в той же pgrp.
+# Раньше смотрели только лидера $pid — дочерний docker/compose оставался в T, wait висел бесконечно.
+_spinner_unstick_background_pid() {
+    local _p="${1:?}" _pgid _line _killg=false
+    kill -0 "$_p" 2>/dev/null || return 0
+    _pgid=$(LC_ALL=C ps -o pgid= -p "$_p" 2>/dev/null | tr -d ' ')
+    [ -n "$_pgid" ] || _pgid="$_p"
+    # Только базовое состояние (первый символ STAT): T/t = остановлен. Шаблон *t* давал ложные срабатывания.
+    if LC_ALL=C ps -g "$_pgid" -o stat= >/dev/null 2>&1; then
+        while IFS= read -r _line; do
+            _line=$(printf '%s' "$_line" | tr -d ' ')
+            [ -z "$_line" ] && continue
+            case "${_line:0:1}" in T|t) _killg=true; break ;; esac
+        done < <(LC_ALL=C ps -g "$_pgid" -o stat= 2>/dev/null || true)
+    else
+        while IFS= read -r _line; do
+            _line=$(printf '%s' "$_line" | tr -d ' ')
+            [ -z "$_line" ] && continue
+            case "${_line:0:1}" in T|t) _killg=true; break ;; esac
+        done < <(LC_ALL=C ps -o stat= -p "$_p" 2>/dev/null || true)
     fi
-    tput cnorm 2>/dev/null || true
+    if [ "$_killg" = true ]; then
+        kill -KILL -- "-${_pgid}" 2>/dev/null || kill -KILL -- "-${_p}" 2>/dev/null || kill -KILL "$_p" 2>/dev/null || true
+    fi
+}
+
+_spinner_unlock_input() {
+    if [ -z "${KEEP_CURSOR_HIDDEN:-}" ]; then
+        tput cnorm 2>/dev/null || true
+    fi
 }
 
 # ═══════════════════════════════════════════════
@@ -65,41 +97,66 @@ show_spinner_prepare() {
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 msg="$1"
+    _SPINNER_INTERRUPTED=0
+    trap '_SPINNER_INTERRUPTED=1' INT
     _spinner_lock_input
-    while kill -0 $pid 2>/dev/null; do
-        _flush_stdin
+    while kill -0 $pid 2>/dev/null && [ "${_SPINNER_INTERRUPTED:-0}" != 1 ]; do
+        _spinner_unstick_background_pid "$pid"
         printf "\r\033[K${BLUE}%s${NC}\033[0m  ${BLUE}%s${NC}" "${spin[$i]}" "$msg"
         i=$(( (i+1) % 10 ))
-        sleep $delay
+        sleep $delay || true
     done
+    if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
+        trap - INT
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        wait $pid 2>/dev/null || true
+        printf "\r\033[K"
+        _spinner_unlock_input
+        printf "${YELLOW}Прервано (Ctrl+C).${NC}\n" >&2
+        return 130
+    fi
+    trap - INT
     wait $pid 2>/dev/null || true
     _spinner_unlock_input
     printf "\r\033[K"
 }
 
 # Спиннер длительной операции. Финальная строка по умолчанию — зелёная.
+# Фоновую работу запускайте с закрытым stdin: ( команды ) </dev/null &
+# Для docker compose внутри фона вызывайте _dfc_detach_run docker compose …
+# Явный PID: ( … ) </dev/null &  show_spinner --pid $! "Сообщение" [done_msg]
 #   show_spinner "Сообщение" [done_msg]
 # Промежуточный шаг: зелёный спиннер/галочка, текст NC (финальные баннеры скриптов — отдельно):
 #   show_spinner --step "Сообщение" [done_msg]
 # Цепочка фаз (--chain): при успехе только очистить строку (без ✅), следующий спиннер — на её месте:
 #   show_spinner --step --chain "Фаза 1"; show_spinner --step --chain "Фаза 2"; …
+# Если KEEP_CURSOR_HIDDEN=1 — после спиннера курсор снова скрыт (между шагами установки не мелькает).
 show_spinner() {
     local _step_nc=false
     local _chain=false
-    while [[ "${1:-}" == "--step" || "${1:-}" == "--chain" ]]; do
+    local _spin_pid=""
+    while [[ "${1:-}" == "--step" || "${1:-}" == "--chain" || "${1:-}" == "--pid" ]]; do
         case "$1" in
             --step)  _step_nc=true; shift ;;
             --chain) _chain=true; shift ;;
+            --pid)   _spin_pid="${2:?}"; shift 2 ;;
             *) break ;;
         esac
     done
-    local pid=$!
+    local pid="${_spin_pid:-$!}"
+    if [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]]; then
+        printf "${RED}\u2716 show_spinner: нет PID фоновой задачи${NC}\n" >&2
+        return 1
+    fi
     local delay=0.08
     local spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local i=0 msg="${1:?}" done_msg="${2:-$1}"
+    tput civis 2>/dev/null || true
+    _SPINNER_INTERRUPTED=0
+    trap '_SPINNER_INTERRUPTED=1' INT
     _spinner_lock_input
-    while kill -0 $pid 2>/dev/null; do
-        _flush_stdin
+    while kill -0 $pid 2>/dev/null && [ "${_SPINNER_INTERRUPTED:-0}" != 1 ]; do
+        _spinner_unstick_background_pid "$pid"
         # Если какая-то команда случайно включила курсор (cnorm) — прячем обратно.
         tput civis 2>/dev/null || true
         if [ "$_step_nc" = true ]; then
@@ -108,8 +165,18 @@ show_spinner() {
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         fi
         i=$(( (i+1) % 10 ))
-        sleep $delay
+        sleep $delay || true
     done
+    if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
+        trap - INT
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        wait $pid 2>/dev/null || true
+        printf "\r\033[K"
+        _spinner_unlock_input
+        printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
+        return 130
+    fi
+    trap - INT
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
@@ -135,18 +202,27 @@ show_spinner_timer() {
     local i=0
     local delay=0.08
     local elapsed=0
+    _SPINNER_INTERRUPTED=0
+    trap '_SPINNER_INTERRUPTED=1' INT
     _spinner_lock_input
-    while [ $elapsed -lt $seconds ]; do
+    while [ $elapsed -lt $seconds ] && [ "${_SPINNER_INTERRUPTED:-0}" != 1 ]; do
         local remaining=$((seconds - elapsed))
         for ((j=0; j<12; j++)); do
-            _flush_stdin
+            [ "${_SPINNER_INTERRUPTED:-0}" = 1 ] && break
             tput civis 2>/dev/null || true
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
-            sleep $delay
+            sleep $delay || true
             i=$(( (i+1) % 10 ))
         done
         elapsed=$((elapsed + 1))
     done
+    trap - INT
+    if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
+        printf "\r\033[K"
+        _spinner_unlock_input
+        printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
+        return 130
+    fi
     printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
     _spinner_unlock_input
 }
@@ -175,18 +251,31 @@ show_spinner_until_ready() {
             t=$((t + 1))
         done
         echo "timeout" > "$_done_file"
-    ) &
+    ) </dev/null &
     local _checker_pid=$!
 
+    _SPINNER_INTERRUPTED=0
+    trap '_SPINNER_INTERRUPTED=1' INT
     _spinner_lock_input
     printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
 
-    while kill -0 $_checker_pid 2>/dev/null; do
-        _flush_stdin
+    while kill -0 $_checker_pid 2>/dev/null && [ "${_SPINNER_INTERRUPTED:-0}" != 1 ]; do
+        _spinner_unstick_background_pid "$_checker_pid"
         i=$(( (i + 1) % 10 ))
-        sleep $delay
+        sleep $delay || true
         printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
     done
+    if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
+        trap - INT
+        kill -TERM "$_checker_pid" 2>/dev/null || true
+        wait $_checker_pid 2>/dev/null || true
+        rm -f "$_done_file"
+        printf "\r\033[K"
+        _spinner_unlock_input
+        printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
+        return 130
+    fi
+    trap - INT
     wait $_checker_pid 2>/dev/null
 
     local _result
@@ -339,10 +428,12 @@ show_arrow_menu() {
         read -rsn1 key 2>/dev/null || key=""
 
         # Проверяем escape-последовательность для стрелок
+        # CSI: \e[A–\e[D  |  SS3 (часть терминалов): \eOA–\eOD — иначе после \e читается «O»,
+        # ветка «чистый Esc» срабатывала на влево/вправо и возвращала 255 (другой экран).
         if [[ "$key" == $'\e' ]]; then
             local seq1="" seq2=""
             read -rsn1 -t 0.1 seq1 2>/dev/null || seq1=""
-            if [[ "$seq1" == '[' ]]; then
+            if [[ "$seq1" == '[' || "$seq1" == 'O' ]]; then
                 read -rsn1 -t 0.1 seq2 2>/dev/null || seq2=""
                 case "$seq2" in
                     'A')  # Стрелка вверх
@@ -371,10 +462,13 @@ show_arrow_menu() {
                             fi
                         done
                         ;;
+                    'C'|'D')  # Влево/вправо — не используем (случайный выход «назад» на SS3 больше не возможен)
+                        ;;
                 esac
             else
-                # Чистый Esc без последовательности — назад
-                _restore_term
+                # Чистый Esc без последовательности — назад (курсор скрыт до следующего экрана ввода)
+                _restore_stty
+                tput civis 2>/dev/null || true
                 return 255
             fi
         else
@@ -409,6 +503,26 @@ show_arrow_menu() {
 # ВВОД ТЕКСТА
 # ═══════════════════════════════════════════════
 
+# После байта ESC: 0 = одиночный Esc (отмена ввода), 1 = CSI/SS3/Meta — поглощено, ввод продолжается
+_dfc_after_esc_is_bare() {
+    local _sc=""
+    if ! IFS= read -r -s -n1 -t 0.15 _sc 2>/dev/null || [[ -z "$_sc" ]]; then
+        return 0
+    fi
+    if [[ "$_sc" == '[' ]]; then
+        local _c=""
+        while IFS= read -r -s -n1 -t 0.15 _c 2>/dev/null; do
+            [[ "$_c" =~ [A-Za-z~] ]] && break
+        done
+        return 1
+    elif [[ "$_sc" == 'O' ]]; then
+        local _o2=""
+        IFS= read -r -s -n1 -t 0.15 _o2 2>/dev/null || true
+        return 1
+    fi
+    return 1
+}
+
 # Ввод текста с подсказкой
 reading() {
     local prompt="$1"
@@ -429,12 +543,7 @@ reading() {
                 echo -en "\b \b"
             fi
         elif [[ "$char" == $'\x1b' ]]; then
-            local _seq=""
-            while IFS= read -r -s -n1 -t 0.1 _sc; do
-                _seq+="$_sc"
-                [[ "$_sc" =~ [A-Za-z~] ]] && break
-            done
-            if [[ -z "$_seq" ]]; then
+            if _dfc_after_esc_is_bare; then
                 echo -en "\033[0m"
                 echo
                 if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
@@ -454,6 +563,11 @@ reading() {
 }
 
 reading_inline() {
+    local _no_eol=false
+    if [[ "${1:-}" == "--no-eol" ]]; then
+        _no_eol=true
+        shift
+    fi
     local prompt="$1"
     local var_name="$2"
     local default_val="${3:-}"
@@ -461,11 +575,12 @@ reading_inline() {
     local char
     local _rl_stty
     _rl_stty=$(stty -g 2>/dev/null || echo "")
-    tput cnorm 2>/dev/null
+    tput cnorm 2>/dev/null || true
     # Промпты без ANSI: двоеточие в конце — серым (как подсказки в скобках)
     local _p="$prompt"
     while [[ "${_p: -1:1}" == " " ]]; do _p="${_p% }"; done
     if [[ "$prompt" == *$'\033'* ]]; then
+        # Внешний жёлтый для текста без своих кодов; вложенные DARKGRAY/YELLOW в промпте перекрывают
         echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC} \033[32m"
     elif [[ -n "$default_val" ]]; then
         echo -en "${BLUE}➜${NC}  ${YELLOW}${prompt}${NC}${DARKGRAY} [${default_val}]:${NC} \033[32m"
@@ -483,13 +598,9 @@ reading_inline() {
                 echo -en "\b \b"
             fi
         elif [[ "$char" == $'\x1b' ]]; then
-            local _seq=""
-            while IFS= read -r -s -n1 -t 0.1 _sc; do
-                _seq+="$_sc"
-                [[ "$_sc" =~ [A-Za-z~] ]] && break
-            done
-            if [[ -z "$_seq" ]]; then
+            if _dfc_after_esc_is_bare; then
                 echo
+                tput civis 2>/dev/null || true
                 printf -v "$var_name" ''
                 return 2
             fi
@@ -500,7 +611,9 @@ reading_inline() {
     done
     echo -en "\033[0m"
     if [ -n "${_rl_stty:-}" ]; then stty "$_rl_stty" 2>/dev/null || true; fi
-    echo
+    if [[ "$_no_eol" != true ]]; then
+        echo
+    fi
     if [[ -z "$input" && -n "${default_val:-}" ]]; then
         input="$default_val"
     fi
@@ -509,10 +622,11 @@ reading_inline() {
 
 # Промпт "Enter: Продолжить    Esc: Назад" (или Esc: <ярлык>, если передан первый аргумент, напр. «Выход»)
 # Возвращает: 0 = Enter (назад на одно меню), 1 = Esc (в главное меню)
+# Стрелки и прочие ESC-последовательности поглощаются целиком (не оставляют мусор в stdin).
 show_continue_prompt() {
     local _esc_lbl="${1:-Назад}"
     _flush_stdin
-    tput civis 2>/dev/null
+    tput civis 2>/dev/null || true
     printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
     while true; do
         local _cpk
@@ -523,18 +637,18 @@ show_continue_prompt() {
             handle_interrupt
         fi
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
-            tput cnorm 2>/dev/null; echo
+            tput cnorm 2>/dev/null || true
+            echo
             return 0   # Enter → назад на одно меню
         elif [[ "$_cpk" == $'\x1b' ]]; then
-            IFS= read -rsn1 -t 0.1 _cps 2>/dev/null || true
-            if [[ -z "$_cps" ]]; then
-                tput cnorm 2>/dev/null; echo
-                return 1   # Esc → в главное меню
-            else
-                # Поглощаем третий символ escape-последовательности (стрелки: \x1b[A/B/C/D)
-                IFS= read -rsn1 -t 0.1 2>/dev/null || true
+            if _dfc_after_esc_is_bare; then
+                tput cnorm 2>/dev/null || true
+                echo
+                return 1
             fi
+            continue
         fi
+        # остальные клавиши — игнорируем
     done
 }
 
@@ -566,9 +680,9 @@ show_install_error() {
             show_continue_prompt
             return $?
         elif [[ "$_key" == $'\x1b' ]]; then
-            IFS= read -rsn1 -t 0.1 _seq 2>/dev/null || true
-            if [[ -z "$_seq" ]]; then
-                tput cnorm 2>/dev/null; echo
+            if _dfc_after_esc_is_bare; then
+                tput cnorm 2>/dev/null || true
+                echo
                 return 1
             fi
         fi

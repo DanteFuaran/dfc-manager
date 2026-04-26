@@ -53,14 +53,12 @@ obtain_cert_for_domain() {
                 -d "$_cert_dom" -d "*.$_cert_dom" \
                 --agree-tos $_email_flag --non-interactive \
                 --key-type ecdsa >/dev/null 2>&1
-        ) &
-        show_spinner --step "Получение wildcard сертификата для *.$_cert_dom"
+         ) </dev/null &        show_spinner --step "Получение wildcard сертификата для *.$_cert_dom"
     else
         (
             cd "$panel_dir"
             cd "${DIR_NGINX}" && docker compose stop nginx >/dev/null 2>&1
-        ) &
-        show_spinner "Остановка nginx"
+         ) </dev/null &        show_spinner "Остановка Nginx"
 
         ufw_allow_http01_temp
         iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -72,8 +70,7 @@ obtain_cert_for_domain() {
                 --agree-tos $_email_flag --non-interactive \
                 --http-01-port 80 \
                 --key-type ecdsa >/dev/null 2>&1
-        ) &
-        show_spinner --step "Получение SSL-сертификата для $new_domain"
+         ) </dev/null &        show_spinner --step "Получение SSL-сертификата для $new_domain"
 
         ufw_revert_http01_temp
         iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -89,8 +86,7 @@ obtain_cert_for_domain() {
         (
             cd "$panel_dir"
             cd "${DIR_NGINX}" && docker compose start nginx >/dev/null 2>&1
-        ) &
-        show_spinner "Запуск nginx"
+         ) </dev/null &        show_spinner "Запуск Nginx"
         echo
         return 1
     fi
@@ -185,8 +181,7 @@ change_panel_domain() {
     (
         cd "$panel_dir"
         docker compose down >/dev/null 2>&1
-    ) &
-    show_spinner "Остановка работы панели"
+     ) </dev/null &    show_spinner "Остановка работы панели"
 
     # Обновление конфигов
     (
@@ -201,8 +196,7 @@ change_panel_domain() {
         if [ -f "${panel_dir}/.env" ]; then
             sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=${new_domain}|" "${panel_dir}/.env"
         fi
-    ) &
-    show_spinner "Обновление конфигов"
+     ) </dev/null &    show_spinner "Обновление конфигов"
 
     # Обновление cookie доступа
     local OLD_COOKIE_NAME OLD_COOKIE_VALUE NEW_COOKIE_NAME NEW_COOKIE_VALUE
@@ -216,8 +210,7 @@ change_panel_domain() {
             sed -i "s|\$arg_${OLD_COOKIE_NAME}|\$arg_${NEW_COOKIE_NAME}|g" "${DIR_NGINX}nginx.conf"
             sed -i "s|    \"[^\"]*\" \"${OLD_COOKIE_NAME}=${OLD_COOKIE_VALUE}; Path=|    \"${NEW_COOKIE_VALUE}\" \"${NEW_COOKIE_NAME}=${NEW_COOKIE_VALUE}; Path=|g" "${DIR_NGINX}nginx.conf"
             sed -i "s|\"${OLD_COOKIE_VALUE}\" 1|\"${NEW_COOKIE_VALUE}\" 1|g" "${DIR_NGINX}nginx.conf"
-        ) &
-        show_spinner "Обновление доступов"
+         ) </dev/null &        show_spinner "Обновление доступов"
     fi
 
     # Перезапуск сервисов и ожидание доступности
@@ -232,8 +225,7 @@ change_panel_domain() {
             sleep 2
             _w=$((_w + 2))
         done
-    ) &
-    show_spinner "Перезапуск сервисов"
+     ) </dev/null &    show_spinner "Перезапуск сервисов"
 
     nginx_cleanup_unused_certs
 
@@ -314,8 +306,7 @@ _change_panel_url_remote() {
     for i in "${!compose_files[@]}"; do
         sed -i "s|REMNAWAVE_PANEL_URL=.*|REMNAWAVE_PANEL_URL=${new_url}|g" "${compose_files[$i]}"
     done
-    (sleep 0.3) &
-    show_spinner "Обновление конфигов"
+    (sleep 0.3 ) </dev/null &    show_spinner "Обновление конфигов"
 
     # Перезапускаем контейнеры и ждём доступности
     (
@@ -330,8 +321,7 @@ _change_panel_url_remote() {
             sleep 2
             _w=$((_w + 2))
         done
-    ) &
-    show_spinner "Перезапуск сервисов"
+     ) </dev/null &    show_spinner "Перезапуск сервисов"
 
     echo
     print_success "Адрес панели обновлён на ${new_url}"
@@ -444,20 +434,17 @@ _change_sub_domain_standalone() {
     (
         generate_docker_compose_subpage "$new_cert_domain" "$panel_url" "$_use_token" "$subpage_dir"
         generate_nginx_conf_subpage "$new_domain" "$new_cert_domain" "$subpage_dir"
-    ) &
-    show_spinner "Подготовка файлов"
+     ) </dev/null &    show_spinner "Подготовка файлов"
 
     (
         cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
-    ) &
-    show_spinner "Обновление конфигурации"
+     ) </dev/null &    show_spinner "Обновление конфигурации"
 
     (
         cd "$subpage_dir"
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск сервисов"
+     ) </dev/null &    show_spinner "Перезапуск сервисов"
 
     nginx_cleanup_unused_certs
 
@@ -556,20 +543,17 @@ _change_sub_domain_local_existing() {
                 sed -i "s|^REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=${new_api_token}|" "${panel_dir}/.env"
             fi
         fi
-    ) &
-    show_spinner "Подготовка файлов"
+     ) </dev/null &    show_spinner "Подготовка файлов"
 
     (
         cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
-    ) &
-    show_spinner "Обновление конфигурации"
+     ) </dev/null &    show_spinner "Обновление конфигурации"
 
     (
         cd "$panel_dir"
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск сервисов"
+     ) </dev/null &    show_spinner "Перезапуск сервисов"
 
     nginx_cleanup_unused_certs
 
@@ -639,8 +623,7 @@ _change_sub_domain_remote() {
         else
             echo "SUB_PUBLIC_DOMAIN=${new_domain}" >> "${panel_dir}/.env"
         fi
-    ) &
-    show_spinner "Обновление конфигурации"
+     ) </dev/null &    show_spinner "Обновление конфигурации"
 
     # Проверяем, есть ли уже API токен subscription-page
     local existing_api_token
@@ -667,8 +650,7 @@ _change_sub_domain_remote() {
         cd "$panel_dir"
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск панели"
+     ) </dev/null &    show_spinner "Перезапуск панели"
 
     echo
     print_success "Домен страницы подписки изменён на ${new_domain}"
@@ -711,7 +693,7 @@ change_node_domain() {
     )
 
     if [ -z "$current_node_domain" ]; then
-        print_warning "Нода не обнаружена в конфигурации nginx."
+        print_warning "Нода не обнаружена в конфигурации Nginx."
         echo -e "${WHITE}Смена домена ноды доступна только при установке${NC}"
         echo -e "${WHITE}типа \"Панель + Нода\" на одном сервере.${NC}"
         echo
@@ -766,22 +748,19 @@ change_node_domain() {
     fi
     sed -i "s|server_name ${current_node_domain}|server_name ${new_domain}|g" "${DIR_NGINX}nginx.conf"
     
-    (sleep 0.3) &
-    show_spinner "Обновление nginx.conf"
+    (sleep 0.3 ) </dev/null &    show_spinner "Обновление конфигурации Nginx"
 
     (
         if [ -f "${panel_dir}/docker-compose.yml" ] && grep -q "${current_node_domain}" "${panel_dir}/docker-compose.yml" 2>/dev/null; then
             sed -i "s|${current_node_domain}|${new_domain}|g" "${panel_dir}/docker-compose.yml"
         fi
-    ) &
-    show_spinner "Обновление docker-compose.yml"
+     ) </dev/null &    show_spinner "Обновление docker-compose.yml"
 
     (
         cd "$panel_dir"
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Перезапуск сервисов"
+     ) </dev/null &    show_spinner "Перезапуск сервисов"
 
     nginx_cleanup_unused_certs
 

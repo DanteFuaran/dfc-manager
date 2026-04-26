@@ -311,8 +311,7 @@ uninstall_warp_native() {
         # Удаляем пакеты
         DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y wireguard >/dev/null 2>&1 || true
         DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление WARP"
+     ) </dev/null &    show_spinner "Удаление WARP"
 
     # Проверяем результат
     if ! ip link show warp 2>/dev/null | grep -q "warp"; then
@@ -345,9 +344,12 @@ warp_retry_prompt() {
     while true; do
         read -s -n 1 key
         if [[ "$key" == $'\x1b' ]]; then
-            tput cnorm 2>/dev/null || true
-            echo
-            return 1
+            if _dfc_after_esc_is_bare; then
+                tput cnorm 2>/dev/null || true
+                echo
+                return 1
+            fi
+            continue
         elif [[ "$key" == "" ]]; then
             tput cnorm 2>/dev/null || true
             # Текущая строка + рамка + пустая строка + ошибка + предыдущий prompt.
@@ -379,7 +381,9 @@ add_warp_to_config() {
     echo
 
     if [ "$key" = $'\x1b' ]; then
-        return 0
+        if _dfc_after_esc_is_bare; then
+            return 0
+        fi
     fi
 
     # Получаем токен
@@ -559,7 +563,7 @@ add_warp_to_config() {
         if [[ $_rc_port -eq 2 ]]; then return; fi
         if [[ "$warp_port" =~ ^[0-9]+$ ]] && [ "$warp_port" -ge 1024 ] && [ "$warp_port" -le 65535 ]; then
             if ss -tuln 2>/dev/null | grep -qE ":${warp_port}[^0-9]"; then
-                print_error "Порт ${warp_port} уже занят (например, nginx). Выберите другой порт."
+                print_error "Порт ${warp_port} уже занят (например, Nginx). Выберите другой порт."
                 warp_retry_prompt || return 0
             else
                 break

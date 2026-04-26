@@ -90,10 +90,8 @@ _installation_subpage_on_panel() {
         (
             cd /opt/remnawave && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1
             [ -n "$backup_node_compose" ] && { cd /opt/remnanode && docker compose up -d >/dev/null 2>&1; } || true
-        ) &
-        show_spinner "Восстановление конфигурации"
-        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-        show_spinner "Перезапуск nginx"
+         ) </dev/null &        show_spinner "Восстановление конфигурации"
+        (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &        show_spinner "Перезапуск Nginx"
         show_spinner_timer 10 "Ожидание запуска сервисов" "Запуск сервисов"
         tput cnorm 2>/dev/null || true
     }
@@ -102,7 +100,7 @@ _installation_subpage_on_panel() {
     local panel_domain
     panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | sed -n '1p')
     if [ -z "$panel_domain" ]; then
-        print_error "Не удалось определить домен панели из nginx.conf"
+        print_error "Не удалось определить домен панели из конфигурации Nginx"
         show_continue_prompt || return 1
         return
     fi
@@ -110,7 +108,7 @@ _installation_subpage_on_panel() {
     # Извлекаем cookie
     local COOKIE_NAME COOKIE_VALUE
     if ! get_cookie_from_nginx; then
-        print_error "Не удалось извлечь cookie из nginx.conf"
+        print_error "Не удалось извлечь cookie из конфигурации Nginx"
         show_continue_prompt || return 1
         return
     fi
@@ -234,8 +232,7 @@ _installation_subpage_on_panel() {
         [ -n "$backup_node_compose" ] && { cd /opt/remnanode 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
         [ -f "${DIR_SUB}docker-compose.yml" ] && { cd "${DIR_SUB}" 2>/dev/null && docker compose down >/dev/null 2>&1 || true; }
         true
-    ) &
-    show_spinner "Остановка сервисов"
+     ) </dev/null &    show_spinner "Остановка сервисов"
     echo
 
     local NODE_LISTEN_PORT=2222
@@ -266,14 +263,12 @@ _installation_subpage_on_panel() {
             generate_nginx_conf_full "$panel_domain" "$SUB_DOMAIN" "$selfsteal_domain" \
                 "$panel_cert_domain" "$SUB_CERT_DOMAIN" "$node_cert_domain" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
-        ) &
-    else
+         ) </dev/null &    else
         (
             generate_docker_compose_panel "$panel_cert_domain" "$SUB_CERT_DOMAIN"
             generate_nginx_conf_panel "$panel_domain" "$SUB_DOMAIN" "$panel_cert_domain" "$SUB_CERT_DOMAIN" \
                 "$COOKIE_NAME" "$COOKIE_VALUE"
-        ) &
-    fi
+         ) </dev/null &    fi
     show_spinner "Подготовка файлов" || true
 
     # Если SECRET_KEY был в старом compose, восстанавливаем его
@@ -291,8 +286,7 @@ _installation_subpage_on_panel() {
         cd /opt/remnawave && docker compose up -d >/dev/null 2>&1 || true
         [ "$has_local_node" = true ] && { cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1 || true; }
         cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Обновление конфигурации" || true
+     ) </dev/null &    show_spinner "Обновление конфигурации" || true
 
     echo
     if ! show_spinner_until_ready "http://127.0.0.1:3001/health" "Проверка доступности API" 120; then
@@ -323,8 +317,7 @@ _installation_subpage_on_panel() {
 
     (
         cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner "Запуск сервисов" || true
+     ) </dev/null &    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
     print_subpage_connected_screen
@@ -352,8 +345,7 @@ _installation_subpage_on_node() {
         if [ -n "$backup_nginx" ]; then
             echo "$backup_nginx" > "${DIR_NGINX}nginx.conf"
         fi
-        (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-        show_spinner "Восстановление конфигурации ноды"
+        (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1 ) </dev/null &        show_spinner "Восстановление конфигурации ноды"
     }
 
     # Запрашиваем URL панели
@@ -393,9 +385,12 @@ _installation_subpage_on_node() {
             while true; do
                 read -s -n 1 _pk
                 if [[ "$_pk" == $'\x1b' ]]; then
-                    tput cnorm 2>/dev/null || true
-                    echo
-                    return 1
+                    if _dfc_after_esc_is_bare; then
+                        tput cnorm 2>/dev/null || true
+                        echo
+                        return 1
+                    fi
+                    continue
                 elif [[ "$_pk" == "" ]]; then
                     tput cnorm 2>/dev/null || true
                     for ((l=0; l<5; l++)); do
@@ -515,8 +510,7 @@ _installation_subpage_on_node() {
     echo
     print_action "Обновление конфигурации..."
 
-    (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1; true) &
-    show_spinner "Остановка сервисов"
+    (cd "${NODE_DIR}" && docker compose down >/dev/null 2>&1; true ) </dev/null &    show_spinner "Остановка сервисов"
 
     # Добавляем subscription-page сервис к docker-compose ноды
     (
@@ -547,7 +541,7 @@ _installation_subpage_on_node() {
     ports:
       - '127.0.0.1:3010:3010'
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 3010']
+      test: ['CMD', 'node', '-e', 'require("net").connect(3010,"127.0.0.1").on("connect",function(){this.destroy();process.exit(0)}).on("error",()=>process.exit(1))']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -562,23 +556,19 @@ EOL
         # Обновляем nginx.conf — добавляем sub-page server block
         generate_nginx_conf_node_with_subpage "$selfsteal_domain" "$node_cert_domain" \
             "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_DIR"
-    ) &
-    show_spinner "Обновление конфигурации" || true
+     ) </dev/null &    show_spinner "Обновление конфигурации" || true
 
     # Запуск сервисов
-    (cd "${NODE_DIR}" && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Запуск контейнеров"; then
+    (cd "${NODE_DIR}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    if ! show_spinner "Запуск контейнеров"; then
         print_error "Не удалось запустить контейнеры. Восстановление..."
         _restore_node_config
         show_continue_prompt || return 1
         return
     fi
 
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск nginx" || true
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск Nginx" || true
 
-    (true) &
-    show_spinner "Запуск сервисов" || true
+    (true ) </dev/null &    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
@@ -656,10 +646,13 @@ _installation_subpage_standalone() {
             while true; do
                 read -s -n 1 _pk
                 if [[ "$_pk" == $'\x1b' ]]; then
-                    tput cnorm 2>/dev/null || true
-                    echo
-                    [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null
-                    return 1
+                    if _dfc_after_esc_is_bare; then
+                        tput cnorm 2>/dev/null || true
+                        echo
+                        [ "$is_fresh_install" = true ] && rm -rf "${SUBPAGE_DIR}" 2>/dev/null
+                        return 1
+                    fi
+                    continue
                 elif [[ "$_pk" == "" ]]; then
                     tput cnorm 2>/dev/null || true
                     for ((l=0; l<5; l++)); do
@@ -778,32 +771,27 @@ _installation_subpage_standalone() {
     (
         generate_docker_compose_subpage "$SUB_CERT_DOMAIN" "$PANEL_URL" "$API_TOKEN" "$SUBPAGE_DIR"
         generate_nginx_conf_subpage "$SUB_DOMAIN" "$SUB_CERT_DOMAIN" "$SUBPAGE_DIR"
-    ) &
-    show_spinner "Подготовка файлов" || true
+     ) </dev/null &    show_spinner "Подготовка файлов" || true
 
     (
         ufw allow 443/tcp >/dev/null 2>&1 || true
         ufw reload >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Настройка файрвола" || true
+     ) </dev/null &    show_spinner "Настройка файрвола" || true
 
     echo
-    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск Nginx" || true
+    (cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск Nginx" || true
 
     (
         cd "${SUBPAGE_DIR}"
         docker compose up -d >/dev/null 2>&1
-    ) &
-    if ! show_spinner "Настройка сервисов"; then
+     ) </dev/null &    if ! show_spinner "Настройка сервисов"; then
         print_error "Не удалось запустить контейнеры"
         show_continue_prompt || true
         return
     fi
 
     echo
-    (true) &
-    show_spinner "Запуск сервисов" || true
+    (true ) </dev/null &    show_spinner "Запуск сервисов" || true
     tput cnorm 2>/dev/null || true
 
     # Проверка здоровья
@@ -817,7 +805,7 @@ _installation_subpage_standalone() {
 
     # Удаляем trap при успешном завершении
     if [ "$is_fresh_install" = true ]; then
-        trap - INT TERM
+        dfc_restore_interrupt_traps
     fi
 
     if [ "$health_ok" = true ]; then

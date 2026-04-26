@@ -58,8 +58,7 @@ manage_swap() {
                     swapoff -a 2>/dev/null
                     rm -f /swapfile 2>/dev/null
                     sed -i '/\/swapfile/d' /etc/fstab 2>/dev/null
-                ) &
-                show_spinner "Удаление текущего SWAP"
+                 ) </dev/null &                show_spinner "Удаление текущего SWAP"
                 ;;
             1)
                 # Только удаляем
@@ -75,8 +74,7 @@ manage_swap() {
                     rm -f /swapfile 2>/dev/null
                     sed -i '/\/swapfile/d' /etc/fstab 2>/dev/null
                     sed -i '/vm.swappiness/d' /etc/sysctl.conf 2>/dev/null
-                ) &
-                show_spinner "Удаление SWAP"
+                 ) </dev/null &                show_spinner "Удаление SWAP"
                 echo
                 print_success "SWAP удалён"
                 echo
@@ -129,8 +127,7 @@ manage_swap() {
         chmod 600 /swapfile
         mkswap /swapfile >/dev/null 2>&1
         swapon /swapfile 2>/dev/null
-    ) &
-    show_spinner "Создание SWAP-файла (${swap_size_gb} GB)"
+     ) </dev/null &    show_spinner "Создание SWAP-файла (${swap_size_gb} GB)"
 
     # Добавляем в fstab если нет
     if ! grep -q '/swapfile' /etc/fstab 2>/dev/null; then

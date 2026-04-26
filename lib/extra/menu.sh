@@ -85,16 +85,8 @@ run_speed_test() {
             echo -e "${DARKGRAY}Текущая архитектура: ${_arch}${NC}"
             echo
             echo -e "${BLUE}══════════════════════════════════════${NC}"
-            echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-            tput civis 2>/dev/null || true
-            while true; do
-                local _k=""
-                IFS= read -rsn1 _k
-                case "$_k" in
-                    $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-                    "")      tput cnorm 2>/dev/null || true; return 0 ;;
-                esac
-            done
+            show_continue_prompt "Выход"
+            return $?
             ;;
     esac
 
@@ -105,46 +97,28 @@ run_speed_test() {
         curl -fsSL --connect-timeout 15 --max-time 180 \
             "https://install.speedtest.net/app/cli/${_pkg}" -o speedtest.tgz && \
         tar -xzf speedtest.tgz
-    ) &
-    if ! show_spinner --step --chain "Подготовка инструмента тестирования"; then
+     ) </dev/null &    if ! show_spinner --step --chain "Подготовка инструмента тестирования"; then
         rm -f "$tmpfile"
         echo
         echo -e "${RED}Не удалось скачать или распаковать Speedtest CLI.${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-        tput civis 2>/dev/null || true
-        while true; do
-            local _k=""
-            IFS= read -rsn1 _k
-            case "$_k" in
-                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-                "")      tput cnorm 2>/dev/null || true; return 0 ;;
-            esac
-        done
+        show_continue_prompt "Выход"
+        return $?
     fi
 
     (
         cd /tmp && \
         ./speedtest --accept-license --accept-gdpr 2>/dev/null > "$tmpfile" && \
         rm -rf speedtest.tgz speedtest
-    ) &
-    if ! show_spinner --step --chain "Запущен тест скорости сети"; then
+     ) </dev/null &    if ! show_spinner --step --chain "Запущен тест скорости сети"; then
         rm -f "$tmpfile"
         echo
         echo -e "${RED}Не удалось выполнить тест скорости${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-        tput civis 2>/dev/null || true
-        while true; do
-            local _k=""
-            IFS= read -rsn1 _k
-            case "$_k" in
-                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-                "")      tput cnorm 2>/dev/null || true; return 0 ;;
-            esac
-        done
+        show_continue_prompt "Выход"
+        return $?
     fi
 
     local output
@@ -191,16 +165,8 @@ run_speed_test() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt "Выход"
+    return $?
 }
 
 run_services_check() {
@@ -217,8 +183,7 @@ run_services_check() {
         curl -fsSL --connect-timeout 10 --max-time 180 "https://storage.umager.ru/checker_all_ru.sh" -o "$_chk" 2>/dev/null \
             && bash "$_chk" </dev/null > "$tmpfile" 2>&1
         rm -f "$_chk"
-    ) &
-    show_spinner "Проверка доступности сервисов" "Диагностика доступности сервисов завершена"
+     ) </dev/null &    show_spinner "Проверка доступности сервисов" "Диагностика доступности сервисов завершена"
     echo
 
     local output
@@ -231,16 +196,8 @@ run_services_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt "Выход"
+    return $?
 }
 
 # ═══════════════════════════════════════════════════
@@ -392,6 +349,138 @@ _print_ipv6_section() {
     fi
 }
 
+# Фолбэк без IPRegion: только базовая геолокация (ip-api / ipwho.is).
+_dfc_geolocation_fallback() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 <<'PY'
+import json, sys, urllib.request
+
+def emit(q, asn, country, cc, city, isp, org):
+    print(f"IPv4: {q}")
+    print(f"ASN: {asn}")
+    print()
+    print("Details")
+    print()
+    print("Service  IPv4")
+    print(f"Страна   {country} ({cc})")
+    print(f"Город   {city}")
+    print(f"Провайдер   {isp}")
+    print(f"Организация   {org}")
+
+def main():
+    try:
+        req = urllib.request.Request(
+            "http://ip-api.com/json/?fields=status,message,query,country,countryCode,city,isp,org,as,asname&lang=ru",
+            headers={"User-Agent": "dfc-manager/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+        if d.get("status") == "success":
+            q = d.get("query") or ""
+            asn = d.get("as") or d.get("asname") or ""
+            emit(
+                q,
+                asn,
+                d.get("country") or "",
+                d.get("countryCode") or "",
+                d.get("city") or "",
+                d.get("isp") or "",
+                d.get("org") or "",
+            )
+            return
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request("https://ipwho.is/", headers={"User-Agent": "dfc-manager/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+        if d.get("success"):
+            conn = d.get("connection") or {}
+            asn_n = conn.get("asn")
+            org = conn.get("org") or ""
+            asn_s = f"AS{asn_n} {org}" if asn_n else org
+            emit(
+                d.get("ip") or "",
+                asn_s,
+                d.get("country") or "",
+                d.get("country_code") or "",
+                d.get("city") or "",
+                conn.get("isp") or "",
+                org,
+            )
+            return
+    except Exception:
+        pass
+    sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+PY
+}
+
+# Одна секции таблицы (Popular / CDN / GeoIP) в формате run_geolocation.
+_dfc_emit_ipregion_section() {
+    local title="$1" json="$2" key="$3"
+    local cnt
+    cnt=$(echo "$json" | jq -r --arg k "$key" '(.results[$k] // []) | length') || return 0
+    [ "${cnt:-0}" -eq 0 ] && return 0
+
+    echo "$title"
+    echo ""
+    echo "Service  IPv4"
+    echo "$json" | jq -r --arg k "$key" \
+        '.results[$k][] | "\(.service)  \(.ipv4 // .ipv6 // "N/A" | tostring)"'
+    echo ""
+}
+
+# JSON из ipregion.sh -j → текст для парсера геолокации (ASN — ip-api по IPv4).
+_dfc_emit_geo_report_from_ipregion_json() {
+    local json="$1"
+    local ip asn
+    ip=$(echo "$json" | jq -r '.ipv4 // empty')
+    [ -n "$ip" ] || return 1
+
+    asn=$(curl -fsS --connect-timeout 8 --max-time 22 \
+        "http://ip-api.com/json/${ip}?fields=status,as,asname&lang=ru" 2>/dev/null \
+        | jq -r 'if .status == "success" then (.as // .asname // "") else "" end' 2>/dev/null)
+    [ -z "$asn" ] && asn="—"
+
+    printf 'IPv4: %s\n' "$ip"
+    printf 'ASN: %s\n' "$asn"
+    echo ""
+
+    _dfc_emit_ipregion_section "Popular services" "$json" "custom"
+    _dfc_emit_ipregion_section "CDN services" "$json" "cdn"
+    _dfc_emit_ipregion_section "GeoIP services" "$json" "primary"
+}
+
+# Полный отчёт: локальный lib/extra/ipregion.sh в режиме -j (JSON в stdout, без спиннера).
+_dfc_geolocation_text() {
+    if ! command -v jq >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq \
+            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+            jq util-linux >/dev/null 2>&1 || { _dfc_geolocation_fallback; return; }
+    fi
+
+    local _menu_dir _scr _json
+    _menu_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    _scr="$_menu_dir/ipregion.sh"
+    if [ ! -f "$_scr" ]; then
+        _dfc_geolocation_fallback
+        return
+    fi
+
+    # -j: только JSON; -4: IPv4; -t: таймаут curl на сервис внутри ipregion.sh
+    _json=$(bash "$_scr" -j -t 12 -4 2>/dev/null) || true
+
+    if [ -z "$_json" ] || ! echo "$_json" | jq -e '.ipv4 != null and .ipv4 != ""' >/dev/null 2>&1; then
+        _dfc_geolocation_fallback
+        return
+    fi
+
+    _dfc_emit_geo_report_from_ipregion_json "$_json" || _dfc_geolocation_fallback
+}
+
 run_regional_check() {
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -406,8 +495,7 @@ run_regional_check() {
         curl -fsSL --connect-timeout 10 --max-time 180 "https://storage.umager.ru/checker_inst_ru.sh" -o "$_chk" 2>/dev/null \
             && bash "$_chk" </dev/null > "$tmpfile" 2>&1
         rm -f "$_chk"
-    ) &
-    show_spinner "Проверка региональных ограничений" "Диагностика региональных ограничений завершена"
+     ) </dev/null &    show_spinner "Проверка региональных ограничений" "Диагностика региональных ограничений завершена"
     echo
 
     local output
@@ -420,16 +508,8 @@ run_regional_check() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt "Выход"
+    return $?
 }
 
 run_geolocation() {
@@ -441,16 +521,8 @@ run_geolocation() {
 
     local tmpfile
     tmpfile=$(mktemp /tmp/rw_test.XXXXXX)
-    # Запускаем скрипт геолокации в фоне с таймаутом 20 сек
     (
-        command -v lscpu >/dev/null 2>&1 || \
-            DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq \
-            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold util-linux >/dev/null 2>&1
-        _ipreg=$(mktemp /tmp/dfc_ipregion.XXXXXX.sh)
-        if curl -fsSL --connect-timeout 10 --max-time 60 "https://storage.umager.ru/ipregion.sh" -o "$_ipreg" 2>/dev/null; then
-            echo "Y" | bash "$_ipreg"
-        fi
-        rm -f "$_ipreg"
+        _dfc_geolocation_text
     ) > "$tmpfile" 2>&1 &
     show_spinner "Определение геолокации IP" "Диагностика геолокации завершена"
     echo
@@ -474,16 +546,8 @@ run_geolocation() {
         echo -e "${RED}Не удалось получить данные геолокации${NC}"
         echo
         echo -e "${BLUE}══════════════════════════════════════${NC}"
-        echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-        tput civis 2>/dev/null || true
-        while true; do
-            local _k=""
-            IFS= read -rsn1 _k
-            case "$_k" in
-                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-                "")      tput cnorm 2>/dev/null || true; return 0 ;;
-            esac
-        done
+        show_continue_prompt "Выход"
+        return $?
     fi
 
     # Проход 1: найти максимальную длину имени сервиса по всем таблицам
@@ -531,7 +595,11 @@ run_geolocation() {
             svc_val=$(echo "$line" | grep -oP '[[:space:]]{2,}\K\S.*' | head -1 | sed 's/[[:space:]]*$//')
             [[ -z "$svc_val" ]] && continue
             local vc="${GREEN}"
-            [[ "$svc_val" =~ ^(N/A|null|-)$ ]] && vc="${DARKGRAY}"
+            local _vnorm
+            _vnorm=$(printf '%s' "$svc_val" | tr '[:upper:]' '[:lower:]')
+            if [[ "$_vnorm" == 'n/a' || "$_vnorm" == 'null' || "$_vnorm" == '-' || "$_vnorm" == 'none' || "$_vnorm" == 'undefined' || "$svc_val" == '—' ]]; then
+                vc="${DARKGRAY}"
+            fi
             echo -e " ${WHITE}$(_mpad "${svc_name}:" $col_w)${NC} ${vc}${svc_val}${NC}"
             continue
         fi
@@ -546,17 +614,8 @@ run_geolocation() {
 
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        tput civis 2>/dev/null || true
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt "Выход"
+    return $?
 }
 
 # ═══════════════════════════════════════════════════

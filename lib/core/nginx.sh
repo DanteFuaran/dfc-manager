@@ -383,6 +383,47 @@ nginx_copy_cert() {
     cp -fL "${src}/privkey.pem"   "${dst}/privkey.pem"
 }
 
+# ─── Первая строка `server {` для decoy selfsteal (try_files /index.html =444) ───
+# Если Beszel вставить после этого блока при том же server_name (часто IP), nginx
+# отдаёт заглушку selfsteal — блок BESZEL должен быть раньше в конфиге.
+_nginx_selfsteal_server_line() {
+    local conf="$1"
+    local hit L
+    hit=$(grep -n 'try_files /index.html =444' "$conf" 2>/dev/null | head -1 | cut -d: -f1) || return 1
+    [ -n "$hit" ] || return 1
+    L="$hit"
+    while [ "$L" -ge 1 ]; do
+        if sed -n "${L}p" "$conf" | grep -qE '^[[:space:]]*server[[:space:]]*\{'; then
+            echo "$L"
+            return 0
+        fi
+        L=$((L - 1))
+    done
+    return 1
+}
+
+# ─── Вставляет BESZEL перед selfsteal, иначе — как обычно перед end http ───
+_nginx_insert_beszel_block() {
+    local conf_file="$1"
+    local block_file="$2"
+    local tmp="$3"
+    local ins_line
+    if ins_line=$(_nginx_selfsteal_server_line "$conf_file"); then
+        head -n "$((ins_line - 1))" "$conf_file" > "$tmp"
+        cat "$block_file" >> "$tmp"
+        tail -n "+${ins_line}" "$conf_file" >> "$tmp"
+        cat "$tmp" > "$conf_file"
+    else
+        awk -v blockfile="$block_file" '
+            /^} # ─── end http ───/ {
+                while ((getline line < blockfile) > 0) print line
+                close(blockfile)
+            }
+            { print }
+        ' "$conf_file" > "$tmp" && cat "$tmp" > "$conf_file"
+    fi
+}
+
 # ─── Вставляет server-блок перед '} # ─── end http ───' в nginx.conf ───
 _nginx_insert_server_block() {
     local conf_file="$1"
@@ -392,13 +433,17 @@ _nginx_insert_server_block() {
     local block_file
     block_file=$(mktemp)
     printf '# BEGIN_%s_BLOCK\n%s\n# END_%s_BLOCK\n' "$name" "$content" "$name" > "$block_file"
-    awk -v blockfile="$block_file" '
-        /^} # ─── end http ───/ {
-            while ((getline line < blockfile) > 0) print line
-            close(blockfile)
-        }
-        { print }
-    ' "$conf_file" > "$tmp" && cat "$tmp" > "$conf_file"
+    if [ "$name" = "BESZEL" ]; then
+        _nginx_insert_beszel_block "$conf_file" "$block_file" "$tmp"
+    else
+        awk -v blockfile="$block_file" '
+            /^} # ─── end http ───/ {
+                while ((getline line < blockfile) > 0) print line
+                close(blockfile)
+            }
+            { print }
+        ' "$conf_file" > "$tmp" && cat "$tmp" > "$conf_file"
+    fi
     rm -f "$tmp" "$block_file"
 }
 
@@ -443,7 +488,7 @@ nginx_restore_server_blocks() {
     fi
     # Проверяем, есть ли listen 443 в базовом конфиге (панель + нода или только панель).
     # Если нет (standalone нода) — порт 443 предназначен для xray, внешние блоки не должны на нём слушать.
-    if grep -q 'listen 443 ssl;' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
+    if grep -qE 'listen 443 ssl' "${DIR_NGINX}nginx.conf" 2>/dev/null; then
         has_port_443=true
     fi
     for name in "${!_NGINX_EXTERNAL_BLOCKS[@]}"; do
@@ -455,13 +500,23 @@ nginx_restore_server_blocks() {
             # Добавляем unix socket listen если отсутствует
             if ! printf '%s' "$content" | grep -q 'listen unix:/dev/shm/nginx.sock'; then
                 if $has_port_443; then
-                    # Панель + нода: сохраняем listen 443 ssl; наряду с unix socket
-                    content=$(printf '%s\n' "$content" | sed \
-                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;\n    listen 443 ssl;|')
+                    # Панель + нода: сохраняем listen 443 (в т.ч. default_server) наряду с unix socket
+                    if printf '%s' "$content" | grep -q 'listen 443 ssl default_server'; then
+                        content=$(printf '%s\n' "$content" | sed \
+                            's|listen 443 ssl default_server;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;\n    listen 443 ssl default_server;|')
+                    else
+                        content=$(printf '%s\n' "$content" | sed \
+                            's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;\n    listen 443 ssl;|')
+                    fi
                 else
                     # Standalone нода: порт 443 для xray — заменяем на unix socket
-                    content=$(printf '%s\n' "$content" | sed \
-                        's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;|')
+                    if printf '%s' "$content" | grep -q 'listen 443 ssl default_server'; then
+                        content=$(printf '%s\n' "$content" | sed \
+                            's|listen 443 ssl default_server;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;|')
+                    else
+                        content=$(printf '%s\n' "$content" | sed \
+                            's|listen 443 ssl;|listen unix:/dev/shm/nginx.sock ssl proxy_protocol;\n    real_ip_header proxy_protocol;\n    set_real_ip_from unix:;|')
+                    fi
                 fi
             else
                 content=$(printf '%s\n' "$content" | sed \
@@ -510,17 +565,108 @@ nginx_has_users() {
     return 1
 }
 
+# ─── Beszel по IPv4: без SNI запрос попадает в default_server (ssl_reject) → TLS unrecognized name.
+# Делаем default_server на TCP 443 у BESZEL и снимаем его с ssl_reject для той же пары listen.
+# Для домена Beszel — наоборот (восстанавливаем ssl_reject как default на 443).
+nginx_beszel_sync_ip_tcp_default_server() {
+    local mode="${1:-false}"
+    local cf="${DIR_NGINX}nginx.conf"
+    [ -f "$cf" ] || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    python3 - "$cf" "$mode" <<'PY'
+import re, sys
+path, mode = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8", errors="replace") as f:
+    s = f.read()
+if mode == "true":
+    def fix_beszel(m):
+        blk = m.group(0)
+        blk = re.sub(
+            r"^(\s*listen 443 ssl);(\s*)$",
+            r"\1 default_server;\2",
+            blk,
+            flags=re.M,
+        )
+        blk = re.sub(
+            r"^(\s*listen \[::\]:443 ssl);(\s*)$",
+            r"\1 default_server;\2",
+            blk,
+            flags=re.M,
+        )
+        return blk
+
+    s = re.sub(
+        r"^# BEGIN_BESZEL_BLOCK\n.*?\n# END_BESZEL_BLOCK\n",
+        fix_beszel,
+        s,
+        flags=re.S | re.M,
+    )
+    s = re.sub(
+        r"^(\s*listen 443 ssl) default_server;(\s*\n\s*server_name _;\s*\n\s*ssl_reject_handshake on;)",
+        r"\1;\2",
+        s,
+        flags=re.M,
+    )
+else:
+    def unfix_beszel(m):
+        blk = m.group(0)
+        blk = re.sub(
+            r"^(\s*listen 443 ssl) default_server;",
+            r"\1;",
+            blk,
+            flags=re.M,
+        )
+        blk = re.sub(
+            r"^(\s*listen \[::\]:443 ssl) default_server;",
+            r"\1;",
+            blk,
+            flags=re.M,
+        )
+        return blk
+
+    s = re.sub(
+        r"^# BEGIN_BESZEL_BLOCK\n.*?\n# END_BESZEL_BLOCK\n",
+        unfix_beszel,
+        s,
+        flags=re.S | re.M,
+    )
+    s = re.sub(
+        r"^(\s*listen 443 ssl);(\s*\n\s*server_name _;\s*\n\s*ssl_reject_handshake on;)",
+        r"\1 default_server;\2",
+        s,
+        flags=re.M,
+    )
+with open(path, "w", encoding="utf-8") as f:
+    f.write(s)
+PY
+}
+
+_nginx_beszel_auto_sync_tcp443_default() {
+    local conf="${DIR_NGINX}nginx.conf"
+    [ -f "$conf" ] || return 0
+    grep -q "^# BEGIN_BESZEL_BLOCK$" "$conf" 2>/dev/null || return 0
+    local blk
+    blk=$(sed -n "/^# BEGIN_BESZEL_BLOCK$/,/^# END_BESZEL_BLOCK$/p" "$conf" 2>/dev/null)
+    if echo "$blk" | grep -qE "server_name[[:space:]]+[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+"; then
+        nginx_beszel_sync_ip_tcp_default_server true
+    else
+        nginx_beszel_sync_ip_tcp_default_server false
+    fi
+}
+
 # ─── Стартует или перезапускает nginx ───
 nginx_reload() {
     if ! [ -f "${DIR_NGINX}docker-compose.yml" ]; then
         return 1
     fi
-    # Перезагружаем сервер-блоки из памяти перед перезагрузкой
+    # Восстанавливает внешние блоки из _NGINX_EXTERNAL_BLOCKS (без полного extract с диска —
+    # иначе при каждом reload снова гоняется nginx_restore + MT_CONNECT и конфиг панели ломается).
     [ -f "${DIR_NGINX}nginx.conf" ] && nginx_restore_server_blocks
     # Убираем IPv6 директивы если IPv6 не поддерживается ядром
     nginx_strip_ipv6_if_disabled
     # Убираем дублированные listen директивы
     _nginx_dedup_listen
+    [ -f "${DIR_NGINX}nginx.conf" ] && _nginx_beszel_auto_sync_tcp443_default
     # Удаляем bak если остался от предыдущих версий
     rm -f "${DIR_NGINX}nginx.conf.bak" 2>/dev/null || true
     # Проверяем конфиг перед перезапуском (монтируем ssl и letsencrypt)
@@ -530,10 +676,12 @@ nginx_reload() {
          -v "${DIR_NGINX}ssl:/etc/nginx/ssl:ro" \
          -v "/etc/letsencrypt:/etc/letsencrypt:ro" \
          nginx:latest nginx -t >/dev/null 2>&1 || true
-    # Если контейнер уже работает — graceful reload (без downtime)
+    # Если контейнер уже работает — reload; при сбое — restart (иначе новые SSL server_name не подхватываются)
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'remnawave-nginx'; then
         cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1
-        docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+        if ! docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1; then
+            cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1
+        fi
     else
         cd "${DIR_NGINX}" && docker compose up -d >/dev/null 2>&1
     fi

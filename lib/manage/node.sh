@@ -58,8 +58,7 @@ remove_node_from_panel() {
             cd /opt/remnanode && docker compose down >/dev/null 2>&1
         fi
         cd /opt/remnawave && docker compose down >/dev/null 2>&1
-    ) &
-    show_spinner "Остановка контейнеров"
+     ) </dev/null &    show_spinner "Остановка контейнеров"
 
     # ─── Обновление конфигов ───
     (
@@ -100,15 +99,13 @@ remove_node_from_panel() {
 
         # Закрываем порты
         ufw delete allow 8443/tcp >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление ноды"
+     ) </dev/null &    show_spinner "Удаление ноды"
 
     # ─── Запуск сервисов ───
     (
         cd /opt/remnawave && docker compose up -d >/dev/null 2>&1
         nginx_reload
-    ) &
-    show_spinner "Запуск сервисов"
+     ) </dev/null &    show_spinner "Запуск сервисов"
 
     show_spinner_timer 15 "Ожидание запуска панели" "Запуск панели"
     tput cnorm 2>/dev/null || true
@@ -200,12 +197,10 @@ add_node_to_panel() {
                         _step=2
                         break
                     elif [[ "$_owk" == $'\x1b' ]]; then
-                        IFS= read -rsn1 -t 0.1 _ows 2>/dev/null || true
-                        if [[ -z "$_ows" ]]; then
+                        if _dfc_after_esc_is_bare; then
                             tput cnorm 2>/dev/null; echo
                             return
                         fi
-                        IFS= read -rsn1 -t 0.1 2>/dev/null || true
                     fi
                 done
             else

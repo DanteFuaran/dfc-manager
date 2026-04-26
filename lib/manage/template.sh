@@ -93,8 +93,7 @@ manage_random_template() {
         (
             cd "${DIR_NGINX}" 2>/dev/null
             docker compose restart nginx >/dev/null 2>&1
-        ) &
-        show_spinner "Применение изменений"
+         ) </dev/null &        show_spinner "Применение изменений"
     fi
 
     print_success "Шаблон успешно изменён"

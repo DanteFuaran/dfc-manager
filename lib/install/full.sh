@@ -198,8 +198,7 @@ installation_full() {
         generate_nginx_conf_full "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
-    ) &
-    show_spinner "Подготовка файлов" || true
+     ) </dev/null &    show_spinner "Подготовка файлов" || true
 
     (
         setup_firewall >/dev/null 2>&1 || true
@@ -215,11 +214,9 @@ installation_full() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
-    ) &
-    show_spinner "Подготовка сервисов" || true
+     ) </dev/null &    show_spinner "Подготовка сервисов" || true
 
-    (nginx_reload) &
-    show_spinner "Запуск сервисов" || true
+    (nginx_reload ) </dev/null &    show_spinner "Запуск сервисов" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -378,25 +375,21 @@ installation_full() {
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1 && sleep 15
-    ) &
-    show_spinner "Запуск панели" || true
+     ) </dev/null &    show_spinner "Запуск панели" || true
 
-    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск ноды" || true
+    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск ноды" || true
 
-    (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск страницы подписки" || true
+    (cd "${DIR_SUB}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск страницы подписки" || true
 
     echo
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Запуск сервисов" || true
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск сервисов" || true
 
     # 13. Сброс суперадмина — при первом входе пользователь задаст свои данные
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 
     # Удаляем trap при успешном завершении
     if [ "$is_fresh_install" = true ]; then
-        trap - INT TERM
+        dfc_restore_interrupt_traps
     fi
 
     # Итог
@@ -597,8 +590,7 @@ installation_panel_with_node() {
         generate_nginx_conf_panel_with_node "$PANEL_DOMAIN" "$SELFSTEAL_DOMAIN" \
             "$PANEL_CERT_DOMAIN" "$NODE_CERT_DOMAIN" \
             "$COOKIE_NAME" "$COOKIE_VALUE"
-    ) &
-    show_spinner "Подготовка файлов" || true
+     ) </dev/null &    show_spinner "Подготовка файлов" || true
 
     (
         setup_firewall >/dev/null 2>&1 || true
@@ -613,11 +605,9 @@ installation_panel_with_node() {
         cd /opt/remnawave
         docker compose up -d >/dev/null 2>&1 || true
         sleep 5
-    ) &
-    show_spinner "Подготовка сервисов" || true
+     ) </dev/null &    show_spinner "Подготовка сервисов" || true
 
-    (nginx_reload) &
-    show_spinner "Запуск сервисов" || true
+    (nginx_reload ) </dev/null &    show_spinner "Запуск сервисов" || true
 
     local domain_url="127.0.0.1:3000"
     local target_dir="${DIR_PANEL}"
@@ -755,20 +745,17 @@ installation_panel_with_node() {
         cd /opt/remnawave
         docker compose down >/dev/null 2>&1
         docker compose up -d >/dev/null 2>&1 && sleep 15
-    ) &
-    show_spinner "Запуск панели" || true
+     ) </dev/null &    show_spinner "Запуск панели" || true
 
-    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Запуск ноды" || true
+    (cd "${DIR_NODE}" && docker compose up -d >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск ноды" || true
 
     echo
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Запуск сервисов" || true
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &    show_spinner "Запуск сервисов" || true
 
     docker exec -i remnawave-db psql -U postgres -d postgres -c "DELETE FROM admin;" >/dev/null 2>&1
 
     if [ "$is_fresh_install" = true ]; then
-        trap - INT TERM
+        dfc_restore_interrupt_traps
     fi
 
     clear

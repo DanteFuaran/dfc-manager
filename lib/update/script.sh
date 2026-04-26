@@ -9,7 +9,7 @@ _delete_component_panel() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; dfc_restore_interrupt_traps; trap - RETURN' RETURN
     trap '' INT TERM
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -19,8 +19,7 @@ _delete_component_panel() {
     (
         cd /opt/remnawave 2>/dev/null
         docker compose down -v --rmi all >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление панели Remnawave" "Панель Remnawave удалена"
+     ) </dev/null &    show_spinner "Удаление панели Remnawave" "Панель Remnawave удалена"
     rm -rf /opt/remnawave
 
     # Обновляем nginx: минимальный конфиг или удаляем
@@ -43,7 +42,7 @@ _delete_component_node() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; dfc_restore_interrupt_traps; trap - RETURN' RETURN
     trap '' INT TERM
 
     clear
@@ -108,8 +107,7 @@ _delete_component_node() {
         fi
 
         nginx_cleanup_unused_certs
-    ) &
-    show_spinner "Удаление Remnawave (Нода)" "Нода Remnawave успешно удалена!"
+     ) </dev/null &    show_spinner "Удаление Remnawave (Нода)" "Нода Remnawave успешно удалена!"
 
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -127,7 +125,7 @@ _delete_component_subpage() {
         return
     fi
     export DFC_UI_SPINNER_ALIGN=1
-    trap 'unset DFC_UI_SPINNER_ALIGN; trap - INT TERM; trap - RETURN' RETURN
+    trap 'unset DFC_UI_SPINNER_ALIGN; dfc_restore_interrupt_traps; trap - RETURN' RETURN
     trap '' INT TERM
     clear
     echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -199,8 +197,7 @@ _delete_component_subpage() {
             cd /opt/remnanode 2>/dev/null && docker compose up -d >/dev/null 2>&1 || true
             nginx_reload
         fi
-    ) &
-    show_spinner "Подготовка файлов"
+     ) </dev/null &    show_spinner "Подготовка файлов"
 
     nginx_cleanup_unused_certs
 
@@ -247,10 +244,10 @@ manage_delete_components() {
             del_items+=("📄  Remnawave (Страница подписки)"); del_actions+=("subpage")
         }
         [ -f "/opt/beszel/docker-compose.yml" ] && {
-            del_items+=("📊  Beszel (Мониторинг)"); del_actions+=("beszel")
+            del_items+=("📊  Beszel (Панель)"); del_actions+=("beszel")
         }
         [ -f "/opt/beszel-agent/docker-compose.yml" ] && {
-            del_items+=("📊  Beszel (Агент)"); del_actions+=("beszel_agent")
+            del_items+=("📊  Beszel (Нода)"); del_actions+=("beszel_agent")
         }
         _mt_installed && {
             del_items+=("📡  MTProto (Прокси)"); del_actions+=("mtproto")
@@ -297,41 +294,33 @@ manage_delete_components() {
                 (
                 export DFC_UI_SPINNER_ALIGN=1
                 if is_panel_installed; then
-                    ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true ) &
-                    show_spinner --step "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
+                    ( cd /opt/remnawave 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnawave 2>/dev/null || true  ) </dev/null &                    show_spinner --step "Удаление Remnawave (Панель)" "Удаление Remnawave (Панель)"
                 fi
                 if is_node_installed; then
-                    ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true ) &
-                    show_spinner --step "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
+                    ( cd /opt/remnanode 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; rm -rf /opt/remnanode 2>/dev/null || true  ) </dev/null &                    show_spinner --step "Удаление Remnawave (Нода)" "Удаление Remnawave (Нода)"
                 fi
                 if is_subpage_remote_installed || [ -d "/opt/subscribe-page" ] || [ -d "/opt/remnasubpage" ]; then
                     ( for _d in /opt/subscribe-page /opt/remnasubpage; do
                         [ -d "$_d" ] || continue
                         [ -f "${_d}/docker-compose.yml" ] && { cd "$_d" 2>/dev/null && docker compose down -v --rmi all >/dev/null 2>&1 || true; }
                         rm -rf "$_d" 2>/dev/null || true
-                      done; exit 0 ) &
-                    show_spinner --step "Удаление Remnawave (Страница подписки)" "Удаление Remnawave (Страница подписки)"
+                      done; exit 0  ) </dev/null &                    show_spinner --step "Удаление Remnawave (Страница подписки)" "Удаление Remnawave (Страница подписки)"
                 fi
                 if [ -f "/opt/beszel/docker-compose.yml" ]; then
-                    ( uninstall_beszel --force >/dev/null 2>&1 || true ) &
-                    show_spinner --step "Удаление Beszel" "Beszel удалён"
+                    ( uninstall_beszel --force >/dev/null 2>&1 || true  ) </dev/null &                    show_spinner --step "Удаление Beszel" "Beszel удалён"
                 fi
                 if [ -f "/opt/beszel-agent/docker-compose.yml" ]; then
-                    ( uninstall_beszel_agent --force >/dev/null 2>&1 || true ) &
-                    show_spinner --step "Удаление Beszel Agent" "Beszel Agent удалён"
+                    ( uninstall_beszel_agent --force >/dev/null 2>&1 || true  ) </dev/null &                    show_spinner --step "Удаление Beszel Agent" "Beszel Agent удалён"
                 fi
                 # Удаляем MTProto даже если контейнер уже снят, но есть остаточные
                 # файлы (/opt/mtproto) или nginx-блоки MT_CONNECT_*.
                 if _mt_installed || [ -d "/opt/mtproto" ] || \
                    grep -q "# BEGIN_MT_CONNECT_\|# BEGIN_MTPROTO_STREAM" "${DIR_NGINX}nginx.conf" 2>/dev/null; then
-                    ( _mt_do_uninstall --force >/dev/null 2>&1 || true ) &
-                    show_spinner --step "Удаление MTProto" "MTProto удалён"
+                    ( _mt_do_uninstall --force >/dev/null 2>&1 || true  ) </dev/null &                    show_spinner --step "Удаление MTProto" "MTProto удалён"
                 fi
                 # Firewall: оставляем только allow SSH, остальные пронумерованные правила удаляем.
-                ( ufw_delete_all_rules_except_ssh >/dev/null 2>&1 || true ) &
-                show_spinner --step "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
-                ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true ) &
-                show_spinner --step "Очистка Nginx" "Nginx очищен"
+                ( ufw_delete_all_rules_except_ssh >/dev/null 2>&1 || true  ) </dev/null &                show_spinner --step "Очистка Firewall (UFW)" "Очистка Firewall (UFW)"
+                ( _nginx_extract_external_blocks 2>/dev/null; nginx_ensure_conf_for_remaining 2>/dev/null || true; nginx_cleanup_unused_certs 2>/dev/null || true  ) </dev/null &                show_spinner --step "Очистка Nginx" "Nginx очищен"
                 )
                 clear
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -343,7 +332,7 @@ manage_delete_components() {
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 stty sane 2>/dev/null || true
                 tput cnorm 2>/dev/null || true
-                trap - INT TERM
+                dfc_restore_interrupt_traps
                 show_continue_prompt || true
                 return
                 ;;
@@ -488,8 +477,11 @@ update_script() {
     while true; do
         read -s -n 1 _key
         if [[ "$_key" == $'\x1b' ]]; then
-            tput cnorm
-            return 0
+            if _dfc_after_esc_is_bare; then
+                tput cnorm
+                return 0
+            fi
+            continue
         elif [[ "$_key" == "" ]]; then
             tput cnorm
             # Возвращаемся на строку навигации и очищаем её
@@ -505,8 +497,7 @@ update_script() {
         git clone --depth 1 -b "${SCRIPT_BRANCH}" "${SCRIPT_REPO}" "${DIR_SCRIPT%/}" >/dev/null 2>&1
         chmod +x "${DIR_SCRIPT}dfc-manager.sh"
         _install_bin_wrappers
-    ) &
-    show_spinner "Загрузка обновлений"
+     ) </dev/null &    show_spinner "Загрузка обновлений"
 
     if [ -f "${DIR_SCRIPT}dfc-manager.sh" ]; then
         # Гарантируем наличие version файла (в директории скрипта)
@@ -551,8 +542,7 @@ remove_script_all() {
             else
                 nginx_teardown
             fi
-        ) &
-        show_spinner "Удаление Beszel"
+         ) </dev/null &        show_spinner "Удаление Beszel"
         rm -rf /opt/beszel
     fi
 
@@ -563,8 +553,7 @@ remove_script_all() {
         (
             cd /opt/beszel-agent 2>/dev/null
             docker compose down -v --rmi all >/dev/null 2>&1 || true
-        ) &
-        show_spinner --step "Удаление агента Beszel"
+         ) </dev/null &        show_spinner --step "Удаление агента Beszel"
         [ -n "$AGENT_PORT" ] && ufw delete allow "${AGENT_PORT}/tcp" >/dev/null 2>&1 || true
         rm -rf /opt/beszel-agent
     fi
@@ -578,8 +567,7 @@ remove_script_all() {
                   /tmp/wgcf-account.toml /tmp/wgcf-profile.conf 2>/dev/null || true
             DEBIAN_FRONTEND=noninteractive apt-get remove --purge -y wireguard >/dev/null 2>&1 || true
             DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
-        ) &
-        show_spinner "Удаление WARP"
+         ) </dev/null &        show_spinner "Удаление WARP"
         local WARP_PORT
         WARP_PORT=$(cat /etc/wireguard/.warp_port 2>/dev/null)
         [ -n "$WARP_PORT" ] && ufw delete allow "${WARP_PORT}/tcp" >/dev/null 2>&1 || true
@@ -592,8 +580,7 @@ remove_script_all() {
             ufw disable >/dev/null 2>&1 || true
             DEBIAN_FRONTEND=noninteractive apt-get purge -y ufw >/dev/null 2>&1 || true
             DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
-        ) &
-        show_spinner "Удаление UFW"
+         ) </dev/null &        show_spinner "Удаление UFW"
     fi
 
     # Remnawave
@@ -603,8 +590,7 @@ remove_script_all() {
         [ -d "/opt/subscribe-page" ] && cd "/opt/subscribe-page" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         [ -d "${DIR_NODE}" ] && cd "${DIR_NODE}" && docker compose down -v --rmi all >/dev/null 2>&1 || true
         docker system prune -af >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Удаление контейнеров Remnawave"
+     ) </dev/null &    show_spinner "Удаление контейнеров Remnawave"
     _nginx_extract_external_blocks 2>/dev/null || true
     nginx_ensure_conf_for_remaining
     rm -rf "${DIR_PANEL}"

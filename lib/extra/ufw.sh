@@ -146,8 +146,7 @@ manage_ufw() {
 
                 (
                     "${cmd_args[@]}" >/dev/null 2>&1
-                ) &
-                wait $!
+                 ) </dev/null &                wait $!
 
                 print_success "Порт ${ufw_port} открыт"
                 echo
@@ -238,8 +237,7 @@ manage_ufw() {
                     for ((i=0; i<cnt; i++)); do
                         echo "y" | ufw delete 1 >/dev/null 2>&1
                     done
-                ) &
-                show_spinner "Удаление всех правил"
+                 ) </dev/null &                show_spinner "Удаление всех правил"
                 echo
                 echo -e "${BLUE}══════════════════════════════════════${NC}"
                 show_continue_prompt || return 1
@@ -277,8 +275,7 @@ manage_ufw() {
                     _ufw_pe=$?
                     apt-get autoremove -y -qq $DPKG_OPTS >/dev/null 2>&1 || true
                     exit "$_ufw_pe"
-                ) &
-                if ! show_spinner "Удаление Firewall (ufw)" "Firewall (ufw) был успешно удалён!"; then
+                 ) </dev/null &                if ! show_spinner "Удаление Firewall (ufw)" "Firewall (ufw) был успешно удалён!"; then
                     echo
                     print_error "Не удалось удалить пакет ufw. Выполните вручную: apt-get purge -y ufw"
                     echo

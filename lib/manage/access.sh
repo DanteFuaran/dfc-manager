@@ -65,8 +65,7 @@ restore_nginx_config() {
     nginx_strip_ipv6_if_disabled
 
     # Перезапускаем nginx
-    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    if ! show_spinner "Перезапуск Nginx"; then
+    (cd "${DIR_NGINX}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1 ) </dev/null &    if ! show_spinner "Перезапуск Nginx"; then
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
         show_continue_prompt || return 1
@@ -133,8 +132,7 @@ manage_change_bot_domain() {
     sed -i "s|^WEBHOOK_URL=.*|WEBHOOK_URL=${new_url}|" "$rw_env"
     print_success "Обновление домена телеграм бота"
 
-    (cd "${DIR_PANEL}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    if show_spinner "Перезапуск панели Remnawave"; then
+    (cd "${DIR_PANEL}" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1 ) </dev/null &    if show_spinner "Перезапуск панели Remnawave"; then
         print_success "Готово"
     fi
 
@@ -213,7 +211,7 @@ manage_panel_access() {
                     fi
                 else
                     echo
-                    print_error "Не удалось извлечь cookie из nginx.conf"
+                    print_error "Не удалось извлечь cookie из конфигурации Nginx"
                 fi
 
                 # Домен панели
@@ -319,14 +317,14 @@ switch_panel_port() {
     echo
 
     if [ ! -f "${DIR_NGINX}nginx.conf" ]; then
-        print_error "Файл nginx.conf не найден"
+        print_error "Файл конфигурации Nginx не найден (${DIR_NGINX}nginx.conf)"
         sleep 2
         return 1
     fi
 
     local COOKIE_NAME COOKIE_VALUE
     if ! get_cookie_from_nginx; then
-        print_error "Не удалось извлечь cookie из nginx.conf"
+        print_error "Не удалось извлечь cookie из конфигурации Nginx"
         sleep 2
         return 1
     fi
@@ -665,8 +663,7 @@ SERVERBLOCK_8443
         ufw reload >/dev/null 2>&1 || true
         _update_hosts_port "$dir" "$target_port" "$_xray_port"
         exit 0
-    ) &
-    if ! show_spinner "Перезапуск nginx" "Порт доступа к панели изменён на ${target_port}"; then
+     ) </dev/null &    if ! show_spinner "Перезапуск Nginx" "Порт доступа к панели изменён на ${target_port}"; then
         print_error "Nginx не запустился. Проверьте: docker logs remnawave-nginx"
         echo
         show_continue_prompt || return 1
@@ -794,8 +791,7 @@ EOF
     (
         cd "${DIR_NGINX}"
         docker compose restart nginx >/dev/null 2>&1
-    ) &
-    show_spinner "Активация доступа по 8443"
+     ) </dev/null &    show_spinner "Активация доступа по 8443"
 
     ufw allow 8443/tcp >/dev/null 2>&1
 
@@ -815,8 +811,7 @@ change_credentials() {
     (
         cd /opt/remnawave
         docker compose stop remnawave >/dev/null 2>&1
-    ) &
-    show_spinner "Остановка панели"
+     ) </dev/null &    show_spinner "Остановка панели"
 
     if docker exec -i remnawave-db psql -U postgres -d postgres <<'EOSQL' >/dev/null 2>&1
 DELETE FROM admin;
@@ -828,8 +823,7 @@ EOSQL
         (
             cd /opt/remnawave
             docker compose start remnawave >/dev/null 2>&1
-        ) &
-        show_spinner "Запуск панели"
+         ) </dev/null &        show_spinner "Запуск панели"
         sleep 2
         return
     fi
@@ -856,8 +850,7 @@ EOSQL
             sleep 2
             _w=$((_w + 2))
         done
-    ) &
-    show_spinner "Запуск панели"
+     ) </dev/null &    show_spinner "Запуск панели"
 
     tput cnorm 2>/dev/null || true
 
@@ -876,7 +869,7 @@ regenerate_cookies() {
     tput civis 2>/dev/null
 
     if [ ! -f ${DIR_NGINX}nginx.conf ]; then
-        print_error "Файл nginx.conf не найден"
+        print_error "Файл конфигурации Nginx не найден (${DIR_NGINX}nginx.conf)"
         sleep 2
         tput cnorm 2>/dev/null
         return
@@ -884,7 +877,7 @@ regenerate_cookies() {
 
     local COOKIE_NAME COOKIE_VALUE
     if ! get_cookie_from_nginx; then
-        print_error "Не удалось извлечь cookie из nginx.conf"
+        print_error "Не удалось извлечь cookie из конфигурации Nginx"
         sleep 2
         tput cnorm 2>/dev/null
         return
@@ -916,8 +909,7 @@ regenerate_cookies() {
 
     print_success "Cookie успешно обновлены!"
 
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner "Перезапуск Nginx"
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &    show_spinner "Перезапуск Nginx"
 
     local panel_domain
     panel_domain=$(grep -oP 'server_name\s+\K[^;]+' ${DIR_NGINX}nginx.conf | head -1)

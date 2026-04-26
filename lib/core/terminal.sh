@@ -75,5 +75,10 @@ handle_interrupt() {
     exit 0
 }
 
+# После временного trap INT (установка Beszel, логи docker и т.д.) — вернуть глобальный Ctrl+C
+dfc_restore_interrupt_traps() {
+    trap handle_interrupt INT TERM HUP
+}
+
 trap cleanup_terminal EXIT
 trap handle_interrupt INT TERM HUP

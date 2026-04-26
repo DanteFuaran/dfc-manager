@@ -70,8 +70,7 @@ manage_update() {
     (
         cd "$rw_path"
         docker compose pull > "$pull_tmp" 2>&1
-    ) &
-    show_spinner --step "Скачивание обновлений"
+     ) </dev/null &    show_spinner --step "Скачивание обновлений"
 
     pull_count=$(grep -cE 'Pull complete|Downloaded newer|Pulled' "$pull_tmp" 2>/dev/null || true)
     pull_count="${pull_count:-0}"
@@ -89,16 +88,13 @@ manage_update() {
     (
         cd "$rw_path"
         docker compose up -d >/dev/null 2>&1
-    ) &
-    show_spinner --step "Перезапуск сервисов"
+     ) </dev/null &    show_spinner --step "Перезапуск сервисов"
 
-    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1) &
-    show_spinner --step "Перезапуск nginx" || true
+    (cd "${DIR_NGINX}" && docker compose restart nginx >/dev/null 2>&1 ) </dev/null &    show_spinner --step "Перезапуск Nginx" || true
 
     (
         docker image prune -af >/dev/null 2>&1
-    ) &
-    show_spinner --step "Очистка старых образов"
+     ) </dev/null &    show_spinner --step "Очистка старых образов"
 
     echo
     echo -e "${GREEN}✅ Обновление успешно завершено!${NC}"
@@ -205,15 +201,13 @@ manage_logs() {
         local _logs_pid=""
         if [[ "$svc" == "__remnasale_all__" ]]; then
             # Все контейнеры compose (remnasale + taskiq-worker + taskiq-scheduler + db)
-            (cd "$dir" && exec docker compose logs -f -t --tail 100 2>&1) &
-            _logs_pid=$!
+            (cd "$dir" && exec docker compose logs -f -t --tail 100 2>&1 ) </dev/null &            _logs_pid=$!
         elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
             docker logs -f -t --tail 100 "$svc" 2>&1 &
             _logs_pid=$!
         else
             # exec заменяет subshell процессом docker compose — kill корректно завершает его
-            (cd "$dir" && exec docker compose logs -f -t --tail 100 "$svc" 2>&1) &
-            _logs_pid=$!
+            (cd "$dir" && exec docker compose logs -f -t --tail 100 "$svc" 2>&1 ) </dev/null &            _logs_pid=$!
         fi
 
         # Функция для надёжной остановки: SIGTERM → ждём → SIGKILL + дочерние
@@ -226,7 +220,7 @@ manage_logs() {
         }
 
         # Ctrl+C — убиваем процесс логов и возвращаемся в меню выбора
-        trap "_kill_logs; wait \$_logs_pid 2>/dev/null; trap - INT" INT
+        trap "_kill_logs; wait \$_logs_pid 2>/dev/null; dfc_restore_interrupt_traps" INT
 
         # Опрашиваем stdin: Esc завершает просмотр логов и возвращает в меню
         local _key=""
@@ -239,7 +233,7 @@ manage_logs() {
         done
 
         wait "$_logs_pid" 2>/dev/null || true
-        trap - INT
+        dfc_restore_interrupt_traps
     done
 }
 
@@ -255,16 +249,14 @@ manage_reinstall() {
         cd "$rw_path"
         docker compose down -v --rmi all 2>&1
         docker system prune -af 2>&1
-    ) &
-    show_spinner "Удаление контейнеров и данных" || true
+     ) </dev/null &    show_spinner "Удаление контейнеров и данных" || true
 
     _nginx_extract_external_blocks 2>/dev/null || true
     nginx_ensure_conf_for_remaining
 
     (
         rm -rf "$rw_path"
-    ) &
-    show_spinner "Очистка конфигурации" || true
+     ) </dev/null &    show_spinner "Очистка конфигурации" || true
 
     print_success "Готово к переустановке"
 

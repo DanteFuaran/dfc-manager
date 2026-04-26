@@ -181,9 +181,12 @@ prompt_ip_with_retry() {
         while true; do
             read -s -n 1 key
             if [[ "$key" == $'\x1b' ]]; then
-                tput cnorm 2>/dev/null || true
-                echo
-                return 1
+                if _dfc_after_esc_is_bare; then
+                    tput cnorm 2>/dev/null || true
+                    echo
+                    return 1
+                fi
+                continue
             elif [[ "$key" == "" ]]; then
                 tput cnorm 2>/dev/null || true
                 local lines_up=5
@@ -202,6 +205,8 @@ prompt_domain_with_retry() {
     local var_name="$2"
     local use_inline="${3:-false}"
     local skip_ip_check="${4:-false}"
+    local forbid_ipv4="${5:-false}"
+    local allow_ipv4="${6:-false}"
 
     local first=true
     while true; do
@@ -222,6 +227,19 @@ prompt_domain_with_retry() {
             [ $_rc -eq 2 ] && return 1
         fi
 
+        if [ "$forbid_ipv4" = true ] && [[ "${!var_name}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo
+            print_error "Укажите доменное имя (например monitor.example.com), а не IP-адрес."
+            echo -e "${DARKGRAY}   Нужна DNS-запись на этот сервер и сертификат на имя хоста.${NC}"
+            echo
+            first=true
+            continue
+        fi
+
+        if [ "$allow_ipv4" = true ] && [[ "${!var_name}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            return 0
+        fi
+
         local check_ip_flag=true
         [ "$skip_ip_check" = true ] && check_ip_flag=false
 
@@ -233,8 +251,7 @@ prompt_domain_with_retry() {
         (
             check_domain "${!var_name}" "$check_ip_flag" > "$_check_out_file" 2>&1
             echo $? > "$_check_rc_file"
-        ) &
-        local _check_pid=$!
+         ) </dev/null &        local _check_pid=$!
         local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local _si=0
         tput civis 2>/dev/null || true
@@ -245,7 +262,7 @@ prompt_domain_with_retry() {
         done
         printf "\r\033[K"
         wait $_check_pid 2>/dev/null
-        tput cnorm 2>/dev/null || true
+        tput civis 2>/dev/null || true
         _check_rc=$(cat "$_check_rc_file" 2>/dev/null)
         _check_out=$(cat "$_check_out_file" 2>/dev/null)
         rm -f "$_check_out_file" "$_check_rc_file"
@@ -275,11 +292,14 @@ prompt_domain_with_retry() {
         while true; do
             read -s -n 1 key
             if [[ "$key" == $'\x1b' ]]; then
-                tput cnorm 2>/dev/null || true
-                echo
-                return 1
+                if _dfc_after_esc_is_bare; then
+                    tput civis 2>/dev/null || true
+                    echo
+                    return 1
+                fi
+                continue
             elif [[ "$key" == "s" || "$key" == "S" ]]; then
-                tput cnorm 2>/dev/null || true
+                tput civis 2>/dev/null || true
                 echo
                 local skip_lines=$((_total_lines + 1))
                 for ((l=0; l<skip_lines; l++)); do
@@ -288,7 +308,7 @@ prompt_domain_with_retry() {
                 done
                 return 0
             elif [[ "$key" == "" ]]; then
-                tput cnorm 2>/dev/null || true
+                tput civis 2>/dev/null || true
                 local lines_up=$_total_lines
                 for ((l=0; l<lines_up; l++)); do
                     tput cuu1 2>/dev/null

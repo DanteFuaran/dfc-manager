@@ -95,8 +95,7 @@ CRON_EOF
                 chmod 644 /etc/cron.d/logrotate-custom
                 # Отключаем стандартный daily cron для logrotate чтобы не дублировать
                 [ -f /etc/cron.daily/logrotate ] && chmod -x /etc/cron.daily/logrotate 2>/dev/null
-            ) &
-            show_spinner "Применение настроек"
+             ) </dev/null &            show_spinner "Применение настроек"
             echo
             print_success "Ротация: каждые ${rotate_hours}ч, хранить ${keep_count} ротаций"
             echo
@@ -154,8 +153,7 @@ CRON_EOF
 }
 DOCKER_EOF
                 systemctl restart docker >/dev/null 2>&1
-            ) &
-            show_spinner "Применение настроек Docker"
+             ) </dev/null &            show_spinner "Применение настроек Docker"
             echo
             print_success "Docker логи: max-size=${log_size}, max-file=${log_files}"
             print_warning "Docker перезапущен. Контейнеры будут перезапущены автоматически."

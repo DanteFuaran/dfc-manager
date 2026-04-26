@@ -82,8 +82,8 @@ get_panel_token() {
                     while true; do
                         read -s -n 1 key
                         if [[ "$key" == $'\x1b' ]]; then
-                            local _drain; while IFS= read -r -s -n1 -t 0.05 _drain; do :; done
-                            echo; return 2
+                            if _dfc_after_esc_is_bare; then echo; return 2; fi
+                            continue
                         fi
                         [[ "$key" == "" ]] && break
                     done
@@ -110,8 +110,8 @@ get_panel_token() {
                         while true; do
                             read -s -n 1 _key
                             if [[ "$_key" == $'\x1b' ]]; then
-                                local _drain; while IFS= read -r -s -n1 -t 0.05 _drain; do :; done
-                                echo; return 2
+                                if _dfc_after_esc_is_bare; then echo; return 2; fi
+                                continue
                             fi
                             if [[ "$_key" == "" ]]; then
                                 for ((i=0; i<6; i++)); do tput cuu1 2>/dev/null; tput el 2>/dev/null; done
@@ -142,8 +142,8 @@ get_panel_token() {
                     while true; do
                         read -s -n 1 _key
                         if [[ "$_key" == $'\x1b' ]]; then
-                            local _drain; while IFS= read -r -s -n1 -t 0.05 _drain; do :; done
-                            echo; return 2
+                            if _dfc_after_esc_is_bare; then echo; return 2; fi
+                            continue
                         fi
                         if [[ "$_key" == "" ]]; then
                             for ((i=0; i<6; i++)); do tput cuu1 2>/dev/null; tput el 2>/dev/null; done
@@ -171,8 +171,8 @@ get_panel_token() {
                 while true; do
                     read -s -n 1 key
                     if [[ "$key" == $'\x1b' ]]; then
-                        local _drain; while IFS= read -r -s -n1 -t 0.05 _drain; do :; done
-                        echo; return 2
+                        if _dfc_after_esc_is_bare; then echo; return 2; fi
+                        continue
                     fi
                     if [[ "$key" == "" ]]; then
                         for ((i=0; i<7; i++)); do

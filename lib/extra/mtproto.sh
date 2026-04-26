@@ -19,20 +19,14 @@ _mt_press_enter() {
     tput cnorm 2>/dev/null || true
 }
 
-# ── MTProto install helpers ──────────────────────────────────────────────────
-
-# Поглощает CSI/SS3 escape-последовательность из буфера ввода (после \e)
-_mt_consume_escape_seq() {
-    local _s1="" _s2=""
-    read -rsn1 -t 0.1 _s1 2>/dev/null || _s1=""
-    if [[ "$_s1" == '[' ]] || [[ "$_s1" == 'O' ]]; then
-        while true; do
-            read -rsn1 -t 0.1 _s2 2>/dev/null || { _s2=""; break; }
-            [[ -z "$_s2" ]] && break
-            [[ "$_s2" =~ [a-zA-Z~] ]] && break
-        done
-    fi
+# Фон под спиннером: монитор задач bash выключен — иначе дочерний процесс может получить SIGTTIN с задержкой.
+_mt_bg_begin() {
+    set +m 2>/dev/null || true
+    exec 0</dev/null
 }
+
+# ── MTProto install helpers ──────────────────────────────────────────────────
+# Поглощение Esc-последовательностей — _dfc_after_esc_is_bare из lib/core/ui.sh
 
 # Интерактивный ввод строки (Backspace, зелёный ввод)
 # Esc → возвращает 1 ("назад"), Enter → записывает значение и возвращает 0
@@ -60,9 +54,11 @@ _mt_read_input() {
         elif [[ "$_ch" == $'\x7f' ]] || [[ "$_ch" == $'\b' ]]; then
             if [ "${#_typed}" -gt 0 ]; then _typed="${_typed%?}"; printf '\b \b'; fi
         elif [[ "$_ch" == $'\e' ]]; then
-            _mt_consume_escape_seq
-            printf "\r\033[K"   # стрерть текущую строку без перевода
-            _rc=1; break
+            if _dfc_after_esc_is_bare; then
+                printf "\r\033[K"
+                _rc=1; break
+            fi
+            continue
         elif [[ -n "$_ch" ]] && [[ "$_ch" =~ [[:print:]] ]]; then
             _typed="${_typed}${_ch}"
             printf "${GREEN}%s${NC}" "$_ch"
@@ -74,6 +70,7 @@ _mt_read_input() {
         if [ -z "$_typed" ]; then printf -v "$_var" '%s' "$_default"
         else printf -v "$_var" '%s' "$_typed"; fi
     fi
+    tput civis 2>/dev/null || true
     return $_rc
 }
 
@@ -608,6 +605,12 @@ services:
       nofile:
         soft: 131072
         hard: 131072
+    healthcheck:
+      test: ['CMD-SHELL', 'ss -tuln | grep -q ":443"']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
     logging:
       driver: "json-file"
       options:
@@ -635,6 +638,7 @@ _mt_do_install() {
     echo -e "${BLUE}       📦 Установка MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
+    tput civis 2>/dev/null || true
 
     # _mt_erase_lines N — стираем N строк вверх (текущая уже пустая после \r\033[K)
     _mt_erase_lines() {
@@ -672,21 +676,24 @@ _mt_do_install() {
                     while true; do
                         read -s -n 1 key
                         if [[ "$key" == $'\x1b' ]]; then
-                            tput cnorm 2>/dev/null || true
-                            echo
-                            return  # Esc — выход из установки
+                            if _dfc_after_esc_is_bare; then
+                                tput cnorm 2>/dev/null || true
+                                echo
+                                return  # Esc — выход из установки
+                            fi
+                            continue
                         elif [[ "$key" == "s" || "$key" == "S" ]]; then
                             tput cnorm 2>/dev/null || true
                             (( _step++ ))
                             break 2  # Пропустить проверку
                         elif [[ "$key" == "" ]]; then
-                            tput cnorm 2>/dev/null || true
                             # Перерисовываем экран с заголовком и повторяем ввод
                             clear
                             echo -e "${BLUE}══════════════════════════════════════${NC}"
                             echo -e "${BLUE}       📦 Установка MTProto${NC}"
                             echo -e "${BLUE}══════════════════════════════════════${NC}"
                             echo
+                            tput civis 2>/dev/null || true
                             break  # Повторить ввод домена
                         fi
                     done
@@ -719,13 +726,16 @@ _mt_do_install() {
                         while true; do
                             IFS= read -rsn1 _pk
                             if [[ "$_pk" == $'\x1b' ]]; then
-                                tput cnorm 2>/dev/null || true
-                                _mt_erase_lines 6
-                                (( _step-- ))
-                                break 2
+                                if _dfc_after_esc_is_bare; then
+                                    _mt_erase_lines 6
+                                    (( _step-- ))
+                                    tput civis 2>/dev/null || true
+                                    break 2
+                                fi
+                                continue
                             elif [[ "$_pk" == "" ]]; then
-                                tput cnorm 2>/dev/null || true
                                 _mt_erase_lines 6
+                                tput civis 2>/dev/null || true
                                 break
                             fi
                         done
@@ -785,13 +795,17 @@ _mt_do_install() {
     echo
     echo
 
+    local KEEP_CURSOR_HIDDEN=1
+    tput civis 2>/dev/null || true
+
     # Docker (если нет) + файлы конфигурации — после ввода, под одним спиннером
     (
+        _mt_bg_begin
         _mt_ensure_docker_auto || exit 1
         _mt_write_compose
         _mt_save_config
-    ) &
-    if ! show_spinner "Подготовка компонентов" "Подготовка компонентов"; then
+    ) </dev/null &
+    if ! show_spinner --pid $! "Подготовка компонентов" "Подготовка компонентов"; then
         echo
         print_error "Не удалось подготовить компоненты (Docker или запись конфигурации MTProto)."
         _mt_press_enter
@@ -802,42 +816,57 @@ _mt_do_install() {
     # выполняется внутри _mt_db_ensure/_mt_db_migrate; держим процесс в фоне и
     # показываем спиннер, чтобы пользователь не думал, что установка зависла.
     (
+        _mt_bg_begin
         _mt_db_ensure >/dev/null 2>&1 || true
         _mt_db_migrate >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Создание базы данных" "Создание базы данных"
+    ) </dev/null &
+    show_spinner --pid $! "Создание базы данных" "Создание базы данных"
 
     # Чистим старый контейнер если есть
     if _mt_installed; then
-        (cd "$_MT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1 || \
-         docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1) &
-        show_spinner "Остановка старого контейнера" "Остановка старого контейнера"
+        (
+            _mt_bg_begin
+            cd "$_MT_DIR" || exit 1
+            _dfc_detach_run docker compose down --remove-orphans >/dev/null 2>&1 || \
+                docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1
+        ) </dev/null &
+        show_spinner --pid $! "Остановка старого контейнера" "Остановка старого контейнера"
     fi
 
     # Тянем образ (если pull упадёт — up всё равно запустится из кэша)
-    (cd "$_MT_DIR" && docker compose pull -q 2>/dev/null || true) &
-    show_spinner "Загрузка образа MTProto" "Загрузка образа MTProto"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose pull -q 2>/dev/null || true
+    ) </dev/null &
+    show_spinner --pid $! "Загрузка образа MTProto" "Загрузка образа MTProto"
 
     # Запускаем контейнер
     local _compose_err; _compose_err=$(mktemp)
-    (cd "$_MT_DIR" && docker compose up -d 2>"$_compose_err" >/dev/null) &
-    show_spinner "Запуск MTProto" "Запуск MTProto"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose up -d 2>"$_compose_err" >/dev/null
+    ) </dev/null &
+    show_spinner --pid $! "Запуск MTProto" "Запуск MTProto"
 
     # Применяем правила доступа (iptables + UFW) в фоне со спиннером —
     # тут же может докачиваться conntrack через apt-get.
     (
+        _mt_bg_begin
         _mt_block_apply >/dev/null 2>&1 || true
         if command -v ufw >/dev/null 2>&1; then
             ufw allow "${PROXY_PORT}" >/dev/null 2>&1 || true
         fi
-    ) &
-    show_spinner "Настройка правил доступа" "Настройка правил доступа"
+    ) </dev/null &
+    show_spinner --pid $! "Настройка правил доступа" "Настройка правил доступа"
 
     # Проверка доступности порта (локально + best-effort удалённый TCP чекер)
     (
+        _mt_bg_begin
         _mt_port_healthcheck >/tmp/dfc-mtproto-portcheck.log 2>/dev/null || true
-    ) &
-    show_spinner "Проверка доступности порта" "Проверка доступности порта"
+    ) </dev/null &
+    show_spinner --pid $! "Проверка доступности порта" "Проверка доступности порта"
 
     if _mt_running; then
         rm -f "${_compose_err:-}"
@@ -846,23 +875,33 @@ _mt_do_install() {
         # Сертификат и страница /connect (только для доменного SERVER_IP)
         if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             if [ -z "$(_mt_nginx_container)" ]; then
-                (_mt_setup_nginx) &
-                show_spinner "Установка Nginx" "Установка Nginx"
+                (
+                    _mt_bg_begin
+                    _mt_setup_nginx
+                ) </dev/null &
+                show_spinner --pid $! "Установка Nginx" "Установка Nginx"
             fi
-            (_mt_issue_cert "$SERVER_IP") &
+            (
+                _mt_bg_begin
+                _mt_issue_cert "$SERVER_IP"
+            ) </dev/null &
+            local _cert_pid=$!
             local _cert_exists=false
             { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
               openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
             if $_cert_exists; then
-                wait $! 2>/dev/null || true
+                wait "$_cert_pid" 2>/dev/null || true
                 printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
             else
-                show_spinner --step "Получение сертификатов" "Получение сертификатов"
+                show_spinner --step --pid "$_cert_pid" "Получение сертификатов" "Получение сертификатов"
             fi
             local _cert_rc=$?
             if [ "$_cert_rc" -eq 0 ]; then
-                (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-                show_spinner "Создание страницы подключения" "Создание страницы подключения"
+                (
+                    _mt_bg_begin
+                    _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}"
+                ) </dev/null &
+                show_spinner --pid $! "Создание страницы подключения" "Создание страницы подключения"
             elif [ "$_cert_rc" -eq 2 ]; then
                 echo -e "${YELLOW}⚠️  DNS домена ${SERVER_IP} указывает не на этот сервер.${NC}"
                 echo -e "${DARKGRAY}   Страница /connect будет создана после исправления DNS.${NC}"
@@ -875,10 +914,11 @@ _mt_do_install() {
         # Одновременно компилируем бинарные враппера /usr/local/bin/{dfc,rw}
         # (gcc/cc занимает несколько секунд на первой установке — нужен спиннер).
         (
+            _mt_bg_begin
             _mt_ensure_stream_mode >/dev/null 2>&1 || true
             _install_bin_wrappers >/dev/null 2>&1 || true
-        ) &
-        show_spinner "Завершение установки" "Установка завершена"
+        ) </dev/null &
+        show_spinner --pid $! "Завершение установки" "Установка завершена"
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -932,7 +972,11 @@ _mt_do_install() {
             local _k=""
             IFS= read -rsn1 _k
             case "$_k" in
-                $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+                $'\x1b')
+                    if _dfc_after_esc_is_bare; then
+                        tput cnorm 2>/dev/null || true; return 1
+                    fi
+                    ;;
                 "")      tput cnorm 2>/dev/null || true; return 0 ;;
             esac
         done
@@ -1012,7 +1056,11 @@ _mt_do_config() {
         local _k=""
         IFS= read -rsn1 _k
         case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            $'\x1b')
+                if _dfc_after_esc_is_bare; then
+                    tput cnorm 2>/dev/null || true; return 1
+                fi
+                ;;
             "")      tput cnorm 2>/dev/null || true; return 0 ;;
         esac
     done
@@ -1155,12 +1203,16 @@ _mt_do_stats() {
         # docker stats --no-stream блокирует ~1.5 сек — запускаем в фоне, используем кеш
         local _net_io_file="/tmp/mtproto_netio"
         if [ ! -f "$_net_io_file" ]; then touch "$_net_io_file" 2>/dev/null || true; fi
-        local _net_io
-        _net_io=$(cat "$_net_io_file" 2>/dev/null || echo "—")
-        [ -z "$_net_io" ] && _net_io="—"
+        local _net_io _net_io_trim
+        _net_io=$(cat "$_net_io_file" 2>/dev/null | head -1 | tr -d '\r')
+        _net_io_trim=$(printf '%s' "$_net_io" | tr -d '[:space:]')
+        [ -z "$_net_io_trim" ] || [ "$_net_io_trim" = "—" ] && _net_io="0B"
         # Обновляем в фоне для следующего цикла
-        ( docker stats --no-stream --format "{{.NetIO}}" "$_MT_CONTAINER" 2>/dev/null \
-            | head -1 > "$_net_io_file" ) &
+        (
+            _mt_bg_begin
+            docker stats --no-stream --format "{{.NetIO}}" "$_MT_CONTAINER" 2>/dev/null \
+                | head -1 > "$_net_io_file"
+        ) </dev/null &
 
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1282,9 +1334,11 @@ _mt_do_stats() {
             _sk=""
             IFS= read -rsn1 -t 0.1 _sk 2>/dev/null && _rr=0 || _rr=$?
             if [[ "$_sk" == $'\e' ]]; then
-                _mt_consume_escape_seq
-                _mt_stats_restore
-                return 1   # Esc = выход в главное меню
+                if _dfc_after_esc_is_bare; then
+                    _mt_stats_restore
+                    return 1
+                fi
+                continue
             elif [[ $_rr -eq 0 && "$_sk" == "" ]]; then
                 _mt_stats_restore
                 return 0   # Enter = назад в меню MTProto
@@ -1329,6 +1383,7 @@ _mt_do_change_config() {
                     echo -e "${BLUE}     🔑 Смена конфигурации MTProto${NC}"
                     echo -e "${BLUE}══════════════════════════════════════${NC}"
                     echo
+                    tput civis 2>/dev/null || true
                     _mt_read_input NEW_SERVER_IP "Домен или IP для ссылки подключения ${DARKGRAY}[${_default_host}]${NC}:" "$_default_host"
                     if [ $? -eq 1 ]; then return; fi
                     if check_domain "$NEW_SERVER_IP" true; then
@@ -1341,9 +1396,11 @@ _mt_do_change_config() {
                     local key
                     while true; do
                         read -s -n 1 key
-                        if [[ "$key" == $'\x1b' ]]; then tput cnorm 2>/dev/null || true; return
-                        elif [[ "$key" == "s" || "$key" == "S" ]]; then tput cnorm 2>/dev/null || true; (( _step++ )); break 2
-                        elif [[ "$key" == "" ]]; then tput cnorm 2>/dev/null || true; break
+                        if [[ "$key" == $'\x1b' ]]; then
+                            if _dfc_after_esc_is_bare; then tput cnorm 2>/dev/null || true; return; fi
+                            continue
+                        elif [[ "$key" == "s" || "$key" == "S" ]]; then tput civis 2>/dev/null || true; (( _step++ )); break 2
+                        elif [[ "$key" == "" ]]; then tput civis 2>/dev/null || true; break
                         fi
                     done
                 done ;;
@@ -1397,9 +1454,16 @@ _mt_do_change_config() {
     _mt_save_config
     print_success "Конфигурация сохранена"
 
+    local KEEP_CURSOR_HIDDEN=1
+    tput civis 2>/dev/null || true
+
     # Перезапуск с новым портом
-    (cd "$_MT_DIR" && docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Перезапуск MTProto..." "MTProto перезапущен!"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run sh -c 'docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1'
+    ) </dev/null &
+    show_spinner --pid $! "Перезапуск MTProto..." "MTProto перезапущен!"
     _mt_block_apply
 
     if command -v ufw >/dev/null 2>&1; then
@@ -1412,23 +1476,33 @@ _mt_do_change_config() {
     # Пересоздаём страницу /connect если домен изменился или блок ещё не создан
     if ! [[ "${SERVER_IP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         if [ -z "$(_mt_nginx_container)" ]; then
-            (_mt_setup_nginx) &
-            show_spinner "Установка Nginx..." "Nginx установлен"
+            (
+                _mt_bg_begin
+                _mt_setup_nginx
+            ) </dev/null &
+            show_spinner --pid $! "Установка Nginx..." "Nginx установлен"
         fi
-        (_mt_issue_cert "$SERVER_IP") &
+        (
+            _mt_bg_begin
+            _mt_issue_cert "$SERVER_IP"
+        ) </dev/null &
+        local _cc_cert_pid=$!
         local _cert_exists=false
         { [ -f "/etc/letsencrypt/renewal/${SERVER_IP}.conf" ] && \
           openssl x509 -noout -checkend 86400 -in "/etc/letsencrypt/live/${SERVER_IP}/fullchain.pem" >/dev/null 2>&1; } && _cert_exists=true
         if $_cert_exists; then
-            wait $! 2>/dev/null || true
+            wait "$_cc_cert_pid" 2>/dev/null || true
             printf "${GREEN}\u2705${NC} Сертификат уже существует\n"
         else
-            show_spinner --step "Получение SSL-сертификата..." "SSL-сертификат получен"
+            show_spinner --step --pid "$_cc_cert_pid" "Получение SSL-сертификата..." "SSL-сертификат получен"
         fi
         local _cert_rc=$?
         if [ "$_cert_rc" -eq 0 ]; then
-            (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-            show_spinner "Создание страницы /connect..." "Страница /connect обновлена"
+            (
+                _mt_bg_begin
+                _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}"
+            ) </dev/null &
+            show_spinner --pid $! "Создание страницы /connect..." "Страница /connect обновлена"
         elif [ "$_cert_rc" -eq 2 ]; then
             echo -e "${YELLOW}⚠️  DNS mismatch — страница /connect не создана.${NC}"
         fi
@@ -1454,8 +1528,12 @@ _mt_do_stop() {
         echo -e "${YELLOW}⚠️  Прокси не запущен${NC}"
         _mt_press_enter; return
     fi
-    (cd "$_MT_DIR" && docker compose stop >/dev/null 2>&1) &
-    show_spinner "Остановка прокси..." "Прокси остановлен"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose stop >/dev/null 2>&1
+    ) </dev/null &
+    show_spinner --pid $! "Остановка прокси..." "Прокси остановлен"
     _mt_press_enter
 }
 
@@ -1469,8 +1547,12 @@ _mt_do_start() {
         echo -e "${YELLOW}⚠️  Прокси уже запущен${NC}"
         _mt_press_enter; return
     fi
-    (cd "$_MT_DIR" && docker compose start >/dev/null 2>&1) &
-    show_spinner "Запуск прокси..." "Прокси запущен"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose start >/dev/null 2>&1
+    ) </dev/null &
+    show_spinner --pid $! "Запуск прокси..." "Прокси запущен"
     _mt_block_apply
     _mt_press_enter
 }
@@ -1527,9 +1609,13 @@ _mt_do_restart() {
     echo -e "${BLUE}       🔄 Перезапуск MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    (cd "$_MT_DIR" && docker compose restart >/dev/null 2>&1) &
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose restart >/dev/null 2>&1
+    ) </dev/null &
     # Применяем правила блокировки — они не переживают перезапуск контейнера (iptables остаётся)
-    show_spinner "Перезапуск прокси..." "Прокси перезапущен"
+    show_spinner --pid $! "Перезапуск прокси..." "Прокси перезапущен"
     _mt_block_apply
     _mt_press_enter
 }
@@ -1544,7 +1630,11 @@ _mt_do_uninstall() {
     if [ "$_force" = true ]; then
         # Удаляем даже если контейнера нет — вдруг остался /opt/mtproto/
         if [ -d "$_MT_DIR" ]; then
-            (cd "$_MT_DIR" 2>/dev/null && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true)
+            (
+                _mt_bg_begin
+                cd "$_MT_DIR" 2>/dev/null || exit 0
+                _dfc_detach_run docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true
+            )
         fi
         docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
         docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
@@ -1577,20 +1667,21 @@ _mt_do_uninstall() {
     if ! confirm_nav --delete "🗑️  Удаление MTProto"; then
         return
     fi
-    echo
-    echo
 
     # 1) compose down + снятие контейнера
     (
+        _mt_bg_begin
         if [ -d "$_MT_DIR" ]; then
-            cd "$_MT_DIR" && docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true
+            cd "$_MT_DIR" || exit 1
+            _dfc_detach_run docker compose down --remove-orphans --timeout 15 >/dev/null 2>&1 || true
         fi
         docker rm -f "$_MT_CONTAINER" >/dev/null 2>&1 || true
-    ) &
-    show_spinner "Остановка контейнера"
+    ) </dev/null &
+    show_spinner --pid $! "Остановка контейнера"
 
     # 2) образ, каталог, UFW, бинарники
     (
+        _mt_bg_begin
         docker rmi "$_MT_IMAGE" >/dev/null 2>&1 || true
         rm -rf "$_MT_DIR" 2>/dev/null || true
         if command -v ufw >/dev/null 2>&1 && [ -n "${PROXY_PORT:-}" ]; then
@@ -1598,18 +1689,23 @@ _mt_do_uninstall() {
         fi
         rm -f /usr/local/bin/mtproto /usr/local/bin/mt 2>/dev/null || true
         rm -rf /usr/local/lib/mtproto 2>/dev/null || true
-    ) &
-    show_spinner "Удаление остаточных файлов"
+    ) </dev/null &
+    show_spinner --pid $! "Удаление остаточных файлов"
 
     # 3) nginx /connect, stream, ssl-артефакты + iptables (записи блокировок)
     (
+        _mt_bg_begin
         _mt_cleanup_nginx_artifacts 2>/dev/null || true
         _mt_block_clear_all 2>/dev/null || true
-    ) &
-    show_spinner "Удаление остаточных записей"
+    ) </dev/null &
+    show_spinner --pid $! "Удаление остаточных записей"
 
+    clear
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "$(center "🗑️  Удаление MTProto" "$BLUE")"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    echo -e "${GREEN}✅ MTProto полностью удалён${NC}"
+    echo -e "$(center "✅ MTProto успешно удалён!" "$GREEN")"
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
@@ -1619,7 +1715,11 @@ _mt_do_uninstall() {
         local _k=""
         IFS= read -rsn1 _k
         case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return 1 ;;
+            $'\x1b')
+                if _dfc_after_esc_is_bare; then
+                    tput cnorm 2>/dev/null || true; return 1
+                fi
+                ;;
             "")      tput cnorm 2>/dev/null || true; return 0 ;;
         esac
     done
@@ -1635,10 +1735,18 @@ _mt_do_update() {
     echo -e "${BLUE}     ⬆️  Обновление образа MTProto${NC}"
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo
-    (cd "$_MT_DIR" && docker compose pull >/dev/null 2>&1) &
-    show_spinner "Загрузка нового образа..." "Образ обновлён"
-    (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
-    show_spinner "Перезапуск MTProto..." "MTProto обновлён!"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose pull >/dev/null 2>&1
+    ) </dev/null &
+    show_spinner --pid $! "Загрузка нового образа..." "Образ обновлён"
+    (
+        _mt_bg_begin
+        cd "$_MT_DIR" || exit 1
+        _dfc_detach_run docker compose up -d >/dev/null 2>&1
+    ) </dev/null &
+    show_spinner --pid $! "Перезапуск MTProto..." "MTProto обновлён!"
     _mt_press_enter
 }
 
@@ -1707,7 +1815,11 @@ _mt_do_setup_connect() {
     while true; do
         IFS= read -rsn1 _k
         case "$_k" in
-            $'\x1b') tput cnorm 2>/dev/null || true; return ;;
+            $'\x1b')
+                if _dfc_after_esc_is_bare; then
+                    tput cnorm 2>/dev/null || true; return
+                fi
+                ;;
             "") break ;;
         esac
     done
@@ -1717,15 +1829,21 @@ _mt_do_setup_connect() {
 
     # Nginx если не запущен
     if [ -z "$(_mt_nginx_container)" ]; then
-        (_mt_setup_nginx) &
-        show_spinner "Установка Nginx..." "Nginx установлен"
+        (
+            _mt_bg_begin
+            _mt_setup_nginx
+        ) </dev/null &
+        show_spinner --pid $! "Установка Nginx..." "Nginx установлен"
     fi
 
     # Сертификат (force если уже есть, но nginx-блок не создан)
     local _force_flag=""
     $_cert_ok && ! $_nginx_ok && _force_flag="force"
-    (_mt_issue_cert "$SERVER_IP" "$_force_flag") &
-    show_spinner --step "Получение SSL-сертификата..." "SSL-сертификат получен"
+    (
+        _mt_bg_begin
+        _mt_issue_cert "$SERVER_IP" "$_force_flag"
+    ) </dev/null &
+    show_spinner --step --pid $! "Получение SSL-сертификата..." "SSL-сертификат получен"
     local _cert_rc=$?
     if [ "$_cert_rc" -ne 0 ]; then
         echo -e "${RED}✖ Не удалось получить сертификат для ${SERVER_IP}.${NC}"
@@ -1746,8 +1864,11 @@ _mt_do_setup_connect() {
     fi
 
     # Nginx блок + страница
-    (_mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}") &
-    show_spinner "Настройка Nginx и страницы..." "Страница /connect создана"
+    (
+        _mt_bg_begin
+        _mt_nginx_add_domain "$SERVER_IP" "$PROXY_SECRET" "$PROXY_PORT" "${PROXY_NAME:-}"
+    ) </dev/null &
+    show_spinner --pid $! "Настройка Nginx и страницы..." "Страница /connect создана"
 
     echo
     echo -e "${GREEN}✅ Страница подключения:${NC}"
@@ -1758,8 +1879,8 @@ _mt_do_setup_connect() {
 
 # ─── Управление доступом: блокировка IP / подсетей через iptables ────────────
 _MT_DB="${_MT_DIR}/mtproto.db"             # SQLite-база всех данных MTProto
-_MT_NGINX_CONF="/opt/nginx/nginx.conf"     # nginx конфиг (stream-блок MTProto)
-_MT_NGINX_CONTAINER="remnawave-nginx"      # имя nginx-контейнера
+_MT_NGINX_CONF="/opt/nginx/nginx.conf"     # конфиг Nginx (stream-блок MTProto)
+_MT_NGINX_CONTAINER="remnawave-nginx"      # имя контейнера Nginx
 
 # Инициализация схемы БД (вызывать при установке и при первом обращении)
 _mt_db_init() {
@@ -2361,11 +2482,12 @@ _mt_do_access() {
 
     if ! command -v conntrack >/dev/null 2>&1; then
         (
+            _mt_bg_begin
             export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none
             local _dpkg='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
             apt-get update -qq >/dev/null 2>&1 || true
             apt-get install -y -qq $_dpkg conntrack >/dev/null 2>&1 || true
-        ) &
+        ) </dev/null &
     fi
 
     while true; do
@@ -2681,7 +2803,9 @@ _mt_do_access() {
             local _ck
             while true; do
                 IFS= read -rsn1 _ck 2>/dev/null
-                if [[ "$_ck" == $'\x1b' ]]; then break
+                if [[ "$_ck" == $'\x1b' ]]; then
+                    if _dfc_after_esc_is_bare; then break; fi
+                    continue
                 elif [[ "$_ck" == "" ]]; then
                     sqlite3 "$_MT_DB" "DELETE FROM blocked WHERE mode='${_access_mode}';" 2>/dev/null || true
                     _mt_block_clear_all 2>/dev/null
@@ -2901,8 +3025,12 @@ manage_mtproto() {
             if _mt_installed; then
                 _mt_load_env
                 _mt_write_compose
-                (cd "$_MT_DIR" && docker compose up -d >/dev/null 2>&1) &
-                show_spinner "Восстановление полного режима MTProto" "Готово"
+                (
+                    _mt_bg_begin
+                    cd "$_MT_DIR" || exit 1
+                    _dfc_detach_run docker compose up -d >/dev/null 2>&1
+                ) </dev/null &
+                show_spinner --pid $! "Восстановление полного режима MTProto" "Готово"
                 _mt_block_apply >/dev/null 2>&1 || true
             fi
         fi

@@ -171,8 +171,7 @@ DNSCONF
         # Создаём директорию для флага, если её нет
         mkdir -p "${DIR_SCRIPT}" 2>/dev/null || true
         touch "${DIR_SCRIPT}install_packages"
-    ) &
-    show_spinner --step "Обновление пакетов"
+     ) </dev/null &    show_spinner --step "Обновление пакетов"
     echo
     source /usr/share/bash-completion/bash_completion 2>/dev/null || true
     source /usr/share/bash-completion/completions/ufw 2>/dev/null || true

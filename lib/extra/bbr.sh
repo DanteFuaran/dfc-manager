@@ -75,8 +75,7 @@ manage_bbr() {
                             /Снижение latency/d;
                             /Обработка burst/d' /etc/sysctl.conf 2>/dev/null
                     sysctl -p >/dev/null 2>&1
-                ) &
-                show_spinner "Выключение BBR"
+                 ) </dev/null &                show_spinner "Выключение BBR"
 
                 local new_cc
                 new_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)
@@ -143,8 +142,7 @@ net.core.somaxconn=4096
 net.ipv4.tcp_max_syn_backlog=4096
 SYSCTL
                     sysctl -p >/dev/null 2>&1
-                ) &
-                show_spinner "Включение BBR"
+                 ) </dev/null &                show_spinner "Включение BBR"
 
                 local new_cc
                 new_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)
