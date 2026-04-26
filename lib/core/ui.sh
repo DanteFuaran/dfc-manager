@@ -41,6 +41,23 @@ _dfc_prompt_prepare_input() {
     while IFS= read -r -t 0 -N 4096 _c </dev/tty 2>/dev/null && [ -n "$_c" ]; do true; done
 }
 
+# Сброс входного буфера TTY в ядре (read -t 0 не всегда вычищает icanon-хвост от Enter во время спиннеров)
+_dfc_tcflush_dev_tty() {
+    [ ! -r /dev/tty ] && return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    python3 -c 'import os,termios; f=os.open("/dev/tty",os.O_RDWR); termios.tcflush(f,termios.TCIFLUSH); os.close(f)' 2>/dev/null || true
+}
+
+# FD дубликата /dev/tty для show_continue_prompt (закрыть при Ctrl+C и EXIT)
+_DFC_CONTINUE_PROMPT_TTYFD=""
+
+dfc_close_continue_prompt_ttyfd() {
+    if [[ "${_DFC_CONTINUE_PROMPT_TTYFD:-}" =~ ^[0-9]+$ ]]; then
+        eval "exec ${_DFC_CONTINUE_PROMPT_TTYFD}>&-" 2>/dev/null || true
+        _DFC_CONTINUE_PROMPT_TTYFD=""
+    fi
+}
+
 # Одиночные клавиши (промпты, меню). -echoctl: иначе после stty sane Esc на экране как ^[
 _dfc_stty_cbreak_prompt() {
     local _tin="${1-}"
@@ -93,9 +110,14 @@ _dfc_setsid_exec() {
 # Режим ввода (icanon/isig) не меняем; ввод не «съедается».
 _spinner_lock_input() {
     _SPINNER_STTY=""
+    _SPINNER_TTY_F=""
     if [ -t 0 ]; then
         _SPINNER_STTY=$(stty -g 2>/dev/null || echo "")
         stty -echo -echoctl 2>/dev/null || stty -echo 2>/dev/null || true
+    elif [ -r /dev/tty ]; then
+        _SPINNER_TTY_F=/dev/tty
+        _SPINNER_STTY=$(stty -F "$_SPINNER_TTY_F" -g 2>/dev/null || echo "")
+        stty -F "$_SPINNER_TTY_F" -echo -echoctl 2>/dev/null || stty -F "$_SPINNER_TTY_F" -echo 2>/dev/null || true
     fi
     tput civis 2>/dev/null || true
 }
@@ -128,9 +150,14 @@ _spinner_unstick_background_pid() {
 
 _spinner_unlock_input() {
     if [ -n "${_SPINNER_STTY:-}" ]; then
-        stty "$_SPINNER_STTY" 2>/dev/null || stty sane 2>/dev/null || true
+        if [ -n "${_SPINNER_TTY_F:-}" ]; then
+            stty -F "$_SPINNER_TTY_F" "$_SPINNER_STTY" 2>/dev/null || stty -F "$_SPINNER_TTY_F" sane 2>/dev/null || true
+        else
+            stty "$_SPINNER_STTY" 2>/dev/null || stty sane 2>/dev/null || true
+        fi
     fi
     _SPINNER_STTY=""
+    _SPINNER_TTY_F=""
     if [ -z "${KEEP_CURSOR_HIDDEN:-}" ]; then
         tput cnorm 2>/dev/null || true
     fi
@@ -555,11 +582,17 @@ show_arrow_menu() {
 # ═══════════════════════════════════════════════
 
 # После байта ESC: 0 = одиночный Esc (отмена ввода), 1 = CSI/SS3/Meta — поглощено, ввод продолжается
-# Необязательный аргумент: путь к TTY (например /dev/tty); иначе читаем stdin.
+# $1 — путь к TTY (например /dev/tty); пусто — stdin.
+# $2 — необязательный номер fd (>=3): read -u fd вместо файла/stdin.
 _dfc_after_esc_is_bare() {
     local _tty="${1-}"
-    local _sc=""
-    if [ -n "$_tty" ]; then
+    local _u="${2-}"
+    local _sc="" _o2=""
+    if [[ "$_u" =~ ^[0-9]+$ ]] && [ "$_u" -ge 3 ]; then
+        if ! IFS= read -r -s -N 1 -t 0.15 _sc -u "$_u" 2>/dev/null || [[ -z "$_sc" ]]; then
+            return 0
+        fi
+    elif [ -n "$_tty" ]; then
         if ! IFS= read -r -s -N 1 -t 0.15 _sc < "$_tty" 2>/dev/null || [[ -z "$_sc" ]]; then
             return 0
         fi
@@ -571,7 +604,9 @@ _dfc_after_esc_is_bare() {
     if [[ "$_sc" == '[' ]]; then
         local _c=""
         while true; do
-            if [ -n "$_tty" ]; then
+            if [[ "$_u" =~ ^[0-9]+$ ]] && [ "$_u" -ge 3 ]; then
+                IFS= read -r -s -N 1 -t 0.15 _c -u "$_u" 2>/dev/null || break
+            elif [ -n "$_tty" ]; then
                 IFS= read -r -s -N 1 -t 0.15 _c < "$_tty" 2>/dev/null || break
             else
                 IFS= read -r -s -N 1 -t 0.15 _c 2>/dev/null || break
@@ -580,8 +615,9 @@ _dfc_after_esc_is_bare() {
         done
         return 1
     elif [[ "$_sc" == 'O' ]]; then
-        local _o2=""
-        if [ -n "$_tty" ]; then
+        if [[ "$_u" =~ ^[0-9]+$ ]] && [ "$_u" -ge 3 ]; then
+            IFS= read -r -s -N 1 -t 0.15 _o2 -u "$_u" 2>/dev/null || true
+        elif [ -n "$_tty" ]; then
             IFS= read -r -s -N 1 -t 0.15 _o2 < "$_tty" 2>/dev/null || true
         else
             IFS= read -r -s -N 1 -t 0.15 _o2 2>/dev/null || true
@@ -698,8 +734,15 @@ show_continue_prompt() {
     local _esc_lbl="${1:-Назад}"
     local _cp_stty=""
     local _tin=""
+    local _cpfd=""
     [ -r /dev/tty ] && _tin=/dev/tty
     _dfc_prompt_prepare_input
+    [ -n "$_tin" ] && _dfc_tcflush_dev_tty
+    # Отдельный fd к управляющему TTY: ввод не «прилипает» к старому stdin после спиннеров/docker
+    if [ -n "$_tin" ]; then
+        exec {_cpfd}<>"$_tin" || _cpfd=""
+        [[ "$_cpfd" =~ ^[0-9]+$ ]] && _DFC_CONTINUE_PROMPT_TTYFD="$_cpfd"
+    fi
     if [ -n "$_tin" ]; then
         _cp_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
         # sane: после спиннеров (icanon+echo) и docker в TTY дисциплина может быть в «ломаных» флагах
@@ -712,18 +755,21 @@ show_continue_prompt() {
         _dfc_stty_cbreak_prompt ""
         _dfc_drain_tty_after_cbreak ""
     fi
-    tput civis 2>/dev/null || true
+    [ -n "$_tin" ] && _dfc_tcflush_dev_tty
+    # Видимый курсор: иначе кажется, что меню «мертвое», а ввод уехал на новую строку
+    tput cnorm 2>/dev/null || true
     if [[ "$_quiet" != true ]]; then
         printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
     fi
     while true; do
         local _cpk=""
-        if [ -n "$_tin" ]; then
-            IFS= read -r -s -N 1 _cpk < "$_tin" 2>/dev/null || _cpk=""
+        if [[ "$_cpfd" =~ ^[0-9]+$ ]]; then
+            IFS= read -r -s -N 1 _cpk -u "$_cpfd" 2>/dev/null || _cpk=""
         else
             IFS= read -r -s -N 1 _cpk 2>/dev/null || _cpk=""
         fi
         if [[ "$_cpk" == $'\x03' ]]; then
+            dfc_close_continue_prompt_ttyfd
             if [ -n "$_tin" ]; then
                 if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
             elif [ -n "${_cp_stty:-}" ]; then
@@ -732,6 +778,7 @@ show_continue_prompt() {
             handle_interrupt
         fi
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
+            dfc_close_continue_prompt_ttyfd
             if [ -n "$_tin" ]; then
                 if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
             elif [ -n "${_cp_stty:-}" ]; then
@@ -741,7 +788,16 @@ show_continue_prompt() {
             echo
             return 0
         elif [[ "$_cpk" == $'\x1b' ]]; then
-            if _dfc_after_esc_is_bare "$_tin"; then
+            _esc_bare=false
+            if [[ "$_cpfd" =~ ^[0-9]+$ ]]; then
+                _dfc_after_esc_is_bare "" "$_cpfd" && _esc_bare=true
+            elif [ -n "$_tin" ]; then
+                _dfc_after_esc_is_bare "$_tin" && _esc_bare=true
+            else
+                _dfc_after_esc_is_bare "" && _esc_bare=true
+            fi
+            if [[ "$_esc_bare" == true ]]; then
+                dfc_close_continue_prompt_ttyfd
                 if [ -n "$_tin" ]; then
                     if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
                 elif [ -n "${_cp_stty:-}" ]; then

@@ -6,6 +6,8 @@
 ORIGINAL_STTY=$(stty -g 2>/dev/null || echo "")
 
 cleanup_terminal() {
+    # Закрыть дублирующий fd промпта «Продолжить» (если ui.sh уже загружен)
+    command -v dfc_close_continue_prompt_ttyfd >/dev/null 2>&1 && dfc_close_continue_prompt_ttyfd || true
     # Полное восстановление терминала
     tput cnorm 2>/dev/null || true
     tput sgr0 2>/dev/null || true
@@ -61,6 +63,7 @@ cleanup_uninstalled() {
 
 handle_interrupt() {
     trap '' INT TERM HUP
+    command -v dfc_close_continue_prompt_ttyfd >/dev/null 2>&1 && dfc_close_continue_prompt_ttyfd || true
     if [ -n "${ORIGINAL_STTY:-}" ]; then
         stty "$ORIGINAL_STTY" 2>/dev/null || stty sane 2>/dev/null || true
     else
