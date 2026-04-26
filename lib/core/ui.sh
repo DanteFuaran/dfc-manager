@@ -100,6 +100,8 @@ show_spinner() {
     _spinner_lock_input
     while kill -0 $pid 2>/dev/null; do
         _flush_stdin
+        # Если какая-то команда случайно включила курсор (cnorm) — прячем обратно.
+        tput civis 2>/dev/null || true
         if [ "$_step_nc" = true ]; then
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
         else
@@ -138,6 +140,7 @@ show_spinner_timer() {
         local remaining=$((seconds - elapsed))
         for ((j=0; j<12; j++)); do
             _flush_stdin
+            tput civis 2>/dev/null || true
             printf "\r\033[K${GREEN}%s${NC}\033[0m  %s ${DARKGRAY}(%d сек)${NC}" "${spin[$i]}" "$msg" "$remaining"
             sleep $delay
             i=$(( (i+1) % 10 ))

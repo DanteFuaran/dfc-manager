@@ -861,7 +861,7 @@ installation_node_remote() {
         echo
         print_cert_exists "$SELFSTEAL_DOMAIN"
     fi
-    echo
+    # Без дополнительной пустой строки перед "✅ Обновление пакетов"
 
     if [ ! -f "${DIR_SCRIPT}install_packages" ] || ! command -v docker >/dev/null 2>&1; then
         install_packages
@@ -1027,7 +1027,7 @@ EOL
 
     if [ "$health_ok" = true ]; then
         echo
-        print_success "Нода успешно подключена!"
+        print_final_success "Нода успешно подключена!"
     else
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1127,7 +1127,6 @@ installation_node_with_existing_subpage() {
         esac
         reading_inline "Email для Let's Encrypt:" LETSENCRYPT_EMAIL
         [[ $? -eq 2 ]] && return
-        echo
         if [ "$CERT_METHOD" -eq 1 ]; then
             setup_cloudflare_credentials || return
         elif [ "$CERT_METHOD" -eq 3 ]; then

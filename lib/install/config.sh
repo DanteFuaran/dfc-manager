@@ -537,7 +537,7 @@ _nginx_http_header() {
 user  nginx;
 worker_processes  auto;
 
-error_log  /var/log/nginx/error.log notice;
+error_log  /var/log/nginx/error.log error;
 pid        /run/nginx.pid;
 
 events {
@@ -647,6 +647,8 @@ server {
     server_name $panel_domain;
     # REALITY dest uses TLS on the internal unix socket.
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl;
@@ -705,6 +707,8 @@ server {
 server {
     server_name $sub_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl;
@@ -749,6 +753,8 @@ server {
 server {
     server_name $selfsteal_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl;
@@ -1059,6 +1065,8 @@ ssl_session_tickets off;
 server {
     server_name $selfsteal_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     http2 on;
@@ -1699,6 +1707,8 @@ ssl_session_tickets off;
 server {
     server_name $panel_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl;
@@ -1756,6 +1766,8 @@ server {
 server {
     server_name $selfsteal_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     listen 443 ssl;
@@ -2047,6 +2059,8 @@ ssl_session_tickets off;
 server {
     server_name $selfsteal_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     http2 on;
@@ -2127,6 +2141,8 @@ server {
 server {
     server_name $sub_domain;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    # REALITY fallback receives scanner/bad TLS handshakes; do not spam Docker logs.
+    error_log /dev/null alert;
     real_ip_header proxy_protocol;
     set_real_ip_from unix:;
     http2 on;
