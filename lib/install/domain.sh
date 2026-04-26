@@ -200,7 +200,13 @@ prompt_ip_with_retry() {
     done
 }
 
+# Возврат: 0 — ок; 1 — отмена (Esc) / выход к вызывающему меню; 2 — Esc «шаг назад» (только с --back-on-esc при вводе, не в меню ошибки DNS)
 prompt_domain_with_retry() {
+    local _esc_back=false
+    if [[ "${1:-}" == "--back-on-esc" ]]; then
+        _esc_back=true
+        shift
+    fi
     local prompt_text="$1"
     local var_name="$2"
     local use_inline="${3:-false}" # сохранён для совместимости вызовов; ввод всегда inline --no-eol + спиннер на строке ввода (как Beszel)
@@ -211,7 +217,12 @@ prompt_domain_with_retry() {
     while true; do
         reading_inline --no-eol "$prompt_text" "$var_name"
         local _rc=$?
-        [ $_rc -ne 0 ] && return 1
+        if [ $_rc -ne 0 ]; then
+            if [ $_rc -eq 2 ] && [ "$_esc_back" = true ]; then
+                return 2
+            fi
+            return 1
+        fi
 
         if [ "$forbid_ipv4" = true ] && [[ "${!var_name}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo

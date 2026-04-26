@@ -18,6 +18,14 @@ _install_abort_fresh_panel_extras() {
     _install_rmdir_if_empty "${DIR_SUB}"
 }
 
+# Заголовок экрана «панель + подписка + нода» + пустая строка перед первым ➜
+_install_full_combo_title() {
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo -e "$(center "📦 Установка панели, подписки и ноды" "$BLUE")"
+    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    echo
+}
+
 installation_full() {
     # Гарантируем валидную рабочую директорию перед началом
     cd /opt 2>/dev/null || cd / 2>/dev/null
@@ -43,9 +51,7 @@ installation_full() {
     fi
 
     clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "📦 Установка панели, подписки и ноды" "$BLUE")"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    _install_full_combo_title
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
 
@@ -54,10 +60,60 @@ installation_full() {
         trap '_install_abort_fresh_panel_extras; handle_interrupt' INT TERM
     fi
 
-    # Домены
-    prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
-    prompt_domain_with_retry "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN true || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
-    prompt_domain_with_retry "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true || { [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras; return; }
+    # Домены: Esc на 2–3 шаге — к предыдущему полю; на 1-м — выход в меню
+    local step=1
+    local _full_domain_back=false
+    local _pr
+    while [ "$step" -le 3 ]; do
+        case $step in
+            1)
+                if ! prompt_domain_with_retry "Домен панели ${DARKGRAY}(например panel.example.com)${DARKGRAY}:${YELLOW}" PANEL_DOMAIN; then
+                    [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras
+                    return
+                fi
+                step=2
+                ;;
+            2)
+                if [ "$_full_domain_back" = true ]; then
+                    echo -e " ${DARKGRAY}Домен панели:${NC} ${WHITE}${PANEL_DOMAIN}${NC}"
+                    echo
+                    _full_domain_back=false
+                fi
+                prompt_domain_with_retry --back-on-esc "Домен подписки ${DARKGRAY}(например sub.example.com)${DARKGRAY}:${YELLOW}" SUB_DOMAIN true
+                _pr=$?
+                if [ "$_pr" -eq 2 ]; then
+                    PANEL_DOMAIN=""
+                    SUB_DOMAIN=""
+                    clear
+                    _install_full_combo_title
+                    step=1
+                    continue
+                fi
+                if [ "$_pr" -ne 0 ]; then
+                    [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras
+                    return
+                fi
+                step=3
+                ;;
+            3)
+                prompt_domain_with_retry --back-on-esc "Домен ноды ${DARKGRAY}(например node.example.com)${DARKGRAY}:${YELLOW}" SELFSTEAL_DOMAIN true
+                _pr=$?
+                if [ "$_pr" -eq 2 ]; then
+                    SUB_DOMAIN=""
+                    clear
+                    _install_full_combo_title
+                    _full_domain_back=true
+                    step=2
+                    continue
+                fi
+                if [ "$_pr" -ne 0 ]; then
+                    [ "$is_fresh_install" = true ] && _install_abort_fresh_panel_extras
+                    return
+                fi
+                break
+                ;;
+        esac
+    done
 
     # Автогенерация учётных данных администратора
     local SUPERADMIN_USERNAME
@@ -442,9 +498,7 @@ installation_panel_with_node() {
     fi
 
     clear
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
-    echo -e "$(center "📦 Установка панели, подписки и ноды" "$BLUE")"
-    echo -e "${BLUE}══════════════════════════════════════${NC}"
+    _install_full_combo_title
 
     mkdir -p "${DIR_PANEL}" "${DIR_PANEL}/backups" && cd "${DIR_PANEL}"
 
