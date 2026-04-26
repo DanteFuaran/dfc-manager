@@ -234,6 +234,7 @@ get_cert_cloudflare() {
         echo "$_ec" > "$_exit_file"
     ) &
     show_spinner --step "Получение wildcard сертификата для *.$dnorm"
+    echo
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)
@@ -307,6 +308,7 @@ get_cert_acme() {
         echo "$_ec" > "$_exit_file"
     ) &
     show_spinner --step "Получение сертификата для $dnorm"
+    echo
 
     ufw_revert_http01_temp
     iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -539,6 +541,7 @@ get_cert_gcore() {
         echo "$_ec" > "$_exit_file"
     ) &
     show_spinner --step "Получение wildcard сертификата для *.$dnorm (Gcore)"
+    echo
 
     local _exit_code
     _exit_code=$(cat "$_exit_file" 2>/dev/null || echo 1)

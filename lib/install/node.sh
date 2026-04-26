@@ -1026,8 +1026,16 @@ EOL
     fi
 
     if [ "$health_ok" = true ]; then
+        clear
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        echo -e "$(center "Нода подключена" "$GREEN")"
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo
-        print_final_success "Нода успешно подключена!"
+        echo -e "$(center "✅ Нода успешно подключена!" "$GREEN")"
+        echo
+        echo -e "${BLUE}══════════════════════════════════════${NC}"
+        show_continue_prompt || return 1
+        return 0
     else
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
