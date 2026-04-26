@@ -37,8 +37,24 @@ _dfc_prompt_prepare_input() {
     _flush_stdin
     [ ! -r /dev/tty ] && return 0
     local _d _c
-    while IFS= read -rsn1 -t 0 _d </dev/tty 2>/dev/null; do true; done
+    while IFS= read -r -s -N 1 -t 0 _d </dev/tty 2>/dev/null; do true; done
     while IFS= read -r -t 0 -N 4096 _c </dev/tty 2>/dev/null && [ -n "$_c" ]; do true; done
+}
+
+# После перевода TTY в cbreak: вычитать весь накопленный ввод (Enter во время спиннеров в icanon и т.п.).
+# Восстанавливает min 1 time 0 и -icanon -echo isig.
+_dfc_drain_tty_after_cbreak() {
+    local _tin="${1-}"
+    local _b
+    if [ -n "$_tin" ]; then
+        stty -F "$_tin" min 0 time 0 2>/dev/null || return 0
+        while IFS= read -r -s -N 1 -t 0 _b < "$_tin" 2>/dev/null; do :; done
+        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+    else
+        stty min 0 time 0 2>/dev/null || return 0
+        while IFS= read -r -s -N 1 -t 0 _b 2>/dev/null; do :; done
+        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    fi
 }
 
 # Docker Compose может открыть /dev/tty даже при закрытом stdin — новая сессия + без «TTY»-режима вывода.
@@ -530,11 +546,11 @@ _dfc_after_esc_is_bare() {
     local _tty="${1-}"
     local _sc=""
     if [ -n "$_tty" ]; then
-        if ! IFS= read -r -s -n1 -t 0.15 _sc < "$_tty" 2>/dev/null || [[ -z "$_sc" ]]; then
+        if ! IFS= read -r -s -N 1 -t 0.15 _sc < "$_tty" 2>/dev/null || [[ -z "$_sc" ]]; then
             return 0
         fi
     else
-        if ! IFS= read -r -s -n1 -t 0.15 _sc 2>/dev/null || [[ -z "$_sc" ]]; then
+        if ! IFS= read -r -s -N 1 -t 0.15 _sc 2>/dev/null || [[ -z "$_sc" ]]; then
             return 0
         fi
     fi
@@ -542,9 +558,9 @@ _dfc_after_esc_is_bare() {
         local _c=""
         while true; do
             if [ -n "$_tty" ]; then
-                IFS= read -r -s -n1 -t 0.15 _c < "$_tty" 2>/dev/null || break
+                IFS= read -r -s -N 1 -t 0.15 _c < "$_tty" 2>/dev/null || break
             else
-                IFS= read -r -s -n1 -t 0.15 _c 2>/dev/null || break
+                IFS= read -r -s -N 1 -t 0.15 _c 2>/dev/null || break
             fi
             [[ "$_c" =~ [A-Za-z~] ]] && break
         done
@@ -552,9 +568,9 @@ _dfc_after_esc_is_bare() {
     elif [[ "$_sc" == 'O' ]]; then
         local _o2=""
         if [ -n "$_tty" ]; then
-            IFS= read -r -s -n1 -t 0.15 _o2 < "$_tty" 2>/dev/null || true
+            IFS= read -r -s -N 1 -t 0.15 _o2 < "$_tty" 2>/dev/null || true
         else
-            IFS= read -r -s -n1 -t 0.15 _o2 2>/dev/null || true
+            IFS= read -r -s -N 1 -t 0.15 _o2 2>/dev/null || true
         fi
         return 1
     fi
@@ -672,10 +688,15 @@ show_continue_prompt() {
     _dfc_prompt_prepare_input
     if [ -n "$_tin" ]; then
         _cp_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
+        # sane: после спиннеров (icanon+echo) и docker в TTY дисциплина может быть в «ломаных» флагах
+        stty -F "$_tin" sane 2>/dev/null || true
         stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_drain_tty_after_cbreak "$_tin"
     elif [ -t 0 ]; then
         _cp_stty=$(stty -g 2>/dev/null || echo "")
+        stty sane 2>/dev/null || true
         stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_drain_tty_after_cbreak ""
     fi
     tput civis 2>/dev/null || true
     if [[ "$_quiet" != true ]]; then
@@ -684,9 +705,9 @@ show_continue_prompt() {
     while true; do
         local _cpk=""
         if [ -n "$_tin" ]; then
-            IFS= read -rsn1 _cpk < "$_tin" 2>/dev/null || _cpk=""
+            IFS= read -r -s -N 1 _cpk < "$_tin" 2>/dev/null || _cpk=""
         else
-            IFS= read -rsn1 _cpk 2>/dev/null || _cpk=""
+            IFS= read -r -s -N 1 _cpk 2>/dev/null || _cpk=""
         fi
         if [[ "$_cpk" == $'\x03' ]]; then
             if [ -n "$_tin" ]; then
@@ -736,16 +757,34 @@ show_install_error() {
     [ -r /dev/tty ] && _tin=/dev/tty
     _dfc_prompt_prepare_input
 
+    local _ie_stty=""
+    if [ -n "$_tin" ]; then
+        _ie_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
+        stty -F "$_tin" sane 2>/dev/null || true
+        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_drain_tty_after_cbreak "$_tin"
+    elif [ -t 0 ]; then
+        _ie_stty=$(stty -g 2>/dev/null || echo "")
+        stty sane 2>/dev/null || true
+        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_drain_tty_after_cbreak ""
+    fi
+
     tput civis 2>/dev/null
     local _key _seq
     while true; do
         _key=""
         if [ -n "$_tin" ]; then
-            IFS= read -rsn1 _key < "$_tin" 2>/dev/null || _key=""
+            IFS= read -r -s -N 1 _key < "$_tin" 2>/dev/null || _key=""
         else
-            IFS= read -rsn1 _key 2>/dev/null || _key=""
+            IFS= read -r -s -N 1 _key 2>/dev/null || _key=""
         fi
         if [[ "$_key" == "" ]] || [[ "$_key" == $'\n' ]] || [[ "$_key" == $'\r' ]]; then
+            if [ -n "$_tin" ]; then
+                [ -n "$_ie_stty" ] && stty -F "$_tin" "$_ie_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true
+            elif [ -n "$_ie_stty" ]; then
+                stty "$_ie_stty" 2>/dev/null || stty sane 2>/dev/null || true
+            fi
             tput cnorm 2>/dev/null; echo
             echo
             if [ -n "$log_file" ] && [ -s "$log_file" ]; then
@@ -759,6 +798,11 @@ show_install_error() {
             return $?
         elif [[ "$_key" == $'\x1b' ]]; then
             if _dfc_after_esc_is_bare "$_tin"; then
+                if [ -n "$_tin" ]; then
+                    [ -n "$_ie_stty" ] && stty -F "$_tin" "$_ie_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true
+                elif [ -n "$_ie_stty" ]; then
+                    stty "$_ie_stty" 2>/dev/null || stty sane 2>/dev/null || true
+                fi
                 tput cnorm 2>/dev/null || true
                 echo
                 return 1
