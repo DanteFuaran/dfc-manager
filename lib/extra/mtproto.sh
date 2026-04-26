@@ -37,7 +37,9 @@ _mt_read_input() {
     local _p="$_prompt"
     while [[ "${_p: -1:1}" == " " ]]; do _p="${_p% }"; done
     _orig_stty=$(stty -g 2>/dev/null || echo "")
-    stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    if ! stty -icanon -echo -echoctl isig min 1 time 0 2>/dev/null; then
+        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    fi
     tput cnorm 2>/dev/null || true
     # Как reading_inline: двоеточие у промпта — серым; подсказки внутри %b остаются своим цветом
     if [[ "${_p: -1:1}" == ":" ]]; then

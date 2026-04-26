@@ -41,19 +41,33 @@ _dfc_prompt_prepare_input() {
     while IFS= read -r -t 0 -N 4096 _c </dev/tty 2>/dev/null && [ -n "$_c" ]; do true; done
 }
 
+# Одиночные клавиши (промпты, меню). -echoctl: иначе после stty sane Esc на экране как ^[
+_dfc_stty_cbreak_prompt() {
+    local _tin="${1-}"
+    if [ -n "$_tin" ]; then
+        if ! stty -F "$_tin" -icanon -echo -echoctl isig min 1 time 0 2>/dev/null; then
+            stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        fi
+    else
+        if ! stty -icanon -echo -echoctl isig min 1 time 0 2>/dev/null; then
+            stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        fi
+    fi
+}
+
 # После перевода TTY в cbreak: вычитать весь накопленный ввод (Enter во время спиннеров в icanon и т.п.).
-# Восстанавливает min 1 time 0 и -icanon -echo isig.
+# Восстанавливает min 1 time 0 и режим из _dfc_stty_cbreak_prompt.
 _dfc_drain_tty_after_cbreak() {
     local _tin="${1-}"
     local _b
     if [ -n "$_tin" ]; then
         stty -F "$_tin" min 0 time 0 2>/dev/null || return 0
         while IFS= read -r -s -N 1 -t 0 _b < "$_tin" 2>/dev/null; do :; done
-        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt "$_tin"
     else
         stty min 0 time 0 2>/dev/null || return 0
         while IFS= read -r -s -N 1 -t 0 _b 2>/dev/null; do :; done
-        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt ""
     fi
 }
 
@@ -81,7 +95,7 @@ _spinner_lock_input() {
     _SPINNER_STTY=""
     if [ -t 0 ]; then
         _SPINNER_STTY=$(stty -g 2>/dev/null || echo "")
-        stty -echo 2>/dev/null || true
+        stty -echo -echoctl 2>/dev/null || stty -echo 2>/dev/null || true
     fi
     tput civis 2>/dev/null || true
 }
@@ -356,7 +370,7 @@ show_arrow_menu() {
     tput civis 2>/dev/null || true
 
     # Отключаем canonical mode и echo, включаем чтение отдельных символов
-    stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    _dfc_stty_cbreak_prompt ""
 
     # Функция восстановления терминала
     _restore_stty() {
@@ -690,12 +704,12 @@ show_continue_prompt() {
         _cp_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
         # sane: после спиннеров (icanon+echo) и docker в TTY дисциплина может быть в «ломаных» флагах
         stty -F "$_tin" sane 2>/dev/null || true
-        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt "$_tin"
         _dfc_drain_tty_after_cbreak "$_tin"
     elif [ -t 0 ]; then
         _cp_stty=$(stty -g 2>/dev/null || echo "")
         stty sane 2>/dev/null || true
-        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt ""
         _dfc_drain_tty_after_cbreak ""
     fi
     tput civis 2>/dev/null || true
@@ -761,12 +775,12 @@ show_install_error() {
     if [ -n "$_tin" ]; then
         _ie_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
         stty -F "$_tin" sane 2>/dev/null || true
-        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt "$_tin"
         _dfc_drain_tty_after_cbreak "$_tin"
     elif [ -t 0 ]; then
         _ie_stty=$(stty -g 2>/dev/null || echo "")
         stty sane 2>/dev/null || true
-        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+        _dfc_stty_cbreak_prompt ""
         _dfc_drain_tty_after_cbreak ""
     fi
 
