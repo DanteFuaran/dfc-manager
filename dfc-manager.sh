@@ -32,7 +32,7 @@ if [ "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" != "$_INSTALL_SCRIPT" ]; t
         fi
     done
     unset _vf2 _b2
-    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear; printf "\033[0;31mСкрипт был остановлен пользователем\033[0m\n\n"; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 0' INT TERM
+    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear; printf "\033[0;31mСкрипт остановлен пользователем\033[0m\n\n"; rm -rf "${_INSTALL_DIR}" 2>/dev/null; exit 0' INT TERM
     cd /opt >/dev/null 2>&1 || true
     mkdir -p /usr/local/bin || { echo -e "${_RED}✖ Ошибка создания /usr/local/bin${_NC}"; exit 1; }
     rm -rf "${_INSTALL_DIR}"

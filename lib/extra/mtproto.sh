@@ -967,19 +967,7 @@ _mt_do_install() {
 
         echo -e "${BLUE}══════════════════════════════════════${NC}"
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-        tput civis 2>/dev/null || true
-        while true; do
-            local _k=""
-            IFS= read -rsn1 _k
-            case "$_k" in
-                $'\x1b')
-                    if _dfc_after_esc_is_bare; then
-                        tput cnorm 2>/dev/null || true; return 1
-                    fi
-                    ;;
-                "")      tput cnorm 2>/dev/null || true; return 0 ;;
-            esac
-        done
+        show_continue_prompt -q "Выход" || return 1
     else
         clear
         echo -e "${BLUE}══════════════════════════════════════${NC}"
@@ -1051,19 +1039,7 @@ _mt_do_config() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b')
-                if _dfc_after_esc_is_bare; then
-                    tput cnorm 2>/dev/null || true; return 1
-                fi
-                ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt -q "Выход" || return 1
 }
 
 # Статистика подключений
@@ -1709,20 +1685,7 @@ _mt_do_uninstall() {
     echo
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Выход${NC}"
-    tput civis 2>/dev/null || true
-    while true; do
-        tput civis 2>/dev/null || true
-        local _k=""
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b')
-                if _dfc_after_esc_is_bare; then
-                    tput cnorm 2>/dev/null || true; return 1
-                fi
-                ;;
-            "")      tput cnorm 2>/dev/null || true; return 0 ;;
-        esac
-    done
+    show_continue_prompt -q "Выход" || return 1
 }
 
 _mt_do_update() {
@@ -1809,21 +1772,7 @@ _mt_do_setup_connect() {
         echo -e "    ${BLUE}Enter${DARKGRAY}: Продолжить   ${BLUE}Esc${DARKGRAY}: Отмена${NC}"
     fi
 
-    local _flush; read -s -r -t 0.1 _flush 2>/dev/null || true
-    tput civis 2>/dev/null || true
-    local _k
-    while true; do
-        IFS= read -rsn1 _k
-        case "$_k" in
-            $'\x1b')
-                if _dfc_after_esc_is_bare; then
-                    tput cnorm 2>/dev/null || true; return
-                fi
-                ;;
-            "") break ;;
-        esac
-    done
-    tput cnorm 2>/dev/null || true
+    show_continue_prompt -q "Отмена" || return
 
     echo
 

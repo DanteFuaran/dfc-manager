@@ -50,8 +50,14 @@ _dfc_setsid_exec() {
     fi
 }
 
-# Только визуал: не трогаем stty и не съедаем ввод с клавиатуры (кроме обработки Ctrl+C через trap INT).
+# Спиннер: отключаем только локальный echo — иначе Enter/символы во время анимации дают лишние строки на экране.
+# Режим ввода (icanon/isig) не меняем; ввод не «съедается».
 _spinner_lock_input() {
+    _SPINNER_STTY=""
+    if [ -t 0 ]; then
+        _SPINNER_STTY=$(stty -g 2>/dev/null || echo "")
+        stty -echo 2>/dev/null || true
+    fi
     tput civis 2>/dev/null || true
 }
 
@@ -82,6 +88,10 @@ _spinner_unstick_background_pid() {
 }
 
 _spinner_unlock_input() {
+    if [ -n "${_SPINNER_STTY:-}" ]; then
+        stty "$_SPINNER_STTY" 2>/dev/null || stty sane 2>/dev/null || true
+    fi
+    _SPINNER_STTY=""
     if [ -z "${KEEP_CURSOR_HIDDEN:-}" ]; then
         tput cnorm 2>/dev/null || true
     fi
@@ -107,17 +117,17 @@ show_spinner_prepare() {
         sleep $delay || true
     done
     if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
-        trap - INT
         kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
         wait $pid 2>/dev/null || true
         printf "\r\033[K"
         _spinner_unlock_input
+        dfc_restore_interrupt_traps
         printf "${YELLOW}Прервано (Ctrl+C).${NC}\n" >&2
         return 130
     fi
-    trap - INT
     wait $pid 2>/dev/null || true
     _spinner_unlock_input
+    dfc_restore_interrupt_traps
     printf "\r\033[K"
 }
 
@@ -168,15 +178,14 @@ show_spinner() {
         sleep $delay || true
     done
     if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
-        trap - INT
         kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
         wait $pid 2>/dev/null || true
         printf "\r\033[K"
         _spinner_unlock_input
+        dfc_restore_interrupt_traps
         printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
         return 130
     fi
-    trap - INT
     local exit_code=0
     wait $pid 2>/dev/null || exit_code=$?
     if [ $exit_code -eq 0 ]; then
@@ -191,6 +200,7 @@ show_spinner() {
         printf "\r\033[K${RED}\u2716 %s${NC}\n" "$done_msg"
     fi
     _spinner_unlock_input
+    dfc_restore_interrupt_traps
     return $exit_code
 }
 
@@ -216,15 +226,16 @@ show_spinner_timer() {
         done
         elapsed=$((elapsed + 1))
     done
-    trap - INT
     if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
         printf "\r\033[K"
         _spinner_unlock_input
+        dfc_restore_interrupt_traps
         printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
         return 130
     fi
     printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$done_msg"
     _spinner_unlock_input
+    dfc_restore_interrupt_traps
 }
 
 show_spinner_until_ready() {
@@ -266,16 +277,15 @@ show_spinner_until_ready() {
         printf "\r\033[K${GREEN}%s${NC}\033[0m  %s" "${spin[$i]}" "$msg"
     done
     if [ "${_SPINNER_INTERRUPTED:-0}" = 1 ]; then
-        trap - INT
         kill -TERM "$_checker_pid" 2>/dev/null || true
         wait $_checker_pid 2>/dev/null || true
         rm -f "$_done_file"
         printf "\r\033[K"
         _spinner_unlock_input
+        dfc_restore_interrupt_traps
         printf "${YELLOW}Операция прервана (Ctrl+C).${NC}\n" >&2
         return 130
     fi
-    trap - INT
     wait $_checker_pid 2>/dev/null
 
     local _result
@@ -285,10 +295,12 @@ show_spinner_until_ready() {
     if [ "$_result" = "ok" ]; then
         printf "\r\033[K${GREEN}\u2705${NC}\033[0m %s\n" "$msg"
         _spinner_unlock_input
+        dfc_restore_interrupt_traps
         return 0
     fi
     printf "\r\033[K${YELLOW}⚠️${NC}\033[0m  %s (таймаут)\n" "$msg"
     _spinner_unlock_input
+    dfc_restore_interrupt_traps
     return 1
 }
 
@@ -621,34 +633,44 @@ reading_inline() {
 }
 
 # Промпт "Enter: Продолжить    Esc: Назад" (или Esc: <ярлык>, если передан первый аргумент, напр. «Выход»)
+# Первый аргумент -q — не печатать строку подсказки (она уже выведена выше).
 # Возвращает: 0 = Enter (назад на одно меню), 1 = Esc (в главное меню)
 # Стрелки и прочие ESC-последовательности поглощаются целиком (не оставляют мусор в stdin).
 show_continue_prompt() {
+    local _quiet=false
+    if [[ "${1:-}" == "-q" ]]; then _quiet=true; shift; fi
     local _esc_lbl="${1:-Назад}"
+    local _cp_stty=""
     _flush_stdin
+    if [ -t 0 ]; then
+        _cp_stty=$(stty -g 2>/dev/null || echo "")
+        stty -icanon -echo isig min 1 time 0 2>/dev/null || true
+    fi
     tput civis 2>/dev/null || true
-    printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
+    if [[ "$_quiet" != true ]]; then
+        printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
+    fi
     while true; do
         local _cpk
         IFS= read -rsn1 _cpk 2>/dev/null
-        # Если в каком-то месте stty был выставлен без isig, Ctrl+C не пришлёт SIGINT,
-        # а попадёт сюда как символ \x03 — обрабатываем как прерывание.
         if [[ "$_cpk" == $'\x03' ]]; then
+            if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
             handle_interrupt
         fi
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
+            if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
             tput cnorm 2>/dev/null || true
             echo
-            return 0   # Enter → назад на одно меню
+            return 0
         elif [[ "$_cpk" == $'\x1b' ]]; then
             if _dfc_after_esc_is_bare; then
+                if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
                 tput cnorm 2>/dev/null || true
                 echo
                 return 1
             fi
             continue
         fi
-        # остальные клавиши — игнорируем
     done
 }
 
