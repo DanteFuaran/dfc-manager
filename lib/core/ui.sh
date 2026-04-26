@@ -32,6 +32,15 @@ _flush_stdin() {
     true
 }
 
+# Перед интерактивным промптом: stdin + управляющий терминал (клавиши могут идти в /dev/tty при «особом» fd 0)
+_dfc_prompt_prepare_input() {
+    _flush_stdin
+    [ ! -r /dev/tty ] && return 0
+    local _d _c
+    while IFS= read -rsn1 -t 0 _d </dev/tty 2>/dev/null; do true; done
+    while IFS= read -r -t 0 -N 4096 _c </dev/tty 2>/dev/null && [ -n "$_c" ]; do true; done
+}
+
 # Docker Compose может открыть /dev/tty даже при закрытом stdin — новая сессия + без «TTY»-режима вывода.
 # Без setsid фоновый клиент при обращении к терминалу может получить SIGTTIN и остановиться (спиннер «висит»).
 _dfc_detach_run() {
@@ -516,20 +525,37 @@ show_arrow_menu() {
 # ═══════════════════════════════════════════════
 
 # После байта ESC: 0 = одиночный Esc (отмена ввода), 1 = CSI/SS3/Meta — поглощено, ввод продолжается
+# Необязательный аргумент: путь к TTY (например /dev/tty); иначе читаем stdin.
 _dfc_after_esc_is_bare() {
+    local _tty="${1-}"
     local _sc=""
-    if ! IFS= read -r -s -n1 -t 0.15 _sc 2>/dev/null || [[ -z "$_sc" ]]; then
-        return 0
+    if [ -n "$_tty" ]; then
+        if ! IFS= read -r -s -n1 -t 0.15 _sc < "$_tty" 2>/dev/null || [[ -z "$_sc" ]]; then
+            return 0
+        fi
+    else
+        if ! IFS= read -r -s -n1 -t 0.15 _sc 2>/dev/null || [[ -z "$_sc" ]]; then
+            return 0
+        fi
     fi
     if [[ "$_sc" == '[' ]]; then
         local _c=""
-        while IFS= read -r -s -n1 -t 0.15 _c 2>/dev/null; do
+        while true; do
+            if [ -n "$_tty" ]; then
+                IFS= read -r -s -n1 -t 0.15 _c < "$_tty" 2>/dev/null || break
+            else
+                IFS= read -r -s -n1 -t 0.15 _c 2>/dev/null || break
+            fi
             [[ "$_c" =~ [A-Za-z~] ]] && break
         done
         return 1
     elif [[ "$_sc" == 'O' ]]; then
         local _o2=""
-        IFS= read -r -s -n1 -t 0.15 _o2 2>/dev/null || true
+        if [ -n "$_tty" ]; then
+            IFS= read -r -s -n1 -t 0.15 _o2 < "$_tty" 2>/dev/null || true
+        else
+            IFS= read -r -s -n1 -t 0.15 _o2 2>/dev/null || true
+        fi
         return 1
     fi
     return 1
@@ -641,8 +667,13 @@ show_continue_prompt() {
     if [[ "${1:-}" == "-q" ]]; then _quiet=true; shift; fi
     local _esc_lbl="${1:-Назад}"
     local _cp_stty=""
-    _flush_stdin
-    if [ -t 0 ]; then
+    local _tin=""
+    [ -r /dev/tty ] && _tin=/dev/tty
+    _dfc_prompt_prepare_input
+    if [ -n "$_tin" ]; then
+        _cp_stty=$(stty -F "$_tin" -g 2>/dev/null || echo "")
+        stty -F "$_tin" -icanon -echo isig min 1 time 0 2>/dev/null || true
+    elif [ -t 0 ]; then
         _cp_stty=$(stty -g 2>/dev/null || echo "")
         stty -icanon -echo isig min 1 time 0 2>/dev/null || true
     fi
@@ -651,20 +682,36 @@ show_continue_prompt() {
         printf "${DARKGRAY}   ${BLUE}Enter${DARKGRAY}: Продолжить    ${BLUE}Esc${DARKGRAY}: ${_esc_lbl}${NC}"
     fi
     while true; do
-        local _cpk
-        IFS= read -rsn1 _cpk 2>/dev/null
+        local _cpk=""
+        if [ -n "$_tin" ]; then
+            IFS= read -rsn1 _cpk < "$_tin" 2>/dev/null || _cpk=""
+        else
+            IFS= read -rsn1 _cpk 2>/dev/null || _cpk=""
+        fi
         if [[ "$_cpk" == $'\x03' ]]; then
-            if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
+            if [ -n "$_tin" ]; then
+                if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
+            elif [ -n "${_cp_stty:-}" ]; then
+                stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true
+            fi
             handle_interrupt
         fi
         if [[ "$_cpk" == "" ]] || [[ "$_cpk" == $'\n' ]] || [[ "$_cpk" == $'\r' ]]; then
-            if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
+            if [ -n "$_tin" ]; then
+                if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
+            elif [ -n "${_cp_stty:-}" ]; then
+                stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true
+            fi
             tput cnorm 2>/dev/null || true
             echo
             return 0
         elif [[ "$_cpk" == $'\x1b' ]]; then
-            if _dfc_after_esc_is_bare; then
-                if [ -n "${_cp_stty:-}" ]; then stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true; fi
+            if _dfc_after_esc_is_bare "$_tin"; then
+                if [ -n "$_tin" ]; then
+                    if [ -n "${_cp_stty:-}" ]; then stty -F "$_tin" "$_cp_stty" 2>/dev/null || stty -F "$_tin" sane 2>/dev/null || true; fi
+                elif [ -n "${_cp_stty:-}" ]; then
+                    stty "$_cp_stty" 2>/dev/null || stty sane 2>/dev/null || true
+                fi
                 tput cnorm 2>/dev/null || true
                 echo
                 return 1
@@ -685,10 +732,19 @@ show_install_error() {
     echo -e "${BLUE}══════════════════════════════════════${NC}"
     printf "${DARKGRAY}  ${BLUE}Enter${DARKGRAY}: Показать логи     ${BLUE}Esc${DARKGRAY}: Главное меню${NC}"
 
+    local _tin=""
+    [ -r /dev/tty ] && _tin=/dev/tty
+    _dfc_prompt_prepare_input
+
     tput civis 2>/dev/null
     local _key _seq
     while true; do
-        IFS= read -rsn1 _key 2>/dev/null
+        _key=""
+        if [ -n "$_tin" ]; then
+            IFS= read -rsn1 _key < "$_tin" 2>/dev/null || _key=""
+        else
+            IFS= read -rsn1 _key 2>/dev/null || _key=""
+        fi
         if [[ "$_key" == "" ]] || [[ "$_key" == $'\n' ]] || [[ "$_key" == $'\r' ]]; then
             tput cnorm 2>/dev/null; echo
             echo
@@ -702,7 +758,7 @@ show_install_error() {
             show_continue_prompt
             return $?
         elif [[ "$_key" == $'\x1b' ]]; then
-            if _dfc_after_esc_is_bare; then
+            if _dfc_after_esc_is_bare "$_tin"; then
                 tput cnorm 2>/dev/null || true
                 echo
                 return 1
