@@ -243,26 +243,19 @@ prompt_domain_with_retry() {
         local check_ip_flag=true
         [ "$skip_ip_check" = true ] && check_ip_flag=false
 
-        # Показываем спиннер пока идёт проверка домена
+        # Проверка домена — show_spinner --step как при установке Beszel (одна строка \r)
         local _check_out _check_rc
         local _check_out_file _check_rc_file
         _check_out_file=$(mktemp)
         _check_rc_file=$(mktemp)
         (
             check_domain "${!var_name}" "$check_ip_flag" > "$_check_out_file" 2>&1
-            echo $? > "$_check_rc_file"
-         ) </dev/null &        local _check_pid=$!
-        local _spin=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-        local _si=0
-        tput civis 2>/dev/null || true
-        while kill -0 $_check_pid 2>/dev/null; do
-            printf "\r\033[K${GREEN}%s${NC}\033[0m" "${_spin[$_si]}"
-            _si=$(( (_si+1) % 10 ))
-            sleep 0.08
-        done
-        printf "\r\033[K"
-        wait $_check_pid 2>/dev/null
-        tput civis 2>/dev/null || true
+            chk=$?
+            printf '%s\n' "$chk" > "$_check_rc_file"
+            exit "$chk"
+        ) </dev/null &
+        local _check_pid=$!
+        show_spinner --step --pid "$_check_pid" "Проверка домена…" "Проверка домена" || true
         _check_rc=$(cat "$_check_rc_file" 2>/dev/null)
         _check_out=$(cat "$_check_out_file" 2>/dev/null)
         rm -f "$_check_out_file" "$_check_rc_file"
