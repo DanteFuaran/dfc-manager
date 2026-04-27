@@ -28,10 +28,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}📦\ Remnawave\ —\ Панель}$$ </h2>
+<h2>$${\color{blue}\text{📦 Remnawave — Панель}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -57,10 +57,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}📊\ Beszel\ —\ Мониторинг}$$ </h2>
+<h2>$${\color{blue}\text{📊 Beszel — Мониторинг}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -75,10 +75,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}📡\ MTProto\ —\ TG\ Прокси}$$ </h2>
+<h2>$${\color{blue}\text{📡 MTProto — TG Прокси}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -96,10 +96,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}🧩\ Дополнительные\ программы}$$ </h2>
+<h2>$${\color{blue}\text{🧩 Дополнительные программы}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -113,10 +113,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}🧪\ Тестирование\ сервера}$$ </h2>
+<h2>$${\color{blue}\text{🧪 Тестирование сервера}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -129,10 +129,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}⚙️\ Оптимизация\ сервера}$$ </h2>
+<h2>$${\color{blue}\text{⚙️ Оптимизация сервера}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -143,10 +143,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}🗑️\ Удаление\ компонентов}$$ </h2>
+<h2>$${\color{blue}\text{🗑️ Удаление компонентов}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -156,10 +156,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}✨\ Возможности}$$ </h2>
+<h2>$${\color{blue}\text{✨ Возможности}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -182,10 +182,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{blue}📋\ Требования}$$ </h2>
+<h2>$${\color{blue}\text{📋 Требования}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -193,16 +193,16 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
 > **🌐 DNS:** 2–3 поддомена с A-записями на IP сервера<br>
 > **🔐 SSL:** email для Let's Encrypt **или** Cloudflare API Token (для wildcard)
  
-<sub>⚠️ $${\color{orange}Все\ зависимости\ (Docker,\ Docker\ Compose,\ Certbot,\ git)\ устанавливаются\ автоматически.}$$</sub>
+<sub>⚠️ ${\color{orange}\text{Все зависимости (Docker, Docker Compose, Certbot, git) устанавливаются автоматически.}}$</sub>
  
 </details>
  
 ---
  
-<h2> $${\color{red}🔧\ Решение\ проблем}$$ </h2>
+<h2>$${\color{red}\text{🔧 Решение проблем}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
@@ -222,10 +222,10 @@ cd /opt && bash <(curl -s https://raw.githubusercontent.com/DanteFuaran/dfc-mana
  
 ---
  
-<h2> $${\color{green}💰\ Поддержать\ проект}$$ </h2>
+<h2>$${\color{green}\text{💰 Поддержать проект}}$$</h2>
  
 <details>
-<summary>$${\color{gray}Показать\ подробности:}$$<br></summary>
+<summary>$${\color{gray}\text{Показать подробности:}}$$<br></summary>
  
 <br>
  
